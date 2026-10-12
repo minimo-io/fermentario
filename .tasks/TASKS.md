@@ -1,0 +1,27 @@
+# Tasks
+
+- 025 [TODO] Android packaging
+- 024 [TODO] Microphone and Android permissions
+- 023 [TODO] Model distribution on the device
+- 022 [DONE] Diagnostics page and the on-device gate
+- 021 [DONE] Move the web part into the client
+- 020 [DONE] Platform layer: the database in the WebView
+- 019 [DONE] Tauri v2 shell and static build
+- 018 [DONE] Web app regression baseline
+- 017 [DONE] Layout consistency
+- 016 [DONE] Draft survives navigation
+- 015 [DONE] Download the database without navigating
+- 014 [DONE] Remove a tag from a note
+- 013 [DONE] Heatmap + copy loaded notes
+- 012 [DONE] Restore UX: confirm, progress, visible refresh
+- 011 [DONE] Import database
+- 010 [DONE] Model label, database download, stop an answer
+- 009 [DONE] Load more pagination
+- 008 [DONE] Configurable summary prompt
+- 007 [DONE] Tag pages
+- 006 [DONE] Optimistic note save
+- 005 [DONE] Auto-growing composer
+- 004 [DONE] Universal tab shortcuts + hashtag tags
+- 003 [DONE] Desktop tab shortcuts
+- 002 [DONE] Edit notes
+- 001 [DONE] AI auto-tags for new notes

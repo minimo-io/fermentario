@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "tasks": {
+      "source": "borumbombum/skills",
+      "sourceType": "github",
+      "skillPath": "skills/tasks/SKILL.md",
+      "computedHash": "8258edaef5774d513e4cee21179729b6a06cc4576d29c6a07faaf67dc7d32589"
+    }
+  }
+}

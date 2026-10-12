@@ -1,0 +1,1000 @@
+# Lessons Learned
+
+## Session: Composer save behavior + model refusal handling
+- The "bar changes / input field disappears" bug was `saveNote()` calling
+  `onMode('')`. The note input only renders inside `{#if mode === 'note'}`,
+  so saving collapsed the composer to just buttons. Fix: removed `onMode('')`
+  from `saveNote()` — mode must stay `'note'` after submit.
+- The "text not cleared" bug was `bind:value={text}` on a plain (non-$bindable)
+  prop, tangled with the unmount above. Fix: made the input controlled —
+  `value={text} oninput={(e) => onText(e.currentTarget.value)}`.
+- "I'm sorry, but I can't assist with that." on summary reload was a Qwen
+  0.5B canned refusal, not a crash. Fixes: (1) `chat()` in models.ts detects
+  refusal regex and retries once with sampling (`do_sample:true`,
+  `temperature:0.9`, `repetition_penalty:1.1`) + injected user nudge;
+  (2) summary endpoint has REFUSAL_FALLBACK per language (en/es/pt) so refusal
+  text never reaches the UI.
+- Casting a model callable `as never` makes it uncallable in TS; use
+  `as unknown as (messages: unknown, opts: unknown) => Promise<unknown>`.
+- `svelte:window` tags MUST be top-level in a Svelte component. Placing one inside
+  `<main>`/`<div>` fails svelte-check: `svelte_meta_invalid_placement`.
+- lucide-svelte 1.0.1 is a deprecated publish. The package root barrel import fails
+  under Node/ESM. Use per-icon subpath imports instead: `import Settings from
+  'lucide-svelte/icons/settings'` (resolves + typechecks + builds).
+- CORRECTED: lucide-svelte is deprecated by Lucide itself ("Please use
+  @lucide/svelte instead"). Install `@lucide/svelte` (v1.47.0, peer svelte ^5).
+  Import icons per-icon: `import Settings from '@lucide/svelte/icons/settings'`.
+  Its exports map serves .js wrappers (not raw .svelte), so Node SSR loads them
+  fine. The old `lucide-svelte` package 500s on GET / with
+  ERR_UNKNOWN_FILE_EXTENSION ".svelte".
+- Svelte 5 `$state` initialized from a prop is flagged as
+  `state_referenced_locally`. If the one-time seed is intentional (open-modal
+  form), suppress with `// svelte-ignore state_referenced_locally` on the line.
+  Wrapping in `(() => ...)()`, object literals, or helper functions does NOT
+  silence it and can also change types.
+- Do not auto-show the large weekly recap card. `dismissed` defaults to true and
+  the "Weekly recap ▾" chip toggles it open. This also fixes the layout-shift
+  flicker the user saw (notes appear/disappear on load).
+- The Models button must not be gated behind `{#if week && dismissed}`; Models
+  status is unrelated to the recap. Render it unconditionally.
+- Note save/delete must use non-forced summary refresh (`force=false`);
+  `?rf=1` is reserved for the explicit Re-brew button. Forcing on every note
+  caused the "bar below changes" complaint (a full recompute + bar flash).
+- Language config: `fermentario.config` in localStorage with `{ modelLang,
+  entriesLang }` (en/es/pt). Model lang → `?lang=` on /api/summary GET →
+  `LANG_DIRECTIVE[lang]` appended to the chat prompt. Entries lang → `r.lang`
+  (SpeechRecognition) + Composer placeholder. TTS → `utterance.lang`.
+- Anchor-based edits in Python: avoid literal whitespace in multi-line anchors;
+  spaces vs tabs caused 5 misses in one batch. When an anchor fails, re-read the
+  current file and re-apply with exact bytes rather than guessing.
+- Gate: `pnpm run check` (svelte-check) must print `0 errors and 0 warnings`.
+  `pnpm run build` is a separate bundle smoke check (types vs bundling).
+
+## Session: Weekly recap grounding + note action menu
+- The weekly recap was hallucinating (invented a product launch from 4 trivial
+  notes). Root cause: it used `retrieve('this week journal', {topK:8})` — RAG
+  vector similarity to an abstract query — plus a prompt that DEMANDED themes,
+  moods, worries, wins and "their startup", which a tiny 0.5B instruct model
+  fills with fabricated boilerplate. Fix: feed the recap the ACTUAL week's notes
+  (`notesBetween` → `contextFor`, no retrieval) and rewrite the prompt to be
+  strictly grounded ("Only reflect these notes; never invent events/numbers/
+  people/products/meetings; if notes are short, say so plainly; do not mention
+  the startup unless the notes do").
+- A 0.5B instruct model still emits chatty meta ("Sure, here's a summary:…",
+  "This summary captures the essence…", "Thanks for sharing!"). Defense in
+  depth: (1) sampling instead of greedy decode for the recap (`sample: true` →
+  `do_sample, temperature 0.9, repetition_penalty 1.1`) avoids the templated
+  greedy path; (2) `clean()` strips model preamble up to a `:\n\n` boundary,
+  keeps only the first paragraph block (drops trailing meta-commentary), and
+  strips wrapping quotes; (3) maxNewTokens cut 220 → 140 to force brevity.
+- The 0.5B model's grounding is near its ceiling; prompt-only fixes remove
+  gross fabrication but not all color. The real cure is a larger instruct model
+  (e.g. Qwen2.5-1.5B-Instruct) — offered to the user, who chose prompt-only for now.
+- Dev port: vite.config.ts now pins `server: { port: 4173, strictPort: true }`.
+  strictPort makes Vite fail loudly instead of silently hopping (5173→5174→5175).
+- Per-note controls: the ▶/× text glyphs were unusable on mobile. Replaced with
+  a single `ellipsis-vertical` icon button opening `NoteActionsMenu.svelte`
+  (bottom-sheet on mobile via `place-items-end sm:place-items-center`, big
+  `min-h-11` targets: Read aloud / Copy with feedback / Delete). Delete then
+  opens the reusable `ConfirmDialog.svelte` (`title, message, confirmLabel,
+  cancelLabel, confirmTone, onConfirm, onCancel`) — built as a generic component
+  for use by any future destructive action in the project.
+  - Reusable dialog pattern: fixed inset z-50 backdrop, `role="dialog"`,
+    `aria-modal="true"`, `tabindex="-1"`, backdrop-click + Escape close,
+    destructive confirm tinted rose, label defaults Delete/Cancel.
+
+## Session: honest summaries + selectable chat model
+- 0.5B still fabricates even with a minimal prompt (measured: fabricated recap
+  scored 0.615 cosine vs the best-matching real note — a similarity guard
+  would NOT reliably catch it). Prompt-only fixes remove gross fiction but not
+  invented color; the 0.5B model cannot faithfully paraphrase.
+- Final approach (shipped): TWO mechanisms, no reliance on the model's
+  honesty. (1) A deterministic sparse-week gate in api/summary: if the week's
+  combined note text is under 40 words, skip the LLM entirely and emit an
+  honest recap quoting each entry verbatim ("The notes this week were just a
+  few short entries: "...", "...". There was no other content."). Fabrication
+  is structurally impossible for sparse weeks. (2) For substantial weeks the
+  LLM runs with the minimal prompt (system: "You write short summaries of
+  private journal notes."; user: "Write one paragraph summarizing the following
+  notes. Do not make things up, just a short summary of what's in the notes:")
+  — the earlier verbosity constraints and 3-5 sentence minimum were REMOVED;
+  a minimum length is a trap that forces padding on sparse content.
+- Model is now selectable. Shared list lives in client-safe src/lib/chat-models.ts
+  ({id,label,detail} options; ids '0.5b'|'1.5b'). Server maps id→repo in
+  models.ts (CHAT_REPO), `setActiveChatModel(id)` resets chatPromise +
+  modelProgress.chat so a switch reloads. `getActiveChatModelId()` exposed on
+  /api/status. The summary GET takes ?model=<id> and applies it (this also
+  selects the model the composer /api/chat uses, since it's process-global
+  server state). UI: the model selector lives in the Models &amp; status modal
+  (ModelsModal.svelte), replacing the static "Summary model" row, next to the
+  Re-brew recap button. It is NOT in the Weekly card — the user was explicit the
+  model config belongs in the Models modal only. +page passes model/models/
+  onModelChange into ModelsModal; choice persists in fermentario.config as chatModel.
+- saveConfig must MERGE partials (`config = { ...config, ...p }`), not replace —
+  ConfigModal sends only langs and would otherwise wipe the chatModel choice.
+- id→repo mapping lives once in src/lib/chat-models.ts (ChatModelOption.repo);
+   models.ts derives CHAT_REPO from it, and ModelsModal shows the repo of the
+   selected model. Keep optional-vs-required prop lists in sync between +page
+   and components (svelte-check enforces it, 0 warnings).
+
+## Session: model readiness gating + cursors (no more "hangs")
+- First honest check: model folders in the cache are NOT proof the weights are
+  there. Qwen2.5-1.5B-Instruct had config/tokenizer + only partial
+  `model_int8.onnx.tmp.*` files — a download that never finished. Always verify
+  the actual weight file `onnx/model_int8.onnx` exists before claiming a model
+  is downloaded. `chatDownloaded` now checks exactly that file, not the folder.
+- `warmChatModel()` must swallow its promise rejection. loadChat() rethrows
+  after setting phase=error; a fire-and-forget warm call left the rejection
+  unhandled → Node 24 crashed the whole dev server (ELIFECYCLE) on a missing
+  weight file. Use `void ensureChatLoad().catch(() => {})`.
+- NEVER gate `allowRemoteModels=false` on folder existence: a partial cache
+  throws `ModelFileNotFoundError` and kills the process. Only force local-only
+  when the exact weight file is present; otherwise leave remotes on so the
+  model can genuinely download.
+- Do not auto-warm on every /api/status poll. Loading a missing model started a
+  background download on each 4s poll and re-created partial .tmp files.
+  /api/status now warms ONLY when `chatDownloaded(id)` is true (disk load, no
+  network). Unowned downloads start only on an explicit dropdown switch or the
+  Re-brew button.
+- Truthful status contract: GET /api/status exposes `chatModel`,
+  `chatReady` (loaded id === selected id && pipeline built), `chatDownloaded`
+  (weight file present), plus progress.chat {phase,pct,message}. The summary
+  route still takes ?model= and re-fetch adds &model=config.chatModel.
+- ModelsModal Re-brew button states (gated on chatReady, matching the user's
+  complaint "I can re-brew before the new model has finished"): Brewing…
+  (summary running) / Re-brew recap ↻ (enabled only when chatReady) /
+  Loading model… or Downloading model… {pct}% (disabled) / Download model &
+  re-brew (enabled only when weights are missing AND not started — the honest
+  way to begin a real download).
+- Loading a model into onnxruntime-node blocks the main thread during session
+  creation; a large/streaming 1.5B load can stall status polls for a while.
+  Keep the selected default (0.5B) cached so the normal path never downloads.
+- Tailwind v4 REMOVED the CSS preflight rule that set `cursor: pointer` on
+  buttons. Add a global recovery in src/app.css `@layer base`:
+  `button:not(:disabled), select:not(:disabled), [role='button']:not(:disabled)
+  { cursor: pointer; }` and `button:disabled { cursor: not-allowed; }`.
+  The Settings backdrop keeps its deliberate `cursor-default`.
+- Verify a dev server is actually alive after a crash (curl GET / → 200); a
+  wedged/choken process returns 000 or empty bodies while still holding the port.
+  Refuses: node process exits 1 with `[ELIFECYCLE] Command failed` when a model
+  load rejects — check /tmp/ferm_dev*.log before reporting a hang.
+
+## Session: Re-brew must always recompute + card spacing
+- The Re-brew button "did nothing" once a recap existed because api/summary had
+  TWO shortcuts: the stored recap (which respected `force`) AND a module-level
+  in-memory memo (`cache` keyed on countNotes:latestTimestamp) that did NOT
+  respect `force`. Every brew warms that memo, so clicking Re-brew returned the
+  memoized text instantly and never ran the LLM. Fix: `if (!force && cache?.key
+  === key)` — `rf=1` now always recomputes; non-forced refreshes (page load,
+  note save/delete) still use memo/stored recap.
+- Two cache layers with different force semantics is a footgun: when adding a
+  short-circuit in route handlers, gate EVERY cached layer on the same flag.
+- Spacing around the Weekly card: header was `mb-10`, card section had no
+  margin. Adjacent positive vertical margins COLLAPSE to the larger value
+  (CSS), so adding the card's own `mt-5` while keeping header `mb-10` would
+  still render a 2.5rem gap. Fix: header `mb-10`→`mb-5`, card wrapper section
+  `mt-5 mb-5` → symmetric 1.25rem above and below with the heading row and the
+  timeline.
+- After the memo fix, Re-brew on a sparse week finished in ~1ms (deterministic
+  gate), so it *felt* like "does not process". User-facing fix (chosen over
+  bypassing the sparse gate, which would re-enable LLM fabrication): enforce a
+  minimum visible processing window in the client — measure the fetch round
+  trip, pad to 900ms, and keep `summaryLoading` true until then — so an
+  explicit Re-brew always shows the "Brewing…" state. Set `summaryLoading =
+  false` in a `finally`, not after the await.
+- Re-brew must also reveal the (dismissed) Weekly card when it finishes:
+  `if (withLoading && d.exists) dismissed = false;` in refreshSummaryAnswer.
+  Only the modal's Re-brew passes withLoading=true, so note save/delete and the
+  initial load never pop the card open.
+
+## Session: /api/chat is SSE, not JSON; FTS5 needs sanitized queries
+- /api/chat returns a `text/event-stream`. The client handler still did
+  `fetch(...).then((r) => r.json())` and read `d.answer` — streaming predated
+  the handler, so every Ask threw and showed "Something went wrong asking the
+  archive." Fix: `handleAsk` reads `res.body` with a TextDecoder, splits frames
+  on `\n\n`, appends `{t}` token events to the answer, throws on `{error}`.
+- Flip side of the same bug surface: raw user questions passed into
+  `notes_fts MATCH ?` crash FTS5 — `?`, `"`, `*`, `:`, etc. are query syntax
+  ("fts5: syntax error near "?""). The sanitizer lives INSIDE ftsCandidateIds
+  (db.ts): split to word tokens of 3+ letters, double any embedded quotes, and
+  join as `"t1" OR "t2"`. Empty safe terms → skip FTS, cosine-only retrieval.
+  Never hand free-form user text to MATCH.
+- Test Ask end-to-end with curl and parse the SSE frames (160 events, tokens,
+  done) rather than expecting a single JSON body. A 0.5B model may still emit
+  an inline "I'm sorry…" prefix before its actual answer — that is model
+  behavior, not a transport bug.
+
+## Session: mobile composer bar
+- Mobile bottom bar was too crowded (Note + Ask + input + Speak + Save). Rework
+  Composer.svelte responsive: below `sm` the mode switch is a compact segmented
+  control (`Note | Ask`, active pill `bg-stone-900 text-white`), the input is
+  ALWAYS visible (before, mode `''` rendered a bar with no input at all — the
+  user had to tap Note first), speak collapses to a circular mic icon
+  (`@lucide/svelte/icons/mic`), and the primary action (Save/Ask) stays.
+  Desktop (`sm:`) keeps the previous layout. Note the `hidden sm:flex` /
+  `sm:hidden` pair for the two switches.
+- Mobile toggle no longer supports deselecting to `''` (mode `''` ≈ note in the
+  render condition), so switching is direct: Note→'note', Ask→'ask'.
+
+## Session: Ask input clear + grounded sources
+- Ask input did not clear on submit even after `onQuestion('')` was called.
+  Root cause: the input used `bind:value={question}` on a NON-$bindable prop —
+  the local write works while typing but the parent push is racy. Replace with
+  the same controlled pattern as the note input: `value={question}` +
+  `oninput={(e) => onQuestion(e.currentTarget.value)}`, then prop writes
+  (including `''`) always flow. Rule: NEVER `bind:` a plain prop in Svelte 5;
+  use value+oninput+callback.
+- "The Ask has no clue of the notes": retrieval actually works (the SSE
+  `done` event returned all 4 real notes as sources). The 0.5B model just
+  ignores the grounded context and fabricates a generic reply. Fix at the UX
+  level, not the model level: /api/chat now includes `content` on each source
+  note in the done event, and Composer renders a "Source notes" list under the
+  answer with the actual excerpts. The user always sees which notes were used,
+  even when the model rambles. (A larger model is the real cure mid-term.)
+
+## Session: Notes/Ask top tabs + persisted ask history
+- New `ask_history` table (id, question, answer, sources JSON, created_at),
+  auto-created at db.ts module load. Helpers: insertAsk (returns uuid),
+  listAsks (ASC by created_at), deleteAsk. New routes: GET /api/asks,
+  DELETE /api/asks/[id].
+- /api/chat persists each completed Q&A server-side BEFORE emitting the done
+  event, and the done event carries `entryId` — the client appends the entry
+  locally from that id (no reload flicker). Save is wrapped in try/catch so a
+  DB failure never breaks the SSE stream.
+- Top-level view is now `view: 'notes' | 'ask'` in +page, switched by pill
+  tabs under the header (active pill bg-stone-900 text-white). Notes view
+  renders Weekly + Timeline; Ask view renders the new AskTab thread. Save note
+  -> view 'notes'; submit ask -> view 'ask' (user-requested auto-tab).
+- Composer bottom bar: the Note/Ask switch is GONE — top pills are the single
+  switcher (solves the earlier "too many bottom buttons"). Bar is now just
+  input + mic + primary action per view. Mic fills whichever input the current
+  view has (onText for notes, onQuestion for ask).
+- AskTab: scrollable history (per-entry × DELETE), live streaming entry while
+  answering (spinner), collapsible "Source notes" via native <details>,
+  auto-scrolls to bottom in an $effect on the bound container. The old floating
+  answer box is removed — the thread is the single source of truth for answers
+  and closes via per-entry ×.
+
+## Session: AI auto-tags (task 001)
+- New `note_tags` table (note_id FK ON DELETE CASCADE, tag, PK (note_id, tag)).
+  `Note.tags` lives in BOTH src/lib/server/db.ts and src/lib/types.ts — miss
+  the client one and svelte-check fails with "Property 'tags' does not exist"
+  on the derived grouped list in Timeline.
+- Never query tags per note in a loop. `tagsByNote(rows)` builds one
+  `WHERE note_id IN (?,?,…)` query for the whole page; `withTags(rows)` maps the
+  result back. listNotes(500) would otherwise mean 500 round trips.
+- Tagging is fire-and-forget everywhere: POST /api/notes does
+  `void tagNote(...)` and returns 201 immediately; GET /api/notes awaits
+  `ensureTags()`, the single-flight `ensureIndexed()` analogue. `ensureTags`
+  gates on `getChatModelReady()` so it never forces a model load from a GET.
+- THE 0.5B MODEL CANNOT TAG. Live probes returned: the user prompt echoed back
+  verbatim, meta-plans ("To complete this task, I will follow these steps"),
+  a "Red Herring" logical-fallacy answer, and a Python class definition. Same
+  failure class as the Ask feature. Treat any structured output from 0.5B as
+  untrusted and validate it before it reaches the database.
+- Prompt wording made no difference: "Output ONLY…", "Tags for X are:", and
+  "nothing else" all failed. Do not spend cycles tuning prompts for 0.5B.
+- Lesson: an output filter must be stricter than "it is a string". The first
+  `cleanTags` stored `tagged "cooked" before "pasta` because a 1-item,
+  comma-less junk line passed the per-token checks. Now reject: quotes left in
+  the token, >40 chars, >4 words, and require >=2 tags total. Refuse-on-parse
+  is the correct default for model output.
+- When the active dev server's stdout is not captured, `console.error` is
+  invisible. Debug by appending to a /tmp file from the server module, and
+  remember a stale /tmp/ferm_dev*.log can be attached to a dead process —
+  check the log mtime against the running PID before trusting it.
+- sqlite3 CLI has foreign_keys OFF by default, so a manual DELETE there can
+  orphan child rows that better-sqlite3 would have cascaded. Delete test rows
+  through the API so the real cleanup path runs.
+
+## Session: Edit notes (task 002)
+- NEVER test a write endpoint against the user's real data. PATCH was verified
+  against their only real note and overwrote it. The full original was recovered
+  from an uncheckpointed WAL page with `strings data/fermentario.db*` (also
+  present in the ask_history source copy), then restored. Create a throwaway
+  note for write tests and delete it through the API afterwards.
+- A user note may also be recoverable from a sibling feature: `/api/chat` stores
+  source note content verbatim in ask_history, so an accidental edit is usually
+  recoverable even after the notes row is overwritten.
+- SQLite FTS5 virtual tables have no UPDATE. Rewrite them as
+  DELETE + INSERT (done in `updateNote`). Also, the system `sqlite3` CLI on this
+  machine has no FTS5 module ("no such module: fts5"), so FTS checks must run
+  through the app's own better-sqlite3 from `node -e`.
+- `updated_at` must be forced past `created_at`
+  (`Math.max(Date.now(), created_at + 1)`) because notes can be created with a
+  backdated `created_at`, and a same-millisecond write would leave the note
+  un-flagged as edited.
+- Editing invalidates derived data: the vector and the tags describe the old
+  text. Re-embed with `indexNote` and clear + retry `tagNote` in the background.
+  Clearing the tags (instead of keeping stale ones) lets `ensureTags()` pick the
+  note up on a later GET /api/notes.
+- `let x = $state(prop.value)` in a Svelte 5 component triggers the
+  `state_referenced_locally` warning, and the repo gate requires 0 warnings.
+  Fix without an ignore comment: own the state in the parent and make the child
+  a controlled input (`value` + `oninput` + callback) — the same rule already
+  learned for the composer inputs.
+
+## Session: Desktop tab shortcuts (task 003)
+- Tab switching uses a two-key sequence: `G` then `N` / `G` then `A`, with an
+  800 ms pending window. A bare letter key would steal typing, and Cmd/Ctrl+1
+  is taken by the browser tab bar, so a sequence is the safest option here.
+- Any single-key shortcut handler must guard on all of: `metaKey || ctrlKey ||
+  altKey`, `isComposing` (the app has es/pt input, and a pending IME
+  composition fires keydown with `key === 'Process'`), and the event target
+  being INPUT/TEXTAREA/SELECT/contenteditable.
+- The pending key must be cleared by the timer, by the next first key, and by
+  the previous clear call — otherwise a stale `G` can activate a shortcut
+  seconds later after the user moved on.
+- Kbd hints use `hidden ... sm:inline-flex`, which hides them on phones by
+  width. The alternative is a `(pointer: fine)` media query if hints must also
+  disappear on touch tablets.
+- `aria-hidden="true"` on the kbd span plus `aria-keyshortcuts="G N"` on the
+  button gives screen readers the shortcut without repeating the hint.
+- Verified only through SSR output (`curl | grep`): keydown behaviour itself
+  cannot be checked without a desktop browser session.
+
+## Session: Universal tab shortcuts + hashtag tags (task 004)
+- NO plain `Ctrl`/`Cmd` + digit web shortcut is possible. Chrome's own docs list
+  "Jump to a specific tab — Ctrl + 1 through Ctrl + 8" (and `Ctrl+9` last tab)
+  for Windows, Linux and macOS, and Firefox and Safari bind the same family.
+  The browser consumes the key, so the page never sees it. Every letter is also
+  taken with plain Ctrl/Cmd (select all, bookmarks, omnibox, new tab, print...).
+  `Ctrl`/`Cmd` + `Shift` + `1/2` is unbound in Chrome, Edge, Firefox and
+  Safari on all three desktop platforms — that is the "universal" chord.
+- When a shortcut needs the platform primary modifier, detect it at runtime
+  (`navigator.userAgentData.platform` → `navigator.platform` → UA string) and
+  set the state in `onMount`. Doing it during SSR renders the wrong symbol and
+  causes a hydration swap; the `apple` state starts false, so SSR emits the
+  Control variant and flips after mount.
+- Windows `AltGr` sends `ctrlKey: true, altKey: true`. Any Ctrl chord must
+  require `!altKey` or it fires while the user types `!`, `@`, or `€`.
+- A "hashtag at the end" parser must walk backwards from the end of the string,
+  otherwise the first match in the text wins. Anchoring the last token with `$`
+  and looping on `rest.slice(0, m.index)` handles a whole trailing run.
+  Requiring `(?:\s|^)` before `#` is what stops `url.com/#anchor` from being
+  tagged; requiring a letter/digit right after `#` stops markdown headings.
+- `exec()` without the `g` flag returns the first match, never the last. With
+  the `$` anchor it matches the final token, which is what the backwards walk
+  needs.
+- When a route clears a child table after `updateNote()` returned the row, the
+  returned object still holds the old child array. Assign `note.tags = []` after
+  the clear or the API answers with stale data (caught by a live edit test).
+- Test notes for hashtag and tag work must be deleted through the API after the
+  run, and the user's real notes must be identified by content before any
+  cleanup query.
+
+## Session: Auto-growing composer (task 005)
+- Auto-growing a textarea in Svelte 5 needs `height: auto` before reading
+  `scrollHeight`, otherwise the element can only grow, never shrink:
+  `el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'`.
+- The input in this app is controlled, so the value changes from the parent
+  (voice input, clearing after save, `onQuestion` from Ask). Growing only in
+  `oninput` misses every one of those. An `$effect` that reads the value prop
+  and calls the resize helper catches all of them.
+- The textarea is remounted when the view switches, because both inputs live in
+  separate `{#if}` branches. The resize effect must also depend on the element
+  ref: `autosize()` reads `field`, so `$effect` tracking `field` re-runs after
+  the new element is bound.
+- `max-h` and an inline `height` can disagree: the inline height may be 2000px
+  while `max-h-[45dvh]` clamps the layout. That is the desired result, the
+  textarea scrolls internally past the cap.
+- A fixed-position bar that can grow needs the page to reserve matching space.
+  A `ResizeObserver` on the bar root writing `--composer-h` to `:root`, plus
+  `pb-[calc(var(--composer-h,4.5rem)+2.5rem)]` on the content wrapper, keeps the
+  last entry visible. Always give the variable a fallback: it is undefined on
+  the first paint. This also covers bar-height changes that are not typing, such
+  as the dashed hashtag chips appearing.
+- Shift+Enter for a line break while keeping Enter as submit preserves the
+  existing keyboard habit once a multi-line box allows newlines at all.
+
+## Session: Optimistic note save (task 006)
+- A "slow save" was not the save. `POST /api/notes` returned in 65 ms; the wait
+  was the follow-up `GET /api/notes`, which awaited `ensureTags()` and
+  `ensureIndexed()`. Never await model or embedding work on a list endpoint.
+- A best-effort background pass MUST record what it already tried. `ensureTags`
+  re-tagged the same notes on every request, because a model that cannot
+  produce parseable output leaves the note untagged and the next request sees it
+  as missing again. The result was an infinite generation loop: the vite process
+  at ~400% CPU and every request queued behind inference, which looked exactly
+  like a slow page. A per-process `attempted` set fixed it; verify such loops by
+  sampling `ps -o %cpu` before blaming the request path.
+- `ensureIndexed()` reset its single-flight promise only in `.catch`, so after
+  one successful pass it returned the cached resolved promise forever and no
+  note created later ever got a vector. Those notes were invisible to Ask
+  retrieval. A cache-check pass must reset in `.finally`.
+- Detecting a wrong value in the response is not enough: `updateNote()` returned
+  the row before the caller cleared its tags, so the API answered with the old
+  array until `note.tags = []` was assigned after the clear.
+- `crypto.randomUUID()` is unavailable outside a secure context. The app is
+  served over plain HTTP on the tailnet, where it is `undefined` and any call
+  throws. Use `Math.random()`-based ids for client-side temporary records.
+- In Svelte, `textErr` was assigned in three places and never rendered, so save,
+  delete and load failures were completely silent. An error state that is not in
+  the template does not exist.
+- Optimistic UI needs a rollback: remove the temporary entry, restore the text
+  the user typed, and show the error. Keep the parsed tags on the optimistic
+  entry so the chips appear immediately.
+- Running transformers.js inference on Node's main thread means any request
+  arriving while the model generates waits. When the app feels slow, check
+  whether another endpoint is busy generating before optimizing the endpoint
+  the user complained about.
+
+## Session: Tag pages (task 007)
+- A chip that filters should be a real `<a href>`, not a button with a click
+  handler. SvelteKit intercepts same-origin links, so it stays a client-side
+  navigation, and middle-click, "open in new tab" and no-JS rendering come for
+  free. `encodeURIComponent` the tag: tags can hold spaces, `#` or non-ASCII
+  letters.
+- SvelteKit route params arrive percent-encoded, so decode before using them as
+  a tag to compare against what is stored.
+- A filtered query should not reuse the paginated timeline: `listNotes(500)`
+  silently hides older matches. `listNotesByTag` joins `note_tags` with no
+  LIMIT, and `withTags` still attaches every card's chips.
+- A tag request must skip the background `ensureIndexed`/`ensureTags` passes.
+  They only exist to catch up the main list, and on a filtered page they are
+  pure CPU cost.
+- Reusing `Timeline` on a second route needed no prop changes beyond `lang`,
+  which the new page reads from the same `fermentario.config` localStorage entry
+  the main page writes. `invalidateAll()` is the simplest way to refresh a page
+  whose data comes from a load function after a delete or edit.
+- Verified the chip link and the filtered page through SSR output (`curl | grep`),
+  since chips are rendered client-side only on the main page.
+
+## Session: Load more pagination (task 009) and configurable summary prompt (task 008)
+- Cursor pagination needs the tiebreak column. Ordering by `created_at DESC`
+  alone skips or repeats notes saved in the same millisecond; the cursor must be
+  `(created_at, id)` and the condition `created_at < ? OR (created_at = ? AND id < ?)`,
+  with `id` compared as text because it is the primary key.
+- Fetch `limit + 1` to compute `hasMore` instead of a second COUNT query.
+- Remove the old listing helpers when replacing them. `listNotes(500)` had a
+  hard cap and `listNotesByTag()` had none; keeping both meant two ways to list
+  notes and the cap was one edit away from coming back.
+- A "load more" pass over the whole table to find a few missing rows does not
+  scale: `ensureIndexed()` used `listNotes(100000).filter(...)` plus
+  `allVectors()`. `LEFT JOIN note_vectors WHERE v.note_id IS NULL LIMIT n` makes
+  the per-request cost constant.
+- Shared paginated state belongs in one place. `NotePager` in a `.svelte.ts`
+  module (runes in class fields need that suffix) is used by both the timeline
+  and the tag pages; the tag instance filters appended pages by tag so a
+  mismatched response cannot mix unrelated notes in.
+- Optimistic prepend plus cursor pagination compose safely: new notes are newer
+  than the cursor, so later pages never repeat them. Delete and edit must patch
+  the local list instead of refetching, or an accumulated list collapses back to
+  one page and the scroll position is lost.
+- A quiet background refresh must patch known notes and ignore unknown ones
+  (`sync()`); fetching page one and assigning it to the list is a trap.
+- Grouping by day with `list.filter((x) => x.day === day)` inside the day loop
+  is O(days × notes) per render. Build a `Map` in one pass and iterate the
+  entries. Key the `{#each}` by the note id so appending a page does not remount
+  every card.
+- Any server-side prompt or option that changes the output must be part of the
+  memo/lock key. A `promptHash()` in the key stopped a custom-prompt recap from
+  being served from the default-prompt memo for the same week.
+- Task numbering collides when the user adds a task mid-session. The pagination
+  task was renumbered 008 → 009 (file renamed with `mv`, content untouched) so
+  the new `008 Configurable summary prompt` kept its number.
+- A stored per-week artifact (the weekly recap) is shared across prompts, so a
+  changed prompt only takes effect on Re-brew. Say so in the notes rather than
+  adding a schema column for it.
+## Session: Duplicate Ask card fix
+- The Ask thread rendered every answer twice: `handleAsk` appended the finished
+  answer to `asks` and never cleared `answer`, so AskTab's history loop AND its
+  live block (`{#if answering || answer}`) both matched. One flag caused it.
+- Rule for live-to-persisted handoff: when a streamed result is committed to
+  history, clear the live state in the same branch, and only clear it when the
+  commit actually happened (`entryId` present and text non-empty). Otherwise a
+  failed persist silently deletes the answer from the screen.
+- The client built the history entry from the streamed buffer and ignored the
+  `full` field the server already sends in the `done` event. Prefer the server's
+  final text so the card and the stored row cannot diverge; add the field to the
+  event type when you start using it.
+- SSE verification writes real rows: `POST /api/chat` inserts into ask_history
+  before the done event. Delete those test rows through `DELETE /api/asks/[id]`
+  after checking, and match on the exact questions used in the test.
+- Optimistic entries live under a temporary id, so the success path must swap
+  them by that id. `patch(saved)` matches on the *server* id and therefore
+  matched nothing: the card kept `pending: true` forever, and because the 4 s
+  quiet refresh only runs when no entry is pending, the stale card also blocked
+  the refresh that would have fixed it. Symptom looked like "the note saved but
+  the spinner never stops, and a reload fixes it".
+- Keep `patch` (match by a note's own id, for edits) and `replace(fromId, note)`
+  (swap by a different id, for the optimistic handoff) as separate methods. Two
+  id semantics in one method is how this bug happened.
+- A quiet refresh should also drop temp cards the server does not know, so a
+  POST that died mid-flight cannot leave a permanent placeholder.
+
+## Session: Ask thread newest-first
+- Order lives in three places and all three must agree: the SQL in
+  `listAsks()` (`ASC` was the bug), the client's append
+  (`asks = [...asks, entry]` pushes the newest answer to the bottom), and the
+  position of the live/streaming card. Changing only the SQL moves the whole
+  history to the top while new answers still stream at the bottom and then jump.
+- A live card that is replaced by a saved card must render in the same position
+  in both states. Moving it above the history loop makes the handoff in-place.
+- The old auto-scroll effect (`scrollTop = scrollHeight`) only tracked
+  `threadEl`, so it ran once on mount and never followed new entries. Track a
+  key derived from the newest entry id (plus "streaming") in a plain, non
+  reactive variable: a `$state` tracker would re-trigger its own effect, and
+  scrolling only on a real change leaves a user reading history undisturbed.
+- Verify ordering with two throwaway asks and compare the returned array against
+  a client-side sort; delete them through `DELETE /api/asks/[id]` afterwards.
+
+## Session: model label, database export, stop an answer
+- The select in the Models modal was labelled "Summary model" but it is the one
+  chat model used by BOTH the weekly recap and Ask (`api/chat` never picks a
+  model; it uses the single `activeChatModelId` slot). Renamed to
+  "Summary & Ask model", with the 1.5B detail changed from "better summaries" to
+  "better answers & recaps". The MiniLM row is the embedding model: it only
+  turns text into vectors for retrieval, it never writes an answer.
+- Downloading a SQLite database that runs in WAL mode by copying the main file
+  hands out a stale copy, because recent writes sit in `-wal`. Run
+  `PRAGMA wal_checkpoint(TRUNCATE)` first, then stream the file. Verified the
+  download with `PRAGMA integrity_check` and row counts.
+- To stop a streaming answer: pass an `AbortSignal` into `chat()` and throw from
+  the `TextStreamer` callback when it is aborted. The callback runs between
+  decode steps, so unwinding the generation loop does not corrupt the ONNX
+  session; call `resetModel('chat')` afterwards so the next ask loads a clean
+  pipeline. transformers.js has no generation-level abort hook.
+- A cancelled answer must never be persisted: `api/chat` checks
+  `request.signal.aborted` after `chat()` resolves and skips `insertAsk`, so a
+  partial reply cannot reappear later as a finished history entry.
+- Enqueuing on an aborted `ReadableStreamDefaultController` throws. Wrap
+  `sseEvent` and `close()` in the route's catch/finally when a client can
+  disconnect mid-stream.
+- The client must distinguish a user cancel from a failure: keep the partial
+  text, mark it "stopped — not saved to history", and skip the error toast. The
+  composer's Ask button becomes Stop while `answering` is true.
+
+## Session: Import database (task 011)
+- Never swap the database file while the server holds it open: the process
+  keeps writing to the deleted inode. Restore by `ATTACH`ing the upload to the
+  live connection and copying the tables through it in one transaction.
+- `db.exec()` does NOT bind parameters. `ATTACH DATABASE ? AS backup` in `exec()`
+  silently attaches an empty temporary database (NULL/empty filename) and the
+  failure appears much later as "no such table: backup.notes". Use
+  `db.prepare(...).run(path)` or inline the path with quotes escaped.
+- A transaction spanning an attached WAL database commits into the main WAL
+  only. Nothing else sees the change — not another SQLite connection, not the
+  file — until a checkpoint. `wal_checkpoint(TRUNCATE)` right after the import,
+  or the next download hands out the previous contents. This is the same reason
+  the export checkpoints first.
+- A read-only SQLite connection that cannot read the WAL reports the last
+  checkpointed state, which looks exactly like "the write did not happen".
+  Verify through the app's own API, or force a checkpoint, before concluding
+  that a write was lost. This cost two false conclusions.
+- SQLite opens files lazily: a text file or a truncated database throws on the
+  first read, not on `new Database(...)`. Wrap the whole validation block
+  (open, `quick_check`, schema query) and answer 400 with the real reason;
+  reserve 500 for the apply phase.
+- Deleting an uploaded temp file is not enough. Opening it creates `-shm` and
+  `-wal` siblings next to it; unlink all four suffixes or the data dir fills
+  with orphans.
+- Deleting `notes` cascades into `note_tags` and `note_vectors`
+  (`foreign_keys = ON`), so the import only needs four DELETE statements, and
+  the children must not be emptied first.
+- `notes_fts` is a regular fts5 table, so it can be repopulated with
+  `INSERT INTO notes_fts (content, note_id) SELECT content, id FROM notes`
+  after the import. (`'rebuild'` is only for external-content tables.)
+- The summary memo lives in module state, so the import could not clear it
+  from the route; it moved to src/lib/server/summary-cache.ts.
+- zsh aborts a whole command line when one glob has no match
+  (`rm data/import-*.db-journal` killed the other deletes). Pipe `ls` into a
+  loop when a file may not exist.
+
+## Session: focus composer shortcut
+- `Ctrl`/`Cmd` + `L` is address-bar territory in Chrome, Edge, Firefox and
+  Safari, exactly like the tab digits, so the page never sees it. `Ctrl`/`Cmd` +
+  `Shift` + `L` is unbound everywhere and reuses the guard chain already written
+  for the tab shortcuts: platform modifier, `shiftKey`, `!altKey` (AltGr on
+  Windows reports Ctrl+Alt), `!isComposing`, no modal open, not already inside
+  an editable element.
+- The Composer renders one of two textareas in different `{#if}` branches, so a
+  single `id="composer-field"` is unique in the DOM at any moment and the same
+  `getElementById` + `focus()` + `setSelectionRange(len, len)` works in both
+  views without passing refs across the component boundary. Caret at the end
+  continues the sentence; selecting all would be replaced by the first keystroke.
+- Platform symbols belong in the placeholder as plain text (a placeholder cannot
+  render the `Kbd` component), and the page's existing `apple` flag is passed
+  down for it. Interim speech text replaces the whole placeholder, so the hint
+  disappears while dictating.
+
+## Session: Restore UX (task 012)
+- A destructive action needs a confirm gate that names the file and states
+  exactly what is lost and that it cannot be undone. A warning paragraph under
+  the button is not a gate: one click replaced the journal.
+- Long blocking requests need real phases, not a spinner. The import already had
+  five steps, so `POST /api/import` became an event stream and each step emits
+  its event immediately before running. Open the stream BEFORE reading the
+  request body, otherwise the slowest part (a big upload) is invisible.
+- Emit phases from inside the transaction, not only between calls: the FTS
+  rebuild is a separate statement, so `search` can be reported while the
+  transaction is still open, and a failure there still rolls back.
+- "Nothing appeared to happen" after a data replacement usually means the
+  refresh happened behind a closing modal. Confirm the result in the open UI: a
+  toast with the real counts from the server, not a silent refetch.
+- Generalize the toast (`{ text, tone }`) instead of adding a second success
+  element next to the error one. Reuse the /api/chat SSE reader shape.
+- REGRESSION CAUGHT BY A COUNT CHECK: rewriting the import route dropped
+  `DELETE FROM notes_fts`. FTS5 tables have no foreign key, so deleting from
+  `notes` does not clear the index: every restore stacked another copy (4 notes,
+  13 index rows) and a deleted note stayed searchable. Assert
+  `count(notes_fts) === count(notes)` after any restore, and that a known
+  deleted phrase no longer matches.
+
+## Session: Heatmap + copy loaded notes (task 013)
+- `navigator.clipboard` needs a secure context. Over plain HTTP (the tailnet URL
+  the app is actually used on) it is `undefined`, so every copy path must handle
+  it. The fallback is a dialog with the text pre-selected plus a Blob download;
+  `document.execCommand('copy')` on the selection still works there.
+- When copying notes, append the tags: task 004 strips trailing hashtags out of
+  the stored content, so a copy of `content` alone silently loses them.
+- Show what a "copy everything loaded" button will copy. The loaded count and
+  the server total differ as soon as Load more is used, so the label must come
+  from the pager, not from `countNotes()`.
+- Daily counts: `SELECT date(created_at/1000,'unixepoch','localtime') … GROUP BY
+  day` in one query, and fill the zero days on the client. `localtime` matches
+  the `en-CA` day keys used everywhere else only because server and browser share
+  a machine; a remote deployment must pass the zone in.
+- A calendar grid per month needs leading blanks computed from the weekday of
+  day 1 (`(getDay() - FIRST_WEEKDAY + 7) % 7`) and a trailing partial week.
+- Heatmap cells as `<button tabindex="-1">` satisfy the a11y rules for click
+  handlers while keeping thousands of cells out of the tab order. Plain
+  `<span on:click>` triggers two warnings, and the gate requires zero.
+- THIRD time: a direct SQLite read showed pre-checkpoint counts and looked like
+  data loss. Trust the app's API or checkpoint first; a separate connection that
+  cannot read the WAL only sees the last checkpoint.
+- Heatmap defaults that read wrong: `bg-stone-100` for a zero day is nearly
+  invisible at 12px against the page background (empty days vanished), so use
+  `bg-stone-200` for the neutral step and keep amber for the first count bucket.
+- Month groups are built ascending and then `reverse()`d, because reversing
+  during the build loop makes the cursor walk backwards. Newest-first means the
+  latest days are in the first column and the scroll container starts there for
+  free.
+- A month label row needs a "last labelled month" variable, not just "month of
+  this column": every January column has a January day, so the naive version
+  printed `Jan Jan Jan ...`. Verify label rows by reading the rendered sequence
+  out of the SSR HTML, where duplicated labels are obvious.
+- A continuous year grid: start on the Monday on/before 1 January, end on the
+  Sunday on/after 31 December, and compare day keys as strings to mark future
+  days. Test the leap year too (366 cells, 53 columns).
+- Name the action's scope on the button ("Copy all", not "Copy") and keep the
+  exact count next to it, because "all loaded" is a different set from "all
+  stored" once pagination is involved.
+- A year cannot tile a 7-row grid: 365 = 52×7+1 and 366 = 52×7+2, so a
+  "complete rectangle" either needs the slack at the end of the last column or
+  calendar alignment with padding days from December at the top left. State the
+  arithmetic when the choice is a layout preference.
+- Sequential packing (7 days per column from 1 January) gives a flush top-left
+  edge and a short final column, at the cost of weekday meaning per row. Drop the
+  weekday row labels with it rather than leave labels that lie.
+- `bg-transparent` plus an inset ring reads as "no square" at 12px. Anything that
+  must still look like a filled cell needs a fill colour; a 98-cell block of them
+  was the real reason the heatmap looked misaligned.
+- Count rendered cells per style from the SSR HTML and add them up against the
+  year's day count. It catches padding, double-counting (a legend swatch shares
+  a class with grid cells) and missing cells in one step.
+- Two neutral styles for "no data" (past empty vs not yet) make a heatmap look
+  broken even when each style is individually fine. Use ONE style for every
+  zero-count cell, and move the distinction into the tooltip text where it costs
+  no visual noise. The cost of losing the "where does the year end" cue is worth
+  naming out loud rather than solving with a second colour.
+- When a marker must not disturb a uniform scale, change the marker's opacity
+  (`ring-stone-900/50`) instead of adding a fill: solid `ring-stone-900` on a
+  12px cell reads as a second data colour and competes with the heat scale.
+- Mark a single cell by comparing its date key with a precomputed `todayKey`
+  rather than a `Date.now()` comparison inside the loop, and keep the marker out
+  of `shade()` so the scale stays testable. Explain the marker in the legend, the
+  `aria-label` and the tooltip, otherwise it is decoration nobody understands.
+- "Follow the configured language" can mean the FORMAT, not the words. Using
+  `toLocaleDateString(locale, …)` gives per-language month names, separators and
+  ordering with no translation table, which is what was wanted here; keep
+  relative labels like "Today" as literals until the whole UI is translated.
+- Keep the machine key stable and localize the display: grouping compares and
+  `{#each}` keys stay the ISO day, so a language change cannot merge, split or
+  reorder day groups. Derive "yesterday" with `setDate(-1)`, not
+  `Date.now() - 86400000`, which breaks across DST.
+- A relative day label goes stale at midnight. A 60 s tick that only recomputes
+  the day keys fixes it without re-grouping the list.
+- Do not predict `Intl` output: pt-PT short dates are numeric
+  (`22/09/2026`), not `22 set 2026`. Check the three locales before writing a
+  plan that claims a specific string.
+
+## Session: Remove a tag from a note (task 014)
+- A button cannot live inside an `<a>`: wrap the chip in a `span.group` with the
+  link plus the × button as siblings. Reveal it with `group-hover:opacity-100`
+  plus `focus-visible:opacity-100`, otherwise the control is keyboard-invisible.
+- Model a single-relation change as its own sub-resource
+  (`DELETE /api/notes/[id]/tags/[tag]`) instead of another field on the note
+  PATCH. Tags are not part of the text, the FTS row or the embedding, so the
+  operation must not be able to touch them by accident.
+- Normalise the tag on the way in (trim + lowercase) exactly as
+  `setNoteTags` stores it, otherwise a chip click with a different case 404s.
+- If a tag page passes its own tag to a removal handler, the note must leave the
+  filtered list; check the remaining tags and fall back to `pager.remove(id)`.
+- INCIDENT: after a Vite module reload re-evaluated db.ts, the dev server
+  returned 500 on every database request with `SqliteError: disk I/O error` at the
+  `journal_mode` pragma, while a separate process opened the same file fine
+  (`integrity_check: ok`, empty `-wal`). The old orphaned connection wedged the
+  process. Restarting the dev server fixed it and no data was at risk. When a
+  pragma on a healthy file throws, suspect the process, not the database, and
+  verify the file from a second connection before doing anything destructive.
+
+## Session: Download without navigating (task 015)
+- SvelteKit already ignores same-origin `<a download>` links: `get_link_info`
+  sets `download` only when the origin matches and the attribute is present
+  (`utils.js:150`), and the click handler returns early on it (`client.js:2742`).
+  So "the SPA router navigated" is not the explanation for a reloading download.
+- iOS Safari ignores `download` on a same-origin URL often enough to turn the tap
+  into a real navigation. The reliable pattern is fetch → `blob()` →
+  `URL.createObjectURL` → click an anchor with the filename.
+- When injecting that anchor, append it to the DOM (Firefox ignores clicks on
+  detached nodes) and add a `stopPropagation` click listener, or SvelteKit's
+  document-level handler intercepts the synthetic click too.
+- Exclude the runtime data directory from the dev watcher
+  (`server.watch.ignored: ['**/data/**']`). The SQLite files live in the project,
+  so every note write is a file change the dev server does not need to care about.
+- Changing `vite.config.ts` restarts the dev server. A vanished log file is
+  normal after a reboot or a cleanup; check for the process before assuming the
+  app is broken, and verify the database from a second connection first.
+
+## Session: Draft survives navigation (task 016)
+- Any client-side navigation unmounts the page and drops its `$state`. A
+  composer's unsaved text therefore needs to live outside the page component.
+- `sessionStorage` is the right store for a per-tab draft: it survives SPA
+  navigation and a full reload, and dies with the tab. A module-level `$state`
+  store is simpler but is lost on reload.
+- Restore in the mount `$effect`, write on every keystroke through the existing
+  `onText` / `onQuestion` callbacks, and clear on a successful save. Do not
+  clear on navigation — that is the whole point.
+- The composer needed no change: it already sends every keystroke up to the
+  page, so the draft store only had to be wired into the page's callbacks.
+
+## Session: Layout consistency (task 017)
+- When unifying widths, standardise on the width the majority already uses, not
+  on the one outlier. Four of five containers were `max-w-2xl`; I widened the
+  majority to the outlier's `max-w-5xl` and left the composer behind, which made
+  the bar narrower than the page. The user rejected it immediately.
+- A fixed bottom bar must match the page width, or the layout reads as broken.
+  Check the bar against the page after any width change.
+- A data-dense view (the 53-column heatmap) should scroll inside its container
+  rather than dictate the page width. `overflow-x-auto` already existed.
+- Document the system in `docs/DESIGN.md` and link it from `AGENTS.md` next to
+  the other doc pointers, so the next width change starts from the document
+  instead of from memory.
+- Verify widths by grepping the rendered HTML for the container class, not by
+  reading the source: the tag page still had `max-w-5xl` after I thought I had
+  changed it, and only the SSR output revealed it.
+
+## Session: Tauri plan and the web regression baseline (task 018)
+- **Passing any option to `sveltekit()` makes the plugin ignore
+  `svelte.config.js` entirely.** `vite.config.ts` passed `compilerOptions`
+  inline, so the `kit.adapter` in `svelte.config.js` was never read. The dev
+  server did not care — adapters are not needed in dev — so the app looked
+  healthy, but `pnpm run build` printed "No adapter specified" and wrote
+  nothing to `build/`. The repo has never had a deployable production build.
+  A green `pnpm run build` is not proof that a build exists: check that
+  `build/index.js` is actually there.
+- **The inline options are flat, not nested under `kit`.** `split_config()`
+  keeps only the keys listed in `kit_options`, which are the *contents* of
+  `kit` (`adapter, alias, appDir, csp, csrf, embedded, env, experimental,
+  files, inlineStyleThreshold, moduleExtensions, outDir, output, paths,
+  prerender, router, serviceWorker, typescript, version`). Passing
+  `kit: { adapter }` puts the wrapper through to vite-plugin-svelte and drops
+  the adapter with no error at all. Passing `adapter` directly works. I hit
+  this because I assumed the nested shape, and only reading
+  `node_modules/@sveltejs/kit/src/core/config/options.js` settled it.
+- **"SQLite" is not one thing.** The system `sqlite3` CLI on this machine has
+  no FTS5 at all: `select count(*) from notes_fts` fails with `no such module:
+  fts5`. better-sqlite3 bundles its own build, which is why the app works. The
+  gate for a WebAssembly engine is therefore not "does FTS5 exist" but "does
+  this exact DDL execute", porter tokenizer included:
+  `CREATE VIRTUAL TABLE notes_fts USING fts5(content, note_id UNINDEXED, tokenize = 'porter unicode61')`.
+- `notes_fts` is a standalone virtual table with **no triggers**; application
+  code maintains it. That is why a dropped `DELETE FROM notes_fts` during the
+  import rewrite left stale search hits, and why any new mutation path has to
+  assert `count(notes_fts) == count(notes)`.
+- A golden file must be built from a **frozen synthetic fixture**, not from
+  `data/fermentario.db`. The real database is unstable (every new note changes
+  the golden and hides a real regression) and it would put personal journal
+  text into every diff.
+- **Mask volatile values once, at serialization time, not when recording.**
+  Masking inside the request helper left `updated_at` unmasked, because the
+  value only becomes known as runtime *after* the response that carried it. The
+  temp directory also leaked in through `/api/status`'s `modelCache`.
+- A regression test that dies with a `TypeError` instead of reporting the bad
+  response is not a test. Assert the shape at each step and print what was
+  recorded before exiting.
+- `GET /api/notes` fires `ensureIndexed()` and `ensureTags()` in the background,
+  and both call transformers.js, which downloads weights when the cache is
+  empty. A test against an empty cache silently pulls 22 MB per run. A
+  test-only `--import` guard that rejects the Hugging Face hosts is enough; the
+  routes already swallow those failures.
+- SvelteKit rejects a form POST whose `origin` does not match, so the import
+  test has to send one. That protection is worth keeping — satisfy it in the
+  test rather than disable it.
+- The app already renders an empty shell: no note text and no tag name appear in
+  the HTML of `/`, `/heatmap` or `/tags/<tag>`. Verified, not assumed. It means
+  moving to SPA mode cannot regress the web app's visible output, and it means
+  only a real browser test can cover those pages, because a status-200 curl
+  cannot see a `load` function that now runs in the browser.
+- This directory is not a git repository, so "the diff is empty" is not an
+  available acceptance criterion. Use a `shasum` of the files that must not
+  change.
+- `tauri init` did **not** add `@tauri-apps/api` or `@tauri-apps/cli` to
+  `package.json`, and left `identifier: "com.tauri.dev"` in `tauri.conf.json`
+  and `name = "app"` in `Cargo.toml`. Check what a scaffolding tool actually
+  wrote instead of assuming it did the whole job.
+- `tauri init` flag names: `-A` is app-name, not `-n`. `-W` window-title,
+  `-D` frontend-dist, `-P` dev-url, and `before-dev-command` /
+  `before-build-command` have no short form.
+- adapter-static writes to the `pages` option, which defaults to `build`. It is
+  settable, so `pages: 'dist-static'` keeps the Tauri build from clobbering
+  adapter-node's `build/`. The kit-level `outDir` needs separating too
+  (`.svelte-kit/output-static`), or the two builds share one intermediate
+  directory.
+- `csr: true` passed flat to `sveltekit()` is enough for SPA mode. The Tauri
+  docs say to add `export const ssr = false` to `+layout.ts`, which would touch
+  shared source. A real build confirmed `csr: true` produces
+  `dist-static/index.html` with no source change at all.
+- This machine's `java` on PATH is 1.8, which is too old for Tauri v2 Android.
+  Android Studio ships JDK 21 at
+  `/Applications/Android Studio.app/Contents/jbr/Contents/Home`; point `JAVA_HOME`
+  there instead of installing anything.
+- A new page that reads `window`, `navigator` or `document` **at component
+  init** 500s on the web app, because the web app still server-renders. Put
+  every such read in `onMount`. Watch out for the quiet version of this: Node 24
+  has a global `navigator`, so `navigator.hardwareConcurrency` does not throw
+  during SSR — it silently renders a wrong value into the server HTML.
+- In runes mode a plain `let` is not reactive. A diagnostics page whose rows are
+  collected in `onMount` renders empty with a plain array, and pushing to it
+  needs `rows = rows` after the push for the template to update.
+- `tauri android init` needs a JDK 17 or newer on `JAVA_HOME`. It is not enough
+  to have `java` on the PATH, because the default here is 1.8.
+- `csr` is a **page option**, not a `kit` config option. `kit_options` does not
+  contain it, so `csr: true` passed to `sveltekit()` is forwarded to
+  vite-plugin-svelte and rejected with "invalid plugin option `csr` in inline
+  config". I claimed it worked because the static build still succeeded — and
+  it did, but for the wrong reason: nothing in this app sets `prerender`, so
+  adapter-static emitted only the `index.html` fallback, which is a working SPA
+  on its own. A green build hid an option that was never applied. Read
+  `kit_options` before naming a kit option, and do not trust a build that
+  succeeds while warning about an option.
+- That accident turned out to be the answer: **SPA mode needs no source change
+  at all here.** adapter-static's `fallback: 'index.html'` alone gives the
+  Tauri build a client-routed app, so `src/routes/+layout.ts` was not created.
+- I then tried the documented `export const ssr = false` and the smoke test
+  caught what my earlier "no visible change" claim missed. It changes
+  `/tags/<unknown>` from **404 to 200** and strips all server-rendered markup.
+  An empty-shell observation is evidence about *content*, not about status codes
+  or HTML. Reverted.
+- `tauri android dev` **hides a missing client data layer.** The dev server is
+  still a SvelteKit server, so it serves the `+server.ts` API routes and the app
+  on the device quietly talks to better-sqlite3 in Node. A release build has no
+  server at all. Test the Android app with a built APK, never with `android dev`.
+- A blank white window in the emulator means the WebView loaded nothing, not
+  that the app is broken. The evidence is in logcat: `Tauri/Console` printing
+  `File: chrome-error://chromewebdata/`. Two causes here: Vite was bound to
+  `[::1]:1420` because `host: host || false` left it false when
+  `TAURI_DEV_HOST` was unset, and `localhost:1420` inside an emulator points at
+  the emulator. The emulator reaches the host through `10.0.2.2`, so
+  `src-tauri/tauri.android.conf.json` sets that dev URL and the dev server binds
+  every interface.
+- `pnpm test` tests whatever is in `build/`. Running `test:web:update` without
+  rebuilding captured a 404 for `/diagnostics` in the golden, because the build
+  predated the route. The update script now builds first, and the gate order in
+  `AGENTS.md` is explicit.
+- A **Tauri debug APK still points at `devUrl`**. It installs and launches
+  fine, then shows `Failed to request http://localhost:1420/`. There is no
+  `--no-dev` flag on `tauri android build`; the way to get a self-contained
+  debug APK is to clear the dev URL in the build config:
+  `tauri android build --apk --debug --config '{"build":{"devUrl":null}}'`.
+  Always test the Android app that way — a debug APK is otherwise just a
+  remote browser pointed at a dev server that is not there.
+- An Android emulator reaches the host through `10.0.2.2`, so
+  `src-tauri/tauri.android.conf.json` overrides `build.devUrl` to
+  `http://10.0.2.2:1420`. A physical device needs it overridden with its LAN
+  address on the command line. The Tauri config schema rejects unknown keys, so
+  a `"//"` comment inside it fails the build.
+- The diagnostics page found a bug in itself the moment it ran: keying the row
+  list on `r.label` threw `each_key_duplicate` as soon as the download progress
+  callback reported the same label twice, and the whole list stopped rendering.
+  A test page that only works when everything is fine is not a diagnostic. Key
+  on a counter, and update the progress row in place.
+- Measured on a Pixel 9 AVD (Android 16, WebView 133, `wv`): **Tauri present**,
+  **WebGPU reports "No available adapters"**, `hardwareConcurrency` 4, storage
+  quota 3.5 GB, `getUserMedia` and `MediaRecorder` available, and
+  `SpeechRecognition` **is** present — the Android WebView does expose
+  `webkitSpeechRecognition`, which contradicts the assumption that dictation
+  needs a different route. It still has to be proven to work before relying on
+  it.
+- **`crossOriginIsolated` is false and `SharedArrayBuffer` is absent** on
+  Android, even though `app.security.headers` carries COOP and COEP and the
+  Tauri source applies them from a code path that is not desktop-gated
+  (`protocol/tauri.rs` reads `config.app.security.headers`). So multithreaded
+  WASM is not available on Android and onnxruntime will run single-threaded.
+  Treat single-thread as the baseline and measure against it, rather than
+  assuming the headers worked because they are in the config.
+- **The emulator cannot hold the 488 MB model.** Downloading it inside the WebView
+  tripped the Android lowmemorykiller, which killed
+  `com.google.android.webview:sandboxed_process0` ("min watermark is breached and
+  swap is low"), and the app died with it. The evidence is in logcat, not in the
+  app: `WINDOW DIED` for the MainActivity and `Process app.fermentario.journal.debug
+  has died`. An emulator is not a phone, but this is a real signal that a 488 MB
+  model in a WebView is heavy, and it means the tokens/sec measurement has to
+  come from a real device or a smaller model.
+- A screenshot of the Android home screen means the app is gone, not that the
+  screenshot failed. Check logcat for `has died` before looking for a bug in the
+  app.
+- **A silent fallback to an empty database cost an hour.** `createWasmDb` caught
+  the open failure and quietly used `:memory:`, so every WASM read returned
+  nothing and 19 of 26 parity checks "failed" for a reason that had nothing to
+  do with the queries. Never fall back to an empty store silently: an empty
+  journal that looks like it works is worse than a loud failure.
+- **sqlite-wasm in Node has no real filesystem.** Its `unix` VFS is a virtual
+  in-memory one, so `new oo1.DB('/tmp/x.db', 'c')` *succeeds* and gives an empty
+  database. Files have to come in as bytes.
+- **A WAL-mode image cannot be deserialized** into an in-memory connection:
+  `sqlite3_deserialize` returns `SQLITE_NOTADB` while header bytes 18/19 are `2`.
+  Setting `journal_mode = DELETE` first gets past that, and the documented
+  import path (`oo1.OpfsDb.importDb`) is browser-only, so it cannot be tested
+  from Node. SQL text sidesteps all of it: it runs identically in both engines,
+  which is what `scripts/make-seed.mjs` and the app's export emit.
+- **oo1's row API has two traps.** `stmt.get()` needs a preceding `step()` and
+  then throws "Column index is out of range"; `stmt.get({})` is what returns the
+  current row as an object. `prepare()` takes only the SQL text — binding is a
+  separate `stmt.bind(values)` call. And `oo1.DB`, not `oo1.Opener`, is the
+  constructor in 3.53.
+- **BM25 is floating point, so compare ids and order exactly and scores to a
+  tolerance.** The two builds differ in the last digits
+  (`-6.245083341991583e-8` against `-6.245083341991625e-8`) with identical
+  ordering. A test that demands bit-identical scores fails on nothing.
+- A parity test that asserts a note is gone after an edit must search for a word
+  from *that* note. Searching for "broken chair" proved nothing, because another
+  note legitimately contained it.
+- **A full disk cost two hours and faked a bug.** The emulator's data partition hit
+  90% with 632 MB free, so `adb install -r` started failing with
+  `INSTALL_FAILED_INSUFFICIENT_STORAGE` — and because the install was one step in
+  a `&&` chain, it failed *silently*: I spent several rounds "fixing" an APK that
+  was never on the device, and read a stale diagnostics page as if it were live.
+  Check the exit status of every step, and never let a build-and-install run
+  quietly skip the install. A nearly full disk also breaks SQLite persistence on
+  its own, which is indistinguishable from a VFS bug.
+- `console.log` is not forwarded to logcat on Android under Tauri; `console.error`
+  and uncaught exceptions are. For a startup fact that has to be readable from a
+  terminal, put it on a page — that is what `/diagnostics` is for.
+- The main thread needs the **SAH-pool** OPFS VFS. The default `opfs` VFS requires
+  a Web Worker, and on the main thread it hands back a database that reads and
+  writes perfectly and forgets everything on the next launch. Install it with
+  `sqlite3.opfs.installOpfsSAHPoolVfs()` and open with
+  `new oo1.DB(file, 'c', 'opfs-sahpool')`. A silent, total data loss is a bad
+  enough failure mode that the chosen backend belongs in `/api/status`.
+- **`tauri android run` is the command, not `android build` plus `adb install`.**
+  `android run` builds the frontend, builds the APK, installs and launches it on
+  the device in production mode from `frontendDist`. `android build` keeps
+  pointing a debug APK at `devUrl`, which is why it produced
+  `Failed to request http://localhost:1420/` and needed a
+  `--config '{"build":{"devUrl":null}}'` override that `android run` never needs.
+  The user had to point this out; I had built the right pieces and then assembled
+  them by hand.
+- `tauri init` leaves four visible starter leftovers, all found only by looking
+  at the output rather than the source: `<string name="app_name">"fermentario"</string>`
+  with the quotes as literal text (init writes a JSON string into an XML resource),
+  `Cargo.toml` with `name = "app"` and `description = "A Tauri App"`, a
+  lowercase `productName`, and the Svelte logo left at
+  `src/lib/assets/favicon.svg` with `static/` holding no favicon at all.
+- A page that does not set its own `<title>` inherits the layout's. The homepage
+  was the only route without one; `/heatmap`, `/tags/[tag]` and `/diagnostics`
+  each had theirs. Compare the routes against each other instead of checking one.
+
+## Session: v0.1.1 release (version align + first push)
+- Versions drift: `package.json` was `0.0.1` while `tauri.conf.json` and
+  `Cargo.toml` were `0.1.0`. Bump all three together plus `Cargo.lock`
+  (`[[package]] name = "fermentario"`), or the desktop bundle reports a
+  different version from the web app.
+- `.gitignore` did not cover `/data` or `/.cache`, so `git add -A` staged the
+  real `fermentario.db` plus `-wal`/`-shm`. Fix the ignore file before you
+  stage, then verify with `git add -A --dry-run | grep -E "data/|\.cache"`.
+- Gate order matters: `pnpm run check` (0/0) → `pnpm run build` + verify
+  `build/index.js` exists → `pnpm test` (28/28 web, 27/27 parity) → `GET /`
+  returns 200. `pnpm test` runs against `build/`, so a stale build tests old
+  code.
