@@ -998,3 +998,19 @@
   `build/index.js` exists → `pnpm test` (28/28 web, 27/27 parity) → `GET /`
   returns 200. `pnpm test` runs against `build/`, so a stale build tests old
   code.
+
+## Session: Heatmap button loading state
+- A plain `<a href>` gives no feedback during SvelteKit client navigation: the
+  old page stays mounted while `load()` fetches, so the button must show the
+  wait itself. Derive it from `navigating` in `$app/state`
+  (`navigating.to?.url.pathname === '/heatmap'`) — verified present in
+  `node_modules/@sveltejs/kit/src/runtime/app/state/` on Kit 2.70.3. It sets on
+  navigation start and clears on settle or failure, so no manual reset path.
+- `<a>` takes no `disabled` attribute. Disable with `aria-disabled="true"` +
+  `pointer-events-none opacity-40`, and mark `aria-busy`. Swap the `Grid3x3`
+  icon for `LoaderCircle` with `animate-spin` (`h-3.5 w-3.5`, same as
+  `Timeline.svelte:211`) — no new spacing, color, or type, so `docs/DESIGN.md`
+  stays satisfied.
+- SSR renders the idle branch (`navigating.to` is null), so `curl | grep` only
+  proves `aria-busy="false"` and no spinner class. The pending branch needs a
+  real click test in the browser.

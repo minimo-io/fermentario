@@ -20,7 +20,11 @@ import ModelsModal from '$lib/components/ModelsModal.svelte';
 	import CopyFallback from '$lib/components/CopyFallback.svelte';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Grid3x3 from '@lucide/svelte/icons/grid-3x3';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import { navigating } from '$app/state';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
+
+	let heatmapLoading = $derived(navigating.to?.url.pathname === '/heatmap');
 
 	let summaryLoading = $state(false);
 	let week = $state<string | null>(null);
@@ -467,7 +471,7 @@ function langTag(p: Lang): string {
 				{/if}
 				<button class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100" onclick={() => (showModels = !showModels)}>{showModels ? 'Models &#9650;' : 'Models'}</button>
 				<button class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100" onclick={() => (showConfig = !showConfig)}><Settings class="h-3.5 w-3.5" /> Config</button>
-				<a href="/heatmap" class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"><Grid3x3 class="h-3.5 w-3.5" /> Heatmap</a>
+				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
 			</div>
 		</header>
 
