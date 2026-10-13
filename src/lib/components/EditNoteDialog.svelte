@@ -4,16 +4,18 @@
 	type Props = {
 		note: Note;
 		content: string;
+		video: string;
 		onContent: (value: string) => void;
-		onSave: (content: string) => Promise<void>;
+		onVideo: (value: string) => void;
+		onSave: (content: string, video: string) => Promise<void>;
 		onCancel: () => void;
 	};
-	let { note, content, onContent, onSave, onCancel }: Props = $props();
+	let { note, content, video, onContent, onVideo, onSave, onCancel }: Props = $props();
 
 	let saving = $state(false);
 	let err = $state('');
 
-	const unchanged = $derived(content.trim() === note.content.trim());
+	const unchanged = $derived(content.trim() === note.content.trim() && video.trim() === (note.video ?? ''));
 	const empty = $derived(content.trim().length === 0);
 
 	async function save() {
@@ -21,7 +23,7 @@
 		saving = true;
 		err = '';
 		try {
-			await onSave(content.trim());
+			await onSave(content.trim(), video.trim());
 		} catch (e) {
 			err = (e as Error)?.message ?? 'Could not save the note.';
 		} finally {
@@ -47,6 +49,15 @@
 			oninput={(e) => onContent(e.currentTarget.value)}
 			placeholder="Note text"
 		></textarea>
+		<label class="mt-3 block text-xs font-medium text-stone-500" for="edit-video">YouTube URL (optional)</label>
+		<input
+			id="edit-video"
+			class="mt-1 w-full rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+			value={video}
+			oninput={(e) => onVideo(e.currentTarget.value)}
+			placeholder="https://www.youtube.com/watch?v=…"
+			inputmode="url"
+		/>
 		{#if err}
 			<p class="mt-2 text-xs text-rose-500">{err}</p>
 		{/if}

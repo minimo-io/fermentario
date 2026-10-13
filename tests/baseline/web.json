@@ -71,6 +71,8 @@
 					"content": "Fixed the broken chair in the hallway.",
 					"created_at": 1741089600000,
 					"updated_at": 1741089600000,
+					"featured": false,
+					"video": "",
 					"tags": []
 				},
 				{
@@ -78,6 +80,8 @@
 					"content": "Went kayaking on the river at dawn.",
 					"created_at": 1741089600000,
 					"updated_at": 1741089600000,
+					"featured": false,
+					"video": "",
 					"tags": [
 						"garden"
 					]
@@ -101,6 +105,8 @@
 					"content": "Long standup about the migration deadline.",
 					"created_at": 1740916800000,
 					"updated_at": 1740916800000,
+					"featured": false,
+					"video": "",
 					"tags": [
 						"work"
 					]
@@ -110,6 +116,8 @@
 					"content": "Finally finished the kayak paddle repair.",
 					"created_at": 1740312000000,
 					"updated_at": 1740312000000,
+					"featured": false,
+					"video": "",
 					"tags": [
 						"garden",
 						"work"
@@ -134,6 +142,8 @@
 					"content": "Went kayaking on the river at dawn.",
 					"created_at": 1741089600000,
 					"updated_at": 1741089600000,
+					"featured": false,
+					"video": "",
 					"tags": [
 						"garden"
 					]
@@ -143,6 +153,8 @@
 					"content": "Finally finished the kayak paddle repair.",
 					"created_at": 1740312000000,
 					"updated_at": 1740312000000,
+					"featured": false,
+					"video": "",
 					"tags": [
 						"garden",
 						"work"
@@ -153,6 +165,8 @@
 					"content": "Old note from last year about kayaking trips.",
 					"created_at": 1730626200000,
 					"updated_at": 1730626200000,
+					"featured": false,
+					"video": "",
 					"tags": [
 						"garden"
 					]
@@ -248,6 +262,8 @@
 				"content": "Smoke test note about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
 				"tags": [
 					"garden"
 				]
@@ -262,11 +278,20 @@
 				"content": "Smoke test note, edited, about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
 				"tags": [
 					"work"
 				]
 			}
 		}
+	},
+	"page:/notes/[id]": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": true,
+		"hasTagName": false,
+		"hasPageWidth": true
 	},
 	"DELETE /api/notes/[id]/tags/[tag]": {
 		"status": 405,
@@ -294,13 +319,39 @@
 			"error": "not found"
 		}
 	},
+	"GET /api/notes/[id]": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "Smoke test note, edited, about kayaking",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"tags": [
+					"work"
+				]
+			}
+		}
+	},
+	"GET /api/notes/[missing]": {
+		"status": 404,
+		"body": {
+			"error": "not found"
+		}
+	},
 	"DELETE /api/notes/[id]": {
-		"status": 405,
-		"body": "GET method not allowed"
+		"status": 200,
+		"body": {
+			"ok": true
+		}
 	},
 	"DELETE /api/notes/[id] again": {
-		"status": 405,
-		"body": "GET method not allowed"
+		"status": 404,
+		"body": {
+			"error": "not found"
+		}
 	},
 	"GET /api/asks before delete": {
 		"status": 200,
@@ -334,9 +385,9 @@
 		"filename": "attachment; filename=\"fermentario-<date>.db\"",
 		"check": {
 			"quickCheck": "ok",
-			"notes": 6,
+			"notes": 5,
 			"vectors": 5,
-			"fts": 6
+			"fts": 5
 		}
 	},
 	"POST /api/import": {

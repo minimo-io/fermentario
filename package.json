@@ -1,33 +1,26 @@
 {
 	"name": "fermentario",
 	"private": true,
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"dev:tauri": "vite dev --config vite.config.tauri.ts",
 		"build": "vite build",
-		"build:tauri": "node scripts/make-seed.mjs && vite build --config vite.config.tauri.ts",
-		"seed": "node scripts/make-seed.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "pnpm run test:web && pnpm run test:engine",
+		"test": "pnpm run test:web",
 		"test:web": "node scripts/web-smoke.mjs",
-		"test:engine": "node scripts/parity.ts",
 		"test:web:update": "pnpm run build && node scripts/make-fixture.mjs && node scripts/web-smoke.mjs --update",
-		"fixture": "node scripts/make-fixture.mjs",
-		"gate:sqlite": "node scripts/sqlite-gate.mjs"
+		"fixture": "node scripts/make-fixture.mjs"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-node": "^5.5.7",
-		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.3",
-		"@tauri-apps/cli": "^2.12.0",
 		"@types/better-sqlite3": "^9.6.0",
 		"@types/dom-speech-recognition": "^0.0.12",
 		"daisyui": "^5.7.42",
@@ -40,8 +33,6 @@
 	"dependencies": {
 		"@huggingface/transformers": "^4.3.0",
 		"@lucide/svelte": "^1.47.0",
-		"@sqlite.org/sqlite-wasm": "3.53.4-build1",
-		"@tauri-apps/api": "^2.12.0",
 		"better-sqlite3": "^13.0.3"
 	}
 }

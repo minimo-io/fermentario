@@ -1,17 +1,21 @@
 <script lang="ts">
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import Star from '@lucide/svelte/icons/star';
 	import type { Note } from '$lib/types';
 	import { dayLocale } from '$lib/dates';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
+	import TagChip from '$lib/components/TagChip.svelte';
+	import VideoEmbed from '$lib/components/VideoEmbed.svelte';
 
 	type Props = {
 		notes: Note[];
 		summaryLoading: boolean;
 		onDelete: (id: string) => void;
-		onEdit: (id: string, content: string) => Promise<void>;
+		onEdit: (id: string, content: string, video?: string) => Promise<void>;
+		onFeature: (note: Note) => void;
 		onLoadMore?: () => void;
 		hasMore?: boolean;
 		loadingMore?: boolean;
@@ -23,6 +27,7 @@
 		summaryLoading,
 		onDelete,
 		onEdit,
+		onFeature,
 		onLoadMore,
 		hasMore,
 		loadingMore,
@@ -35,12 +40,14 @@
 	let confirmNote = $state<Note | null>(null);
 	let editNote = $state<Note | null>(null);
 	let editContent = $state('');
+	let editVideo = $state('');
 	let tagTarget = $state<{ note: Note; tag: string } | null>(null);
 
 	function openEdit(n: Note) {
 		menuNote = null;
 		editNote = n;
 		editContent = n.content;
+		editVideo = n.video ?? '';
 	}
 
 	function speakNote(id: string, content: string) {
@@ -132,35 +139,19 @@
 						class="flex items-start gap-3 rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3 {n.pending ? 'opacity-60' : ''}"
 						aria-busy={n.pending ? 'true' : undefined}
 					>
-						<span class="mt-px shrink-0 text-[11px] tabular-nums text-stone-400">{n.hour}</span>
+						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}<a href="/notes/{n.id}" title="Open this note" class="hover:text-stone-600 hover:underline">{n.hour}</a></span>
 						<div class="min-w-0 flex-1">
 							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{n.content}</p>
+							{#if n.video}
+								<div class="mt-2"><VideoEmbed id={n.video} /></div>
+							{/if}
 							{#if n.tags?.length}
 								<div class="mt-2 flex flex-wrap gap-1">
 									{#each n.tags as tag (tag)}
 										{#if onRemoveTag}
-											<span
-												class="group inline-flex items-center overflow-hidden rounded-full bg-stone-100 pl-2 pr-0.5 text-[11px] text-stone-500 transition-colors hover:bg-stone-200"
-											>
-												<a
-													href="/tags/{encodeURIComponent(tag)}"
-													title="See every note tagged #{tag}"
-													class="py-0.5 hover:text-stone-700"
-												>#{tag}</a>
-												<button
-													type="button"
-													class="grid h-4 w-4 place-items-center rounded-full text-stone-400 opacity-0 transition-opacity hover:bg-stone-300 hover:text-stone-600 focus-visible:opacity-100 group-hover:opacity-100"
-													aria-label="Remove #{tag} from this note"
-													title="Remove this tag"
-													onclick={() => (tagTarget = { note: n, tag })}
-												>&times;</button>
-											</span>
+											<TagChip {tag} onRemove={(t) => (tagTarget = { note: n, tag: t })} />
 										{:else}
-											<a
-												href="/tags/{encodeURIComponent(tag)}"
-												title="See every note tagged #{tag}"
-												class="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500 hover:bg-stone-200 hover:text-stone-700"
-											>#{tag}</a>
+											<TagChip {tag} />
 										{/if}
 									{/each}
 								</div>
@@ -222,6 +213,7 @@
 		onListen={(n) => { speakNote(n.id, n.content); menuNote = null; }}
 		onEdit={(n) => { openEdit(n); }}
 		onDelete={(n) => { menuNote = null; confirmNote = n; }}
+		onFeature={(n) => { menuNote = null; onFeature(n); }}
 		onClose={() => (menuNote = null)}
 	/>
 {/if}
@@ -230,9 +222,11 @@
 	<EditNoteDialog
 		note={editing}
 		content={editContent}
+		video={editVideo}
 		onContent={(v) => (editContent = v)}
-		onSave={async (content) => {
-			await onEdit(editing.id, content);
+		onVideo={(v) => (editVideo = v)}
+		onSave={async (content, video) => {
+			await onEdit(editing.id, content, video);
 			editNote = null;
 		}}
 		onCancel={() => (editNote = null)}

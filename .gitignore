@@ -7,9 +7,6 @@ node_modules
 .wrangler
 /.svelte-kit
 /build
-# The Tauri build target. Separate from /build so it can never clobber the
-# adapter-node output.
-/dist-static
 
 # OS
 .DS_Store
@@ -24,9 +21,6 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-
-# Generated from the journal: personal text, never committed.
-src/lib/platform/seed.generated.ts
 
 # Local data and cache: never committed.
 /data

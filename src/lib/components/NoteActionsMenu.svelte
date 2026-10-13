@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Copy from '@lucide/svelte/icons/copy';
 	import Pencil from '@lucide/svelte/icons/pencil';
+	import Star from '@lucide/svelte/icons/star';
 	import Volume2 from '@lucide/svelte/icons/volume-2';
 	import Trash from '@lucide/svelte/icons/trash';
 	import type { Note } from '$lib/types';
@@ -10,9 +11,10 @@
 		onListen: (note: Note) => void;
 		onEdit: (note: Note) => void;
 		onDelete: (note: Note) => void;
+		onFeature: (note: Note) => void;
 		onClose: () => void;
 	};
-	let { note, onListen, onEdit, onDelete, onClose }: Props = $props();
+	let { note, onListen, onEdit, onDelete, onFeature, onClose }: Props = $props();
 
 	let copied = $state(false);
 	let copyErr = $state('');
@@ -57,6 +59,13 @@
 				onclick={() => { onEdit(note); }}
 			>
 				<Pencil class="h-4 w-4 shrink-0 text-stone-400" /> Edit
+			</button>
+			<button
+				type="button"
+				class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+				onclick={() => { onFeature(note); }}
+			>
+				<Star class="h-4 w-4 fill-amber-400 text-amber-400" /> {note.featured ? 'Unfeature' : 'Feature'}
 			</button>
 			<button
 				type="button"

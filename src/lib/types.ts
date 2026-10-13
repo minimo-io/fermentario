@@ -5,6 +5,8 @@ export interface Note {
 	updated_at: number;
 	tags?: string[];
 	pending?: boolean;
+	featured?: boolean;
+	video?: string;
 }
 
 export interface ChatCtx {
@@ -23,5 +25,30 @@ export interface AskEntry {
 	question: string;
 	answer: string;
 	sources: AskSource[];
+	created_at: number;
+}
+
+export interface TodoGroup {
+	id: string;
+	name: string;
+	created_at: number;
+}
+
+export interface TodoItem {
+	id: string;
+	group_id: string;
+	content: string;
+	done: boolean;
+	done_at: number;
+	position: number;
+	created_at: number;
+	updated_at: number;
+	tags: string[];
+}
+
+export interface Principle {
+	id: string;
+	content: string;
+	position: number;
 	created_at: number;
 }

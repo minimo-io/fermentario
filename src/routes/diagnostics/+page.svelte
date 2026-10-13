@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ArrowLeft } from '@lucide/svelte';
+	import { contentWidthClass } from '$lib/display';
 
 	/** The app has no browser chrome, so a page reached by a link needs its own
 	 *  way back. `history.back()` when there is somewhere to go, otherwise the
@@ -14,9 +15,8 @@
 	/**
  * Report the things this app cannot assume.
  *
- * Every check here is a question whose answer differs between a desktop
- * browser, an iOS WebView and an Android WebView, and whose failure mode is
- * silence rather than an error. `crossOriginIsolated` being false does not
+ * Every check here is a question whose answer differs between desktop and
+ * mobile browsers, and whose failure mode is silence rather than an error. `crossOriginIsolated` being false does not
  * throw; it just means onnxruntime silently runs one thread, and the only
  * symptom is that generation is slow.
  *
@@ -35,6 +35,7 @@ interface Row {
 // it the page renders empty, because the checks all run in onMount.
 let rows: Row[] = $state([]);
 let run = $state<(() => void) | null>(null);
+let contentClass = $state('max-w-2xl');
 
 /** Row ids, not labels, key the list: the download progress callback reports
  *  the same label on every tick, and keyed on the label Svelte throws
@@ -52,8 +53,6 @@ const set = (label: string, value: string, ok?: boolean | null, note?: string) =
 	else add(label, value, ok, note);
 	rows = rows;
 };
-
-const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 // --- Isolation: required for multithreaded WASM ---------------------------
 // --- Isolation: required for multithreaded WASM ---------------------------
@@ -133,7 +132,7 @@ function speech() {
 		'SpeechRecognition',
 		has ? 'available' : 'absent',
 		has,
-		has ? undefined : 'The Android WebView has none, so dictation needs another route'
+		has ? undefined : 'Speech recognition is absent, so dictation needs another route'
 	);
 	const md = navigator.mediaDevices;
 	add(
@@ -158,20 +157,7 @@ function speech() {
 // --- The database engine -------------------------------------------------
 async function engine() {
 	try {
-		const res = await fetch('/api/status');
-		const d = await res.json();
-		const db = d?.database;
-		if (db?.vfs) {
-			// The VFS decides whether a saved note is still there tomorrow. A
-			// main-thread `opfs` VFS that is not the SAH pool reads and writes
-			// perfectly and loses everything, so it is called out by name.
-			const persistent = db.vfs === 'opfs-sahpool';
-			add('SQLite file', db.file, true);
-			add('Storage backend', db.vfs, persistent, persistent ? undefined : 'Writes may not survive a restart');
-			add('Notes in the database', String(d.notes ?? 0));
-			add('Seeded from the web journal', d.seeded ? 'yes, on first run' : 'no');
-			return;
-		}
+		await fetch('/api/status');
 		add('SQLite engine', 'the server is answering — this is the web app', true);
 	} catch (err) {
 		add('SQLite engine', `unavailable: ${(err as Error)?.message ?? err}`, false);
@@ -235,8 +221,10 @@ onMount(() => {
 	// Everything that touches window, navigator or document happens here. The
 	// web app still server-renders, so touching them at component init throws
 	// "window is not defined" and the page 500s.
-	const tauri = isTauri();
-	add('Tauri', tauri ? 'yes' : 'no — running in a plain browser', tauri);
+	try {
+		const raw = localStorage.getItem('fermentario.config');
+		if (raw) contentClass = contentWidthClass((JSON.parse(raw) as { contentWidth?: string })?.contentWidth);
+	} catch {}
 	add('User agent', navigator.userAgent);
 	isolation();
 	storage();
@@ -249,7 +237,7 @@ onMount(() => {
 
 <svelte:head><title>Diagnostics</title></svelte:head>
 
-<div class="mx-auto max-w-2xl px-6 pt-14 pb-24">
+<div class="mx-auto {contentClass} px-6 pt-14 pb-24">
 	<button
 		type="button"
 		class="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500"

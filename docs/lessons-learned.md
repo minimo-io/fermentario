@@ -1014,3 +1014,40 @@
 - SSR renders the idle branch (`navigating.to` is null), so `curl | grep` only
   proves `aria-busy="false"` and no spinner class. The pending branch needs a
   real click test in the browser.
+
+## Session: Tauri removal (web-only)
+- `src-tauri/` (65 files), `vite.config.tauri.ts`, `src/hooks.client.ts`,
+  `src/lib/platform/local-api.ts`, `wasm-db.ts`, `seed.generated.ts`,
+  `scripts/make-seed.mjs`, `parity.ts`, `sqlite-gate.mjs` are gone. Kept:
+  `platform/journal.ts` + `sqlite.ts` (the Node server imports them),
+  `platform.ts` (`isAppleDevice`), `scripts/seed.ts` (test fixture data).
+- Deps removed: `@tauri-apps/api`, `@tauri-apps/cli`,
+  `@sveltejs/adapter-static`, `@sqlite.org/sqlite-wasm`. Scripts removed:
+  `dev:tauri`, `build:tauri`, `seed`, `test:engine`, `gate:sqlite`.
+  `pnpm test` is now the web smoke test only (28 checks).
+- `vite.config.ts` lost the dead `__LOCAL_DB__` define. The diagnostics page
+  lost the Tauri row, the VFS branch (web `/api/status` never returns
+  `database.vfs`), and Android-only copy. Tasks 023/024/025 deleted as
+  app-only. Standing rule: never suggest commit or push; the user alone
+  orders it.
+
+## Session: sections run 023–033 (all done, web unbroken)
+- Eleven tasks in order: sections shell + carousel + `G then 1–5` shortcuts
+  (hints in config only, never on pills — modifier chords collide with macOS
+  capture), To-Do (groups/items/tags), Principles (positional numbering,
+  full-order PUT), Library/Influences placeholders, Featured (flag-only PATCH,
+  pinned lists, pager excludes), fullscreen editor (same controlled input),
+  tag colors (registry + palette keys + shared store), YouTube id-only column
+  + click-to-load embed, single-note route reusing all timeline handlers,
+  settings FAB + tabbed modal (old modals deleted).
+- Migrations via `PRAGMA table_info` + `ALTER TABLE` in `db.ts` (featured,
+  video) — verified against a pre-flag database.
+- The smoke "DELETE /api/notes/[id]" steps sent GET (no method arg), so the
+  golden held 405s and DELETE was never tested. Fixed to real DELETEs and
+  added single-note GET/page checks (31 checks). Same mislabeling exists on
+  the two tag-DELETE steps — left alone, golden unchanged there.
+- Golden updates (`featured`, `video` fields) recorded only after reading the
+  diff; `make-fixture` deletes the committed `-shm`/`-wal` sidecars, restored
+  with `git checkout` to keep the change set clean.
+- Touch drags (pills, principles) and the Ask/config FAB positions need a real
+  device to feel; SSR + gates cannot cover them.

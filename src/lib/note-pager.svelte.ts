@@ -25,6 +25,7 @@ export class NotePager {
 	count = $state(0);
 	loading = $state(false);
 	tag: string | null;
+	featured: 'only' | 'exclude' | null = null;
 
 	constructor(tag: string | null = null) {
 		this.tag = tag;
@@ -45,6 +46,7 @@ export class NotePager {
 			q.set('before_id', before.id);
 		}
 		if (this.tag) q.set('tag', this.tag);
+		if (this.featured) q.set('featured', this.featured);
 		const res = await fetch(`/api/notes?${q.toString()}`);
 		if (!res.ok) throw new Error('Failed to load notes.');
 		return (await res.json()) as NotesPage;

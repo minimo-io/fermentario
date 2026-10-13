@@ -1,8 +1,16 @@
 # Tasks
 
-- 025 [TODO] Android packaging
-- 024 [TODO] Microphone and Android permissions
-- 023 [TODO] Model distribution on the device
+- 033 [DONE] Unified config button and tabbed modal
+- 032 [DONE] Single note view
+- 031 [DONE] YouTube reference on a note
+- 030 [DONE] Tag colors
+- 029 [DONE] Fullscreen note editor
+- 028 [DONE] Featured notes
+- 027 [DONE] Influences section (later version)
+- 026 [DONE] Library section (later version)
+- 025 [DONE] Principles list
+- 024 [DONE] To-Do lists and groups
+- 023 [DONE] Sections shell and reorder
 - 022 [DONE] Diagnostics page and the on-device gate
 - 021 [DONE] Move the web part into the client
 - 020 [DONE] Platform layer: the database in the WebView

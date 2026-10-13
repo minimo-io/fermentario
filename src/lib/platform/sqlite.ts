@@ -1,10 +1,9 @@
 /**
- * The database interface shared by both runtimes.
+ * The database interface for the Node server.
  *
- * The web app runs better-sqlite3 in Node. The Tauri app runs SQLite compiled
- * to WebAssembly in the WebView, with the database in OPFS. Neither engine is
- * imported here: `createJournal()` in `./journal` holds the queries, and the
- * two adapters under `src/lib/server` and `src/lib/platform` supply the handle.
+ * The web app runs better-sqlite3 in Node. `createJournal()` in `./journal`
+ * holds the queries, and the adapter under `src/lib/server` supplies the
+ * handle.
  *
  * The shape is deliberately the small part of better-sqlite3 that this app
  * uses, because that keeps every query in `journal.ts` written exactly as it

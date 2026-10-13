@@ -1,4 +1,5 @@
 import type { Note } from '$lib/types';
+import { youTubeWatchUrl } from '$lib/youtube';
 
 export interface FormattedNoteLine {
 	day: string;
@@ -48,7 +49,8 @@ export function formatNotesForClipboard(notes: Note[], locale = 'en-GB'): string
 				minute: '2-digit'
 			});
 			const tags = (n.tags ?? []).map((t) => `#${t}`).join(' ');
-			return `${time}  ${n.content}${tags ? `  ${tags}` : ''}`;
+			const video = n.video ? `  ${youTubeWatchUrl(n.video)}` : '';
+			return `${time}  ${n.content}${tags ? `  ${tags}` : ''}${video}`;
 		});
 		return `${header}\n${lines.join('\n')}`;
 	});

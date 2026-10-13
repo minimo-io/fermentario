@@ -1,17 +1,20 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { onMount } from 'svelte';
+	import { contentWidthClass } from '$lib/display';
 
 	type Props = { data: { days: { day: string; count: number }[]; notes: number } };
 	let { data }: Props = $props();
 
 	let lang = $state('en');
+	let contentClass = $state('max-w-2xl');
 	onMount(() => {
 		try {
 			const raw = localStorage.getItem('fermentario.config');
 			if (raw) {
-				const c = JSON.parse(raw) as { entriesLang?: string };
+				const c = JSON.parse(raw) as { entriesLang?: string; contentWidth?: string };
 				if (c?.entriesLang) lang = c.entriesLang;
+				contentClass = contentWidthClass(c?.contentWidth);
 			}
 		} catch {}
 	});
@@ -132,7 +135,7 @@
 </svelte:head>
 
 <main class="min-h-dvh">
-	<div class="mx-auto max-w-2xl px-6 pt-14 pb-24">
+	<div class="mx-auto {contentClass} px-6 pt-14 pb-24">
 		<header class="mb-6">
 			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800">
 				<ArrowLeft class="h-3.5 w-3.5" /> All notes

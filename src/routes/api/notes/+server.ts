@@ -4,11 +4,13 @@ import {
 	listNotesPage,
 	countNotes,
 	countNotesByTag,
-	setNoteTags
+	setNoteTags,
+	setNoteVideo
 } from '$lib/server/db';
 import { ensureIndexed, indexNote } from '$lib/server/rag';
 import { ensureTags, tagNote } from '$lib/server/tags';
 import { splitTrailingHashtags } from '$lib/hashtags';
+import { extractYouTubeId } from '$lib/youtube';
 
 const MAX_TAG_FILTER = 60;
 
@@ -23,12 +25,14 @@ export async function GET({ url }) {
 	const before = num(url.searchParams.get('before'));
 	const beforeId = url.searchParams.get('before_id');
 	const rawTag = (url.searchParams.get('tag') ?? '').trim().toLowerCase();
+	const rawFeatured = url.searchParams.get('featured');
+	const featured = rawFeatured === 'only' || rawFeatured === 'exclude' ? rawFeatured : undefined;
 
 	if (rawTag) {
 		// A tag page is already filtered: the background passes would only burn
 		// CPU, and every page of the cursor is filtered on the server.
 		const tag = rawTag.slice(0, MAX_TAG_FILTER);
-		const page = listNotesPage({ limit, before, beforeId, tag });
+		const page = listNotesPage({ limit, before, beforeId, tag, featured });
 		return json({ ...page, count: countNotesByTag(tag), tag });
 	}
 
@@ -36,7 +40,7 @@ export async function GET({ url }) {
 	// background and land in the next response.
 	void ensureIndexed().catch(() => {});
 	void ensureTags();
-	const page = listNotesPage({ limit, before, beforeId });
+	const page = listNotesPage({ limit, before, beforeId, featured });
 	return json({ ...page, count: countNotes(), tag: null });
 }
 
@@ -52,6 +56,12 @@ export async function POST({ request }) {
 	}
 	const created = Number(body?.created_at) || Date.now();
 	const note = createNote(content, created);
+	if (typeof body?.video === 'string' && body.video.trim()) {
+		const id = extractYouTubeId(body.video);
+		if (!id) return json({ error: 'not a YouTube URL' }, { status: 400 });
+		setNoteVideo(note.id, id);
+		note.video = id;
+	}
 	void indexNote(note.id, content).catch(() => {});
 	if (tags.length > 0) {
 		// The user typed the tags. They are the tags; the model is not asked.

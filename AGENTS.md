@@ -10,6 +10,7 @@
 - If precision and natural phrasing conflict, precision wins.
 
 ## Process
+- Never suggest to commit or push. The user alone gives that order.
 - After every change, all four gates must pass **in this order**: `pnpm run check` (0 errors, 0 warnings), `pnpm run build` (clean, and `build/index.js` actually exists), `pnpm test` (the web smoke test, 28 checks against `tests/baseline/web.json`), and `GET /` returning 200.
 - `pnpm test` tests whatever is in `build/`, so it must run after `pnpm run build`. Testing a stale build records the old behaviour instead of the current one — that mistake put a 404 for `/diagnostics` into the golden.
 - `pnpm test` is the "the web app still works exactly as before" gate. It boots the production build against a frozen synthetic fixture in a temp directory, so it never touches `data/fermentario.db`. Run it after any change to `src/routes/api`, `src/lib/server`, or the page components. To record an intended behaviour change, run `pnpm run test:web:update` and read the diff.

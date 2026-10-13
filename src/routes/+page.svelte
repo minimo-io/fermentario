@@ -3,17 +3,18 @@
 	import type { Note } from '$lib/types';
 	import type { AskEntry, AskSource } from '$lib/types';
 	import Composer from '$lib/components/Composer.svelte';
-import ConfigModal from '$lib/components/ConfigModal.svelte';
 import Settings from '@lucide/svelte/icons/settings';
-import ModelsModal from '$lib/components/ModelsModal.svelte';
+import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import Weekly from '$lib/components/Weekly.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
 	import AskTab from '$lib/components/AskTab.svelte';
-	import Kbd from '$lib/components/Kbd.svelte';
+	import TodoTab from '$lib/components/TodoTab.svelte';
+	import PrinciplesTab from '$lib/components/PrinciplesTab.svelte';
 	import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from '$lib/chat-models';
 	import { isAppleDevice } from '$lib/platform';
 	import { splitTrailingHashtags } from '$lib/hashtags';
 	import { NotePager } from '$lib/note-pager.svelte';
+	import { tagColors } from '$lib/tag-colors.svelte';
 	import { formatNotesForClipboard } from '$lib/note-export';
 	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
 	import RestoreOverlay from '$lib/components/RestoreOverlay.svelte';
@@ -21,7 +22,12 @@ import ModelsModal from '$lib/components/ModelsModal.svelte';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Grid3x3 from '@lucide/svelte/icons/grid-3x3';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import { navigating } from '$app/state';
+	import SectionBar from '$lib/components/SectionBar.svelte';
+	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
+	import { SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
+	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
 
 	let heatmapLoading = $derived(navigating.to?.url.pathname === '/heatmap');
@@ -30,11 +36,11 @@ import ModelsModal from '$lib/components/ModelsModal.svelte';
 	let week = $state<string | null>(null);
 	let dismissed = $state(true);
 	let saving = $state(false);
-let showModels = $state(false);
-let showConfig = $state(false);
+let showSettings = $state(false);
+let settingsTab = $state<'language' | 'models' | 'database'>('language');
 type Lang = 'en' | 'es' | 'pt';
-type LangConfig = { modelLang: Lang; entriesLang: Lang; chatModel: string; summaryPrompt: string };
-const DEFAULT_CONFIG: LangConfig = { modelLang: 'en', entriesLang: 'en', chatModel: DEFAULT_CHAT_MODEL_ID, summaryPrompt: '' };
+type LangConfig = { modelLang: Lang; entriesLang: Lang; chatModel: string; summaryPrompt: string; sections: string[]; contentWidth: string };
+const DEFAULT_CONFIG: LangConfig = { modelLang: 'en', entriesLang: 'en', chatModel: DEFAULT_CHAT_MODEL_ID, summaryPrompt: '', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH };
 let config = $state<LangConfig>(DEFAULT_CONFIG);
 function saveConfig(p: Partial<LangConfig>) {
 	config = { ...config, ...p };
@@ -59,26 +65,67 @@ function langTag(p: Lang): string {
 	let lastQuestion = $state('');
 	let asks = $state<AskEntry[]>([]);
 	const pager = new NotePager();
+	pager.featured = 'exclude';
 	let notes = $derived(pager.notes);
-	let view = $state<'notes' | 'ask'>('notes');
+	let featured = $state<Note[]>([]);
+	let view = $state<View>('notes');
+	let lastSection = $state<SectionId>('notes');
+	const orderedSections = $derived(
+		sanitizeSectionOrder(config.sections)
+			.map((id) => SECTIONS.find((s) => s.id === id))
+			.filter((s) => s !== undefined)
+	);
+	/** The composer only knows notes vs ask. Every other section uses note mode. */
+	const composerView = $derived(view === 'ask' ? 'ask' : 'notes');
+	const contentClass = $derived(contentWidthClass(config.contentWidth));
+	function selectSection(id: SectionId) {
+		lastSection = id;
+		view = id;
+	}
+	function toggleAsk() {
+		if (view === 'ask') view = lastSection;
+		else {
+			lastSection = view;
+			view = 'ask';
+		}
+	}
 	let apple = $state(false);
 	onMount(() => {
 		apple = isAppleDevice();
 	});
 
-	// Ctrl/⌘ + Shift + 1 / 2 and Ctrl/⌘ + Shift + L. The Shift is required:
-	// every browser binds Ctrl/⌘ + 1…8 to its own tab bar and Ctrl/⌘ + L to the
-	// address bar, so the plain chords never reach the page. AltGr on Windows
-	// reports Ctrl+Alt, hence the altKey guard.
+	// Section shortcuts are a two-key sequence: `G` then `1…5`, with an
+	// 800 ms pending window. Modifier chords are out: Ctrl/⌘ + digits belong
+	// to the browser tab bar and collide with macOS screen capture, so a
+	// sequence is the safe option here. Ctrl/⌘ + Shift + L still focuses the
+	// composer. The hints live in the config Sections list, not on the pills.
+	let pendingSectionKey = $state(false);
+	let pendingSectionTimer: ReturnType<typeof setTimeout> | undefined;
 	function handleViewShortcut(e: KeyboardEvent) {
-		if (!e.shiftKey || e.altKey || e.isComposing) return;
-		if (apple ? !e.metaKey : !e.ctrlKey) return;
-		if (showModels || showConfig) return;
 		const t = e.target as HTMLElement | null;
 		if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
-		if (e.key === '1') view = 'notes';
-		else if (e.key === '2') view = 'ask';
-		else if (e.key === 'l' || e.key === 'L') focusComposer();
+		if (e.isComposing) return;
+		if (pendingSectionKey) {
+			clearTimeout(pendingSectionTimer);
+			pendingSectionTimer = undefined;
+			pendingSectionKey = false;
+			const n = Number(e.key);
+			if (!e.metaKey && !e.ctrlKey && !e.altKey && n >= 1 && n <= 5 && orderedSections[n - 1]) {
+				selectSection(orderedSections[n - 1].id);
+				e.preventDefault();
+			}
+			return;
+		}
+		if (e.metaKey || e.ctrlKey) {
+			if (!e.shiftKey || e.altKey) return;
+			if (showSettings) return;
+			if (e.key === 'l' || e.key === 'L') focusComposer();
+			return;
+		}
+		if (!e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'G')) {
+			pendingSectionKey = true;
+			pendingSectionTimer = setTimeout(() => (pendingSectionKey = false), 800);
+		}
 	}
 
 	function focusComposer() {
@@ -119,8 +166,9 @@ function langTag(p: Lang): string {
 	}
 
 	async function runRestore(file: File) {
-		showConfig = false;
+		showSettings = false;
 		view = 'notes';
+		lastSection = 'notes';
 		restoreName = file.name;
 		restoreError = '';
 		restorePhase = 'uploading';
@@ -190,6 +238,8 @@ function langTag(p: Lang): string {
 
 	$effect(() => {
 		loadNotes();
+		void loadFeatured();
+		void tagColors.load();
 		refreshSummaryAnswer(true, null, false);
 		void loadAsks();
 		// Restore the unsaved composer text after SPA navigation or a reload.
@@ -209,7 +259,9 @@ function langTag(p: Lang): string {
 				modelLang: p.modelLang as Lang,
 				entriesLang: p.entriesLang as Lang,
 				chatModel: typeof p.chatModel === 'string' && CHAT_MODELS.some((m) => m.id === p.chatModel) ? p.chatModel : DEFAULT_CHAT_MODEL_ID,
-				summaryPrompt: typeof p.summaryPrompt === 'string' ? p.summaryPrompt : ''
+				summaryPrompt: typeof p.summaryPrompt === 'string' ? p.summaryPrompt : '',
+					sections: sanitizeSectionOrder(p.sections),
+					contentWidth: sanitizeContentWidth(p.contentWidth)
 			};
 		}
 	} catch {}
@@ -226,6 +278,40 @@ function langTag(p: Lang): string {
 			await pager.open();
 		} catch (e) {
 			showToast((e as Error)?.message ?? 'Failed to load notes.');
+		}
+	}
+
+	async function loadFeatured() {
+		try {
+			const d = await (await fetch('/api/notes?limit=100&featured=only')).json();
+			featured = Array.isArray(d.notes) ? d.notes : [];
+		} catch {
+			showToast('Failed to load featured notes.');
+		}
+	}
+
+	async function handleFeature(n: Note) {
+		try {
+			const res = await fetch(`/api/notes/${n.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ featured: !n.featured })
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to update note.');
+			const saved = d.note as Note;
+			if (saved.featured) {
+				pager.remove(n.id);
+				featured = [saved, ...featured.filter((f) => f.id !== saved.id)];
+			} else {
+				// Back into the chronological list at the top; the next full
+				// load restores the exact position. Never refetch here: that
+				// collapses accumulated pages and loses the scroll position.
+				featured = featured.filter((f) => f.id !== saved.id);
+				pager.prepend(saved);
+			}
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to update note.');
 		}
 	}
 
@@ -274,6 +360,7 @@ function langTag(p: Lang): string {
 	function handleNote(cd: string) {
 		if (!cd.trim() || NO_STATE.has(cd)) return;
 		view = 'notes';
+		lastSection = 'notes';
 		saving = true;
 		const { content, tags } = splitTrailingHashtags(cd);
 		if (!content) {
@@ -315,6 +402,7 @@ function langTag(p: Lang): string {
 			.then((r) => r.json())
 			.then(() => {
 				pager.remove(id);
+				featured = featured.filter((f) => f.id !== id);
 				refreshSummaryAnswer(false, null, false);
 			})
 			.catch((e) => showToast((e as Error)?.message ?? 'Failed to delete note.'));
@@ -328,23 +416,31 @@ function langTag(p: Lang): string {
 			);
 			if (!res.ok) throw new Error('Failed to remove the tag.');
 			const note = notes.find((n) => n.id === noteId);
-			const rest = (note?.tags ?? []).filter((t) => t !== tag);
-			if (rest.length > 0 && note) pager.patch({ ...note, tags: rest });
-			else pager.remove(noteId);
+			if (!note) return;
+			// Always patch, even when no tags remain. Removing the row is the
+			// tag page's behavior (the note no longer matches its filter);
+			// on the timeline the note stays with an empty tag list.
+			pager.patch({ ...note, tags: (note.tags ?? []).filter((t) => t !== tag) });
+			featured = featured.map((f) =>
+				f.id === noteId ? { ...f, tags: (f.tags ?? []).filter((t) => t !== tag) } : f
+			);
 		} catch (e) {
 			showToast((e as Error)?.message ?? 'Failed to remove the tag.');
 		}
 	}
 
-	async function handleEdit(id: string, content: string) {
+	async function handleEdit(id: string, content: string, video?: string) {
+		const body: { content: string; video?: string } = { content };
+		if (video !== undefined) body.video = video;
 		const res = await fetch(`/api/notes/${id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ content })
+			body: JSON.stringify(body)
 		});
 		const d = await res.json();
 		if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
 		pager.patch(d.note as Note);
+		featured = featured.map((f) => (f.id === (d.note as Note).id ? (d.note as Note) : f));
 		refreshSummaryAnswer(false, null, false);
 	}
 
@@ -463,43 +559,60 @@ function langTag(p: Lang): string {
 </svelte:head>
 
 <main class="min-h-dvh">
-	<div class="mx-auto max-w-2xl px-6 pt-14 pb-[calc(var(--composer-h,4.5rem)+2.5rem)]">		<header class="mb-5">
+	<div class="mx-auto {contentClass} px-6 pt-[max(3.5rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)]">		<header class="mb-5">
 			<p class="mt-1 text-sm text-stone-500">your voice journal — life &amp; the bootstrapped thing.</p>
 			<div class="mt-4 flex flex-wrap items-center gap-2">
 				{#if week && dismissed}
 					<button class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100" onclick={() => (dismissed = false)}>Weekly recap &#9662;</button>
 				{/if}
-				<button class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100" onclick={() => (showModels = !showModels)}>{showModels ? 'Models &#9650;' : 'Models'}</button>
-				<button class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100" onclick={() => (showConfig = !showConfig)}><Settings class="h-3.5 w-3.5" /> Config</button>
 				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
+				<span class="ml-auto inline-flex items-center gap-2">
+					<button
+						type="button"
+						class="inline-flex items-center gap-1 rounded-full bg-stone-900 px-3 py-1 text-xs font-medium text-white hover:bg-stone-800"
+						aria-label={view === 'ask' ? 'Close Ask' : 'Ask the archive'}
+						onclick={toggleAsk}
+					>{#if view === 'ask'}<span aria-hidden="true">×</span> Close{:else}<MessageCircle class="h-3.5 w-3.5" /> Ask{/if}</button>
+					<button
+						type="button"
+						class="grid h-7 w-7 place-items-center rounded-full border border-stone-300 bg-white text-stone-600 hover:bg-stone-100"
+						aria-label="Settings"
+						onclick={() => (showSettings = true)}
+					><Settings class="h-3.5 w-3.5" /></button>
+				</span>
 			</div>
 		</header>
 
-		<div class="mb-4 inline-flex items-center rounded-full border border-stone-200 bg-white p-0.5 shadow-sm" role="tablist" aria-label="Views">
-			<button
-				role="tab"
-				aria-selected={view === 'notes'}
-				aria-keyshortcuts={apple ? 'Meta+Shift+1' : 'Control+Shift+1'}
-				class="inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium {view === 'notes' ? 'bg-stone-900 text-white' : 'text-stone-500 hover:bg-stone-100'}"
-				onclick={() => (view = 'notes')}
-			>
-				Notes<Kbd keys={apple ? ['⌘', '⇧', '1'] : ['Ctrl', '⇧', '1']} tone={view === 'notes' ? 'dark' : 'light'} />
-			</button>
-			<button
-				role="tab"
-				aria-selected={view === 'ask'}
-				aria-keyshortcuts={apple ? 'Meta+Shift+2' : 'Control+Shift+2'}
-				class="inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium {view === 'ask' ? 'bg-stone-900 text-white' : 'text-stone-500 hover:bg-stone-100'}"
-				onclick={() => (view = 'ask')}
-			>
-				Ask<Kbd keys={apple ? ['⌘', '⇧', '2'] : ['Ctrl', '⇧', '2']} tone={view === 'ask' ? 'dark' : 'light'} />
-			</button>
+		<div class="mb-4" role="tablist" aria-label="Views">
+			<SectionBar
+				sections={orderedSections}
+				active={view === 'ask' ? lastSection : view}
+				onSelect={selectSection}
+				onReorder={(ids) => saveConfig({ sections: ids })}
+			/>
 		</div>
 
 		{#if view === 'notes'}
 			{#if week && !dismissed}
 				<section class="mt-5 mb-5">
 					<Weekly {summaryLoading} {week} {reading} onRead={readWeekly} onDismiss={dismissWeekly} />
+				</section>
+			{/if}
+
+			{#if featured.length > 0}
+				<section class="mt-5 mb-5" aria-label="Featured notes">
+					<Timeline
+						notes={featured}
+						{summaryLoading}
+						onDelete={handleDelete}
+						onEdit={handleEdit}
+						onFeature={handleFeature}
+						onLoadMore={() => pager.loadMore()}
+						hasMore={false}
+						loadingMore={false}
+						onRemoveTag={removeTag}
+						lang={config.entriesLang}
+					/>
 				</section>
 			{/if}
 
@@ -518,6 +631,7 @@ function langTag(p: Lang): string {
 				{summaryLoading}
 				onDelete={handleDelete}
 				onEdit={handleEdit}
+				onFeature={handleFeature}
 				onLoadMore={() => pager.loadMore()}
 				hasMore={pager.hasMore}
 				loadingMore={pager.loading}
@@ -525,7 +639,7 @@ function langTag(p: Lang): string {
 				lang={config.entriesLang}
 			/>
 			</section>
-		{:else}
+		{:else if view === 'ask'}
 			<AskTab
 				{asks}
 				{lastQuestion}
@@ -535,6 +649,12 @@ function langTag(p: Lang): string {
 				{answerStopped}
 				onDelete={handleDeleteAsk}
 			/>
+		{:else if view === 'todo'}
+			<TodoTab onError={(m) => showToast(m)} lang={config.entriesLang} />
+		{:else if view === 'principles'}
+			<PrinciplesTab onError={(m) => showToast(m)} />
+		{:else}
+			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
 		{/if}
 
 		{#if copyText !== null}
@@ -561,7 +681,7 @@ function langTag(p: Lang): string {
 			onNote={handleNote}
 			onAsk={handleAsk}
 			onStop={stopAsk}
-			{view}
+			view={composerView}
 			{listening} onListen={onListenIm}
 			{micErr}
 			{question} onQuestion={onQuestionIm}
@@ -570,13 +690,20 @@ function langTag(p: Lang): string {
 			{saving}
 			lang={config.entriesLang}
 			{apple}
+			widthClass={contentClass}
 		/>
 
-		{#if showModels}
-			<ModelsModal
+		{#if showSettings}
+			<SettingsModal
+				modelLang={config.modelLang}
+				entriesLang={config.entriesLang}
+				contentWidth={sanitizeContentWidth(config.contentWidth)}
+				sections={orderedSections}
 				{summaryLoading}
 				{week}
-				onClose={() => (showModels = false)}
+				tab={settingsTab}
+				onTab={(t) => (settingsTab = t)}
+				onClose={() => (showSettings = false)}
 				onRerun={() => { void refreshSummaryAnswer(true, null, true); }}
 				model={config.chatModel}
 				models={CHAT_MODELS}
@@ -590,12 +717,13 @@ function langTag(p: Lang): string {
 						body: JSON.stringify({ kind: 'chatModel', id })
 					});
 				}}
+				onSaveLanguages={(p) => saveConfig(p)}
+				onWidth={(w) => saveConfig({ contentWidth: w })}
+				onSections={(ids) => saveConfig({ sections: ids })}
+				onRestoreStart={runRestore}
 			/>
-		{/if}
-		{#if showConfig}
-			<ConfigModal {config} onClose={() => (showConfig = false)} onSave={saveConfig} onRestoreStart={runRestore} />
 		{/if}
 	</div>
 </main>
 
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape') { showModels = false; showConfig = false; } handleViewShortcut(e); }} />
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape') { showSettings = false; } handleViewShortcut(e); }} />

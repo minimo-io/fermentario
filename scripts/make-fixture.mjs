@@ -7,8 +7,7 @@
  * writes would change the golden and hide a real regression.
  *
  * It is built with better-sqlite3 because that build has FTS5. The system
- * `sqlite3` CLI on this machine does not (`no such module: fts5`), which is
- * the same engine-portability risk the Tauri port has to answer.
+ * `sqlite3` CLI on this machine does not (`no such module: fts5`).
  *
  * Everything is deterministic: fixed ids, fixed timestamps, fixed vectors.
  * The cursor edge case is included on purpose — two notes share a

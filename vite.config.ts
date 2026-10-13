@@ -4,9 +4,6 @@ import { defineConfig } from 'vite';
 import adapter from '@sveltejs/adapter-node';
 
 export default defineConfig({
-	// The web app talks to the Node server. Only `vite.config.tauri.ts` sets
-	// `__LOCAL_DB__`, which is what keeps the two builds from bleeding together.
-	define: { __LOCAL_DB__: 'false' },
 	server: {
 		host: true,
 		port: 4173,

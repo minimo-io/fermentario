@@ -14,7 +14,9 @@ export const SCHEMA = `
 		id         TEXT PRIMARY KEY,
 		content    TEXT NOT NULL,
 		created_at INTEGER NOT NULL,
-		updated_at INTEGER NOT NULL
+		updated_at INTEGER NOT NULL,
+		featured   INTEGER NOT NULL DEFAULT 0,
+		video      TEXT NOT NULL DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS note_vectors (
@@ -43,6 +45,41 @@ export const SCHEMA = `
 		PRIMARY KEY (note_id, tag)
 	);
 
+	CREATE TABLE IF NOT EXISTS todo_groups (
+		id         TEXT PRIMARY KEY,
+		name       TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS todo_items (
+		id         TEXT PRIMARY KEY,
+		group_id   TEXT NOT NULL REFERENCES todo_groups(id) ON DELETE CASCADE,
+		content    TEXT NOT NULL,
+		done       INTEGER NOT NULL DEFAULT 0,
+		done_at    INTEGER NOT NULL DEFAULT 0,
+		position   INTEGER NOT NULL DEFAULT 0,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS todo_item_tags (
+		item_id TEXT NOT NULL REFERENCES todo_items(id) ON DELETE CASCADE,
+		tag     TEXT NOT NULL,
+		PRIMARY KEY (item_id, tag)
+	);
+
+	CREATE TABLE IF NOT EXISTS principles (
+		id         TEXT PRIMARY KEY,
+		content    TEXT NOT NULL,
+		position   INTEGER NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS tag_colors (
+		tag   TEXT PRIMARY KEY,
+		color TEXT NOT NULL
+	);
+
 	CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 		content,
 		note_id UNINDEXED,
@@ -55,6 +92,8 @@ export interface Note {
 	content: string;
 	created_at: number;
 	updated_at: number;
+	featured: boolean;
+	video: string;
 	tags: string[];
 }
 
@@ -63,6 +102,8 @@ export interface NoteRow {
 	content: string;
 	created_at: number;
 	updated_at: number;
+	featured: number;
+	video: string;
 }
 
 export interface NoteCursor {
@@ -86,11 +127,38 @@ export interface AskRow {
 
 export type Ask = ReturnType<typeof rowToAsk>;
 
+export interface TodoGroup {
+	id: string;
+	name: string;
+	created_at: number;
+}
+
+export interface TodoItem {
+	id: string;
+	group_id: string;
+	content: string;
+	done: boolean;
+	done_at: number;
+	position: number;
+	created_at: number;
+	updated_at: number;
+	tags: string[];
+}
+
+export interface Principle {
+	id: string;
+	content: string;
+	position: number;
+	created_at: number;
+}
+
 const rowToNote = (r: NoteRow, tags: string[] = []): Note => ({
 	id: r.id,
 	content: r.content,
 	created_at: r.created_at,
 	updated_at: r.updated_at,
+	featured: r.featured === 1,
+	video: r.video ?? '',
 	tags
 });
 
@@ -142,7 +210,7 @@ export function createJournal(db: SqlDb) {
 			now
 		);
 		db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
-		return { id, content, created_at: now, updated_at: now, tags: [] };
+		return { id, content, created_at: now, updated_at: now, featured: false, video: '', tags: [] };
 	}
 
 	function deleteNote(id: string): boolean {
@@ -171,6 +239,22 @@ export function createJournal(db: SqlDb) {
 		return r ? withTags([r])[0] : null;
 	}
 
+	/** Pin or unpin a note. Touches only the flag: text, FTS row, vector
+	 *  and tags are left alone. Returns null when the note does not exist. */
+	function setNoteFeatured(id: string, featured: boolean): Note | null {
+		const done = db.prepare('UPDATE notes SET featured = ? WHERE id = ?').run(featured ? 1 : 0, id).changes > 0;
+		if (!done) return null;
+		return getNote(id);
+	}
+
+	/** Set or clear the YouTube video id. Empty clears. Like featuring, this
+	 *  touches only its column. Returns null when the note does not exist. */
+	function setNoteVideo(id: string, video: string): Note | null {
+		const done = db.prepare('UPDATE notes SET video = ? WHERE id = ?').run(video, id).changes > 0;
+		if (!done) return null;
+		return getNote(id);
+	}
+
 	/** One page of notes, newest first, with a stable cursor.
 	 *
 	 *  The cursor is (created_at, id), not created_at alone: notes saved in the
@@ -178,10 +262,11 @@ export function createJournal(db: SqlDb) {
 	 *  variant joins note_tags, so every page of a tag view is filtered on the
 	 *  server and the client only ever appends matching notes. */
 	function listNotesPage(
-		opts: { limit?: number; before?: number | null; beforeId?: string | null; tag?: string | null } = {}
+		opts: { limit?: number; before?: number | null; beforeId?: string | null; tag?: string | null; featured?: 'only' | 'exclude' } = {}
 	): NotePage {
 		const limit = Math.max(1, Math.min(100, Math.trunc(opts.limit ?? 50)));
 		const tag = opts.tag?.trim().toLowerCase() || null;
+		const featuredSql = opts.featured === 'only' ? ' AND n.featured = 1' : opts.featured === 'exclude' ? ' AND n.featured = 0' : '';
 		const useCursor =
 			typeof opts.before === 'number' && Number.isFinite(opts.before) && !!opts.beforeId;
 		const cursorSql = useCursor
@@ -190,11 +275,11 @@ export function createJournal(db: SqlDb) {
 		const params: SqlValue[] = [];
 		let sql: string;
 		if (tag) {
-			sql = `SELECT n.* FROM notes n JOIN note_tags t ON t.note_id = n.id WHERE t.tag = ?${cursorSql}
+			sql = `SELECT n.* FROM notes n JOIN note_tags t ON t.note_id = n.id WHERE t.tag = ?${featuredSql}${cursorSql}
 				ORDER BY n.created_at DESC, n.id DESC LIMIT ?`;
 			params.push(tag);
 		} else {
-			sql = `SELECT n.* FROM notes n WHERE 1 = 1${cursorSql}
+			sql = `SELECT n.* FROM notes n WHERE 1 = 1${featuredSql}${cursorSql}
 				ORDER BY n.created_at DESC, n.id DESC LIMIT ?`;
 		}
 		if (useCursor) params.push(opts.before as number, opts.before as number, opts.beforeId as string);
@@ -257,6 +342,227 @@ export function createJournal(db: SqlDb) {
 		return (
 			db.prepare('DELETE FROM note_tags WHERE note_id = ? AND tag = ?').run(noteId, clean).changes > 0
 		);
+	}
+
+	// --- To-Do groups and items -------------------------------------------
+	// Tags on items use the exact same normalisation as note tags
+	// (trim + lowercase, max 12), so tags stay one concept across sections.
+
+	function listTodoGroups(): TodoGroup[] {
+		return db
+			.prepare('SELECT * FROM todo_groups ORDER BY created_at ASC, id ASC')
+			.all() as unknown as TodoGroup[];
+	}
+
+	function createTodoGroup(name: string): TodoGroup | null {
+		const clean = name.trim();
+		if (!clean) return null;
+		const now = Date.now();
+		const id = crypto.randomUUID();
+		db.prepare('INSERT INTO todo_groups (id, name, created_at) VALUES (?, ?, ?)').run(id, clean, now);
+		return { id, name: clean, created_at: now };
+	}
+
+	/** Rename a group. Items follow because they reference the group id, which
+	 *  never changes. Returns null when the group does not exist. */
+	function renameTodoGroup(id: string, name: string): TodoGroup | null {
+		const clean = name.trim();
+		if (!clean) return null;
+		const done = db.prepare('UPDATE todo_groups SET name = ? WHERE id = ?').run(clean, id).changes > 0;
+		if (!done) return null;
+		return db.prepare('SELECT * FROM todo_groups WHERE id = ?').get(id) as unknown as TodoGroup;
+	}
+
+	function deleteTodoGroup(id: string): boolean {
+		return db.prepare('DELETE FROM todo_groups WHERE id = ?').run(id).changes > 0;
+	}
+
+	function tagsByItem(rows: { id: string }[]): Map<string, string[]> {
+		const map = new Map<string, string[]>();
+		if (rows.length === 0) return map;
+		const ids = rows.map((r) => r.id);
+		const placeholders = ids.map(() => '?').join(',');
+		const tagRows = db
+			.prepare(`SELECT item_id, tag FROM todo_item_tags WHERE item_id IN (${placeholders}) ORDER BY tag`)
+			.all(...ids) as unknown as { item_id: string; tag: string }[];
+		for (const t of tagRows) {
+			if (!map.has(t.item_id)) map.set(t.item_id, []);
+			map.get(t.item_id)!.push(t.tag);
+		}
+		return map;
+	}
+
+	interface TodoItemRow {
+		id: string;
+		group_id: string;
+		content: string;
+		done: number;
+		done_at: number;
+		position: number;
+		created_at: number;
+		updated_at: number;
+	}
+
+	const rowToTodoItem = (r: TodoItemRow, tags: string[] = []): TodoItem => ({
+		id: r.id,
+		group_id: r.group_id,
+		content: r.content,
+		done: r.done === 1,
+		done_at: r.done_at ?? 0,
+		position: r.position ?? 0,
+		created_at: r.created_at,
+		updated_at: r.updated_at,
+		tags
+	});
+
+	function listTodoItems(groupId: string): TodoItem[] {
+		const rows = db
+			.prepare('SELECT * FROM todo_items WHERE group_id = ? ORDER BY position ASC, created_at ASC, id ASC')
+			.all(groupId) as unknown as TodoItemRow[];
+		const tags = tagsByItem(rows);
+		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
+	}
+
+	function getTodoItem(id: string): TodoItem | null {
+		const r = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as unknown as TodoItemRow | undefined;
+		if (!r) return null;
+		return rowToTodoItem(r, tagsByItem([r]).get(r.id) ?? []);
+	}
+
+	function createTodoItem(groupId: string, content: string, createdAt: number): TodoItem | null {
+		const group = db.prepare('SELECT id FROM todo_groups WHERE id = ?').get(groupId) as unknown as { id: string } | undefined;
+		if (!group) return null;
+		const clean = content.trim();
+		if (!clean) return null;
+		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM todo_items WHERE group_id = ?').get(groupId) as { m: number };
+		const id = crypto.randomUUID();
+		db.prepare(
+			'INSERT INTO todo_items (id, group_id, content, done, done_at, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?, ?)'
+		).run(id, groupId, clean, max.m + 1, createdAt, createdAt);
+		return { id, group_id: groupId, content: clean, done: false, done_at: 0, position: max.m + 1, created_at: createdAt, updated_at: createdAt, tags: [] };
+	}
+
+	/** Edit text and/or checked state. `updated_at` always moves past
+	 *  `created_at`. Checking stamps `done_at`; unchecking clears it.
+	 *  Returns null when the item does not exist. */
+	function updateTodoItem(id: string, patch: { content?: string; done?: boolean }): TodoItem | null {
+		const existing = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as unknown as TodoItemRow | undefined;
+		if (!existing) return null;
+		const content = patch.content !== undefined ? patch.content.trim() : existing.content;
+		if (!content) return null;
+		const done = patch.done !== undefined ? (patch.done ? 1 : 0) : existing.done;
+		const now = Math.max(Date.now(), existing.created_at + 1);
+		const doneAt = patch.done !== undefined ? (patch.done ? now : 0) : (existing.done_at ?? 0);
+		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, now, id);
+		return getTodoItem(id);
+	}
+
+	function deleteTodoItem(id: string): boolean {
+		return db.prepare('DELETE FROM todo_items WHERE id = ?').run(id).changes > 0;
+	}
+
+	/** Items carrying a tag, newest first. Powers the To-Do group on tag pages. */
+	function listTodoItemsByTag(tag: string): TodoItem[] {
+		const clean = tag.trim().toLowerCase();
+		if (!clean) return [];
+		const rows = db
+			.prepare(
+				`SELECT i.* FROM todo_items i JOIN todo_item_tags t ON t.item_id = i.id
+				 WHERE t.tag = ? ORDER BY i.created_at DESC, i.id DESC`
+			)
+			.all(clean) as unknown as TodoItemRow[];
+		const tags = tagsByItem(rows);
+		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
+	}
+
+	/** Persist a full item order inside one group. Unknown ids are ignored. */
+	function setTodoItemOrder(groupId: string, ids: string[]): void {
+		const upd = db.prepare('UPDATE todo_items SET position = ? WHERE id = ? AND group_id = ?');
+		db.transaction(() => {
+			ids.forEach((id, i) => upd.run(i, id, groupId));
+		});
+	}
+
+	/** Replace an item's tags. Passing an empty array clears them. */
+	function setTodoItemTags(itemId: string, tags: string[]): void {
+		const clean = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 12);
+		db.prepare('DELETE FROM todo_item_tags WHERE item_id = ?').run(itemId);
+		if (clean.length === 0) return;
+		const ins = db.prepare('INSERT INTO todo_item_tags (item_id, tag) VALUES (?, ?)');
+		db.transaction(() => {
+			for (const t of clean) ins.run(itemId, t);
+		});
+	}
+
+	// --- Principles ------------------------------------------------------
+	// Numbering is positional: `position` stores the order, the display
+	// derives 1..N from it. Reorder writes the whole order in one
+	// transaction so numbers can never gap.
+
+	function listPrinciples(): Principle[] {
+		return db
+			.prepare('SELECT * FROM principles ORDER BY position ASC, created_at ASC, id ASC')
+			.all() as unknown as Principle[];
+	}
+
+	function createPrinciple(content: string): Principle | null {
+		const clean = content.trim();
+		if (!clean) return null;
+		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM principles').get() as { m: number };
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.prepare('INSERT INTO principles (id, content, position, created_at) VALUES (?, ?, ?, ?)').run(
+			id,
+			clean,
+			max.m + 1,
+			now
+		);
+		return { id, content: clean, position: max.m + 1, created_at: now };
+	}
+
+	function updatePrinciple(id: string, content: string): Principle | null {
+		const clean = content.trim();
+		if (!clean) return null;
+		const done = db.prepare('UPDATE principles SET content = ? WHERE id = ?').run(clean, id).changes > 0;
+		if (!done) return null;
+		return db.prepare('SELECT * FROM principles WHERE id = ?').get(id) as unknown as Principle;
+	}
+
+	function deletePrinciple(id: string): boolean {
+		return db.prepare('DELETE FROM principles WHERE id = ?').run(id).changes > 0;
+	}
+
+	/** Persist a full order. Unknown ids are ignored; missing rows keep
+	 *  their relative order after the listed ones. */
+	function setPrincipleOrder(ids: string[]): void {
+		const upd = db.prepare('UPDATE principles SET position = ? WHERE id = ?');
+		db.transaction(() => {
+			ids.forEach((id, i) => upd.run(i, id));
+		});
+	}
+
+	// --- Tag colors -------------------------------------------------------
+	// One row per normalized tag. The registry outlives any single note or
+	// item, so a color choice survives deletes. Colors are palette keys, not
+	// free CSS, so a stored value can never inject a style.
+
+	function listTagColors(): Record<string, string> {
+		const rows = db.prepare('SELECT tag, color FROM tag_colors').all() as unknown as {
+			tag: string;
+			color: string;
+		}[];
+		const out: Record<string, string> = {};
+		for (const r of rows) out[r.tag] = r.color;
+		return out;
+	}
+
+	function setTagColor(tag: string, color: string): boolean {
+		const clean = tag.trim().toLowerCase();
+		if (!clean) return false;
+		db.prepare(
+			'INSERT INTO tag_colors (tag, color) VALUES (?, ?) ON CONFLICT(tag) DO UPDATE SET color = excluded.color'
+		).run(clean, color);
+		return true;
 	}
 
 	function notesMissingTags(limit = 50): string[] {
@@ -376,6 +682,8 @@ export function createJournal(db: SqlDb) {
 		notesBetween,
 		setNoteTags,
 		removeNoteTag,
+		setNoteFeatured,
+		setNoteVideo,
 		notesMissingTags,
 		setVector,
 		allVectors,
@@ -386,7 +694,26 @@ export function createJournal(db: SqlDb) {
 		saveWeeklyRecap,
 		insertAsk,
 		listAsks,
-		deleteAsk
+		deleteAsk,
+		listTodoGroups,
+		createTodoGroup,
+		renameTodoGroup,
+		deleteTodoGroup,
+		listTodoItems,
+		getTodoItem,
+		createTodoItem,
+		updateTodoItem,
+		deleteTodoItem,
+		setTodoItemTags,
+		listTodoItemsByTag,
+		setTodoItemOrder,
+		listPrinciples,
+		createPrinciple,
+		updatePrinciple,
+		deletePrinciple,
+		setPrincipleOrder,
+		listTagColors,
+		setTagColor
 	};
 }
 

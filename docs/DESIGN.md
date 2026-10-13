@@ -6,8 +6,9 @@ sizing. Consult this before changing any of them.
 ## Layout
 
 - **Page container** (every route): `mx-auto max-w-2xl px-6 pt-14 pb-24`.
-  One max width for all pages so the heatmap, the timeline and the tag pages
-  line up on desktop. The heatmap is the one view that needs more room than
+  The width follows the Column width setting (Narrow `max-w-xl`, Standard
+  `max-w-2xl`, Wide `max-w-4xl`); one value drives every route so the heatmap,
+  the timeline and the tag pages line up on desktop. The heatmap is the one view that needs more room than
   672px for its 53-column grid, so its grid scrolls horizontally inside the
   container rather than widening the page.
 - **Composer** (fixed bottom bar): `mx-auto max-w-2xl px-6 pb-8`. Same width as

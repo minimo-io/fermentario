@@ -235,14 +235,17 @@ const edited = await api(
 );
 must('PATCH /api/notes/[id]', edited, (r) => r.status === 200 && !!r.body.note, '200 with a note');
 volatile.add(edited.body.note.updated_at);
+await page('page:/notes/[id]', `/notes/${id}`);
 
 await api('DELETE /api/notes/[id]/tags/[tag]', `/api/notes/${id}/tags/work`);
 await api('DELETE /api/notes/[id]/tags/[missing]', `/api/notes/${id}/tags/nosuch`);
 await api('POST /api/notes empty', '/api/notes', json({ content: '' }));
 await api('POST /api/notes hashtags only', '/api/notes', json({ content: '#garden' }));
 await api('PATCH /api/notes/missing', '/api/notes/does-not-exist', json({ content: 'x' }, 'PATCH'));
-await api('DELETE /api/notes/[id]', `/api/notes/${id}`);
-await api('DELETE /api/notes/[id] again', `/api/notes/${id}`);
+await api('GET /api/notes/[id]', `/api/notes/${id}`);
+await api('GET /api/notes/[missing]', '/api/notes/does-not-exist');
+await api('DELETE /api/notes/[id]', `/api/notes/${id}`, { method: 'DELETE' });
+await api('DELETE /api/notes/[id] again', `/api/notes/${id}`, { method: 'DELETE' });
 
 const asks = await api('GET /api/asks before delete', '/api/asks');
 const askId = asks.body.asks[0]?.id;

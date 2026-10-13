@@ -1,6 +1,6 @@
 /**
- * The fixture data, as SQL, so the frozen `journal.db` and the engine parity
- * test cannot drift apart. Two notes share a `created_at` on purpose: the
+ * The fixture data, as SQL, so the frozen `journal.db` cannot drift from its
+ * source. Two notes share a `created_at` on purpose: the
  * pagination cursor is `(created_at, id)`, so a change to the ordering shows up
  * as a reordering rather than passing silently.
  */
