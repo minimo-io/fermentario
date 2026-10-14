@@ -25,3 +25,6 @@ Status: [DONE]
 
 ### Follow-up — overlay respects width + fades
 - The overlay header, chips, and editor now use the `widthClass` prop (your Column width) instead of hardcoded `max-w-2xl`. Open/close runs a 150ms `fade`. Gates re-run green.
+
+### Follow-up — short mobile placeholders
+- The bar placeholders shorten below 640px (`Say or type…` / `Ask…`, localized) via `matchMedia`; desktop keeps the focus hint. SSR defaults to short (mobile-first). Gates re-run green.

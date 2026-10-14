@@ -57,6 +57,7 @@ export const SCHEMA = `
 		content    TEXT NOT NULL,
 		done       INTEGER NOT NULL DEFAULT 0,
 		done_at    INTEGER NOT NULL DEFAULT 0,
+		in_progress INTEGER NOT NULL DEFAULT 0,
 		position   INTEGER NOT NULL DEFAULT 0,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
@@ -139,6 +140,7 @@ export interface TodoItem {
 	content: string;
 	done: boolean;
 	done_at: number;
+	inProgress: boolean;
 	position: number;
 	created_at: number;
 	updated_at: number;
@@ -398,6 +400,7 @@ export function createJournal(db: SqlDb) {
 		content: string;
 		done: number;
 		done_at: number;
+		in_progress: number;
 		position: number;
 		created_at: number;
 		updated_at: number;
@@ -409,6 +412,7 @@ export function createJournal(db: SqlDb) {
 		content: r.content,
 		done: r.done === 1,
 		done_at: r.done_at ?? 0,
+		inProgress: r.in_progress === 1,
 		position: r.position ?? 0,
 		created_at: r.created_at,
 		updated_at: r.updated_at,
@@ -417,7 +421,7 @@ export function createJournal(db: SqlDb) {
 
 	function listTodoItems(groupId: string): TodoItem[] {
 		const rows = db
-			.prepare('SELECT * FROM todo_items WHERE group_id = ? ORDER BY position ASC, created_at ASC, id ASC')
+			.prepare('SELECT * FROM todo_items WHERE group_id = ? ORDER BY in_progress DESC, position ASC, created_at ASC, id ASC')
 			.all(groupId) as unknown as TodoItemRow[];
 		const tags = tagsByItem(rows);
 		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
@@ -437,15 +441,15 @@ export function createJournal(db: SqlDb) {
 		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM todo_items WHERE group_id = ?').get(groupId) as { m: number };
 		const id = crypto.randomUUID();
 		db.prepare(
-			'INSERT INTO todo_items (id, group_id, content, done, done_at, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?, ?)'
+			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?)'
 		).run(id, groupId, clean, max.m + 1, createdAt, createdAt);
-		return { id, group_id: groupId, content: clean, done: false, done_at: 0, position: max.m + 1, created_at: createdAt, updated_at: createdAt, tags: [] };
+		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, tags: [] };
 	}
 
 	/** Edit text and/or checked state. `updated_at` always moves past
 	 *  `created_at`. Checking stamps `done_at`; unchecking clears it.
 	 *  Returns null when the item does not exist. */
-	function updateTodoItem(id: string, patch: { content?: string; done?: boolean }): TodoItem | null {
+	function updateTodoItem(id: string, patch: { content?: string; done?: boolean; inProgress?: boolean }): TodoItem | null {
 		const existing = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as unknown as TodoItemRow | undefined;
 		if (!existing) return null;
 		const content = patch.content !== undefined ? patch.content.trim() : existing.content;
@@ -453,7 +457,8 @@ export function createJournal(db: SqlDb) {
 		const done = patch.done !== undefined ? (patch.done ? 1 : 0) : existing.done;
 		const now = Math.max(Date.now(), existing.created_at + 1);
 		const doneAt = patch.done !== undefined ? (patch.done ? now : 0) : (existing.done_at ?? 0);
-		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, now, id);
+		const inProgress = patch.inProgress !== undefined ? (patch.inProgress ? 1 : 0) : (existing.in_progress ?? 0);
+		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, in_progress = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, inProgress, now, id);
 		return getTodoItem(id);
 	}
 

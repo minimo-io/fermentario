@@ -1,13 +1,17 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
+	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import type { TodoGroup, TodoItem } from '$lib/types';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
+	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
+	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
-	type Props = { onError: (msg: string) => void; lang?: string };
-	let { onError, lang = 'en' }: Props = $props();
+	type Props = { onError: (msg: string) => void; lang?: string; widthClass?: string };
+	let { onError, lang = 'en', widthClass = 'max-w-2xl' }: Props = $props();
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
 
@@ -24,6 +28,8 @@
 	let editText = $state('');
 	let confirmingGroup = $state<TodoGroup | null>(null);
 	let confirmingItem = $state<TodoItem | null>(null);
+	let menuGroup = $state<TodoGroup | null>(null);
+	let menuItem = $state<TodoItem | null>(null);
 
 	async function loadGroups(select?: string) {
 		try {
@@ -122,7 +128,27 @@
 			});
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
+			if (!d.item) throw new Error(d?.error ?? 'The server answered without the item.');
 			items = items.map((x) => (x.id === item.id ? d.item : x));
+		} catch (e) {
+			onError((e as Error)?.message ?? 'Failed to update item.');
+		}
+	}
+
+	async function progressItem(item: TodoItem) {
+		try {
+			const res = await fetch(`/api/todo/items/${item.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ inProgress: !item.inProgress })
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
+			if (!d.item) throw new Error(d?.error ?? 'The server answered without the item.');
+			const saved = d.item as TodoItem;
+			items = [...items.filter((x) => x.id !== saved.id), saved].sort(
+				(a, b) => Number(b.inProgress ?? false) - Number(a.inProgress ?? false) || a.position - b.position
+			);
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to update item.');
 		}
@@ -289,25 +315,13 @@
 			{:else}
 				<span class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium {activeGroup === g.id ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'}">
 					<button type="button" onclick={() => { activeGroup = g.id; void loadItems(g.id); }}>{g.name}</button>
-					<button type="button" aria-label="Rename {g.name}" class="opacity-60 hover:opacity-100" onclick={() => { renaming = g.id; renameText = g.name; }}>✎</button>
-					<button type="button" aria-label="Delete {g.name}" class="opacity-60 hover:opacity-100" onclick={() => (confirmingGroup = g)}>×</button>
+					<button type="button" aria-label="Group actions" class="opacity-60 hover:opacity-100" onclick={() => (menuGroup = g)}><EllipsisVertical class="h-3.5 w-3.5" /></button>
 				</span>
 			{/if}
 		{/each}
 	</div>
 
 	{#if activeGroup}
-		<form class="sticky top-0 z-10 -mx-1 bg-white/95 px-1 py-2 backdrop-blur" onsubmit={(e) => { e.preventDefault(); void addItem(); }}>
-			<div class="flex gap-2">
-				<input
-					class="min-w-0 flex-1 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-800 shadow-sm outline-none placeholder:text-stone-400"
-					placeholder="New item… (trailing #tags work too)"
-					value={newItem}
-					oninput={(e) => (newItem = e.currentTarget.value)}
-				/>
-				<button type="submit" class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-xs font-medium text-white">Add</button>
-			</div>
-		</form>
 		<ul class="space-y-2">
 			{#each items as item (item.id)}
 				<li
@@ -357,9 +371,12 @@
 							</span>
 						{:else}
 							<button type="button" class="min-w-0 flex-1 text-left text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) { editing = item.id; editText = item.content; } }}>{item.content}</button>
-							<button type="button" aria-label="Delete item" class="shrink-0 text-stone-400 hover:text-rose-600" onclick={() => (confirmingItem = item)}>×</button>
+							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 						{/if}
 					</div>
+					{#if item.inProgress}
+						<span class="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+					{/if}
 					{#if item.done && item.done_at}
 						<p class="mt-1 pl-7 text-[11px] tabular-nums text-stone-400">
 							done {new Date(item.done_at).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -383,6 +400,82 @@
 	{/if}
 </div>
 
+{#if menuItem}
+	{@const m = menuItem}
+	<div
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 p-4 sm:place-items-center"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Item actions"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) menuItem = null; }}
+		onkeydown={(e) => { if (e.key === 'Escape') menuItem = null; }}
+		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
+	>
+		<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+			<div class="px-3.5 pb-2 pt-3">
+				<h2 class="text-sm font-semibold text-stone-900">Item actions</h2>
+				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{m.content}</p>
+			</div>
+			<div class="flex flex-col">
+				<button
+					type="button"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					onclick={() => { const item = menuItem; menuItem = null; if (item) void toggleItem(item); }}
+				>{m.done ? 'Mark not done' : 'Mark done'}</button>
+				<button
+					type="button"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					onclick={() => { const item = menuItem; menuItem = null; if (item) void progressItem(item); }}
+				>{m.inProgress ? 'Mark as not in progress' : 'Mark in progress'}</button>
+				<button
+					type="button"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					onclick={() => { const item = menuItem; menuItem = null; if (item) { editing = item.id; editText = item.content; } }}
+				>Edit</button>
+				<button
+					type="button"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+					onclick={() => { const item = menuItem; menuItem = null; if (item) confirmingItem = item; }}
+				>Delete</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if menuGroup}
+	{@const g = menuGroup}
+	<div
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 p-4 sm:place-items-center"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Group actions"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) menuGroup = null; }}
+		onkeydown={(e) => { if (e.key === 'Escape') menuGroup = null; }}
+		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
+	>
+		<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+			<div class="px-3.5 pb-2 pt-3">
+				<h2 class="text-sm font-semibold text-stone-900">Group actions</h2>
+				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{g.name}</p>
+			</div>
+			<div class="flex flex-col">
+				<button
+					type="button"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					onclick={() => { const grp = menuGroup; menuGroup = null; if (grp) { renaming = grp.id; renameText = grp.name; } }}
+				>Rename</button>
+				<button
+					type="button"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+					onclick={() => { const grp = menuGroup; menuGroup = null; if (grp) confirmingGroup = grp; }}
+				>Delete</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 {#if confirmingItem}
 	<ConfirmDialog
 		title="Delete this item?"
@@ -405,4 +498,19 @@
 		onConfirm={() => { const g = confirmingGroup; confirmingGroup = null; if (g) void deleteGroup(g); }}
 		onCancel={() => (confirmingGroup = null)}
 	/>
+{/if}
+
+{#if activeGroup}
+	<FixedBottomBar {widthClass}>
+		<form class="flex min-w-0 flex-1 items-center gap-2" onsubmit={(e) => { e.preventDefault(); void addItem(); }}>
+			<input
+				class="min-h-11 w-full min-w-0 flex-1 bg-transparent px-2 py-2.5 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400"
+				placeholder="New item… #tag"
+				aria-label="New to-do item"
+				value={newItem}
+				oninput={(e) => (newItem = e.currentTarget.value)}
+			/>
+			<button type="submit" class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium whitespace-nowrap text-white">Add</button>
+		</form>
+	</FixedBottomBar>
 {/if}

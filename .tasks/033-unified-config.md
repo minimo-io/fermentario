@@ -30,3 +30,8 @@ Status: [DONE]
 ### Follow-up — configurable column width + modal motion
 - `contentWidth` (`narrow|standard|wide`, default `standard`) in `fermentario.config`, `src/lib/display.ts` owns sanitize + class map. Every page container and the composer bar follow it; control lives in the Language tab; `docs/DESIGN.md` documents the three widths.
 - Settings tab switches animate container height (measured pixels + CSS transition, `motion-reduce` off-ramp); section rows glide with `animate:flip`. Gates re-run green: check 0/0, build + `build/index.js`, test 31/31, `GET /` 200; default width unchanged in SSR.
+
+### Follow-up — pills without scrollbar, language split, save feedback
+- Section carousel uses a `no-scrollbar` utility (all engines); snap scroll kept.
+- Model language moved to the Models tab (immediate pills next to the model selector); Language tab keeps entries language only, and its Save button confirms with a temporary "Saved ✓" state.
+- Gates re-run green.

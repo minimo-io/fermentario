@@ -1051,3 +1051,22 @@
   with `git checkout` to keep the change set clean.
 - Touch drags (pills, principles) and the Ask/config FAB positions need a real
   device to feel; SSR + gates cannot cover them.
+- `{@const}` over `$state` re-reads live inside event handlers: nulling the
+  state before consuming its snapshot throws on every button. Capture first,
+  clear after — always. (Cost a user-caught bug in the To-Do sheets.)
+- Modal motion is centralized: `src/lib/motion.ts` (`BACKDROP_MS 150`,
+  `PANEL_MS 180`, `PANEL_Y 24`, `motionMs` zeroes under
+  `prefers-reduced-motion`). Every sheet/modal fades its backdrop and flies
+  its panel up. Same rule as all client motion: gates cannot see it, confirm
+  on device.
+
+## Session: To-Do in-progress + db.ts repair
+- `todo_items.in_progress` mirrors the note flag: `PATCH` accepts it,
+  `listTodoItems` sorts it first, gold tag in both render spots, migration
+  verified against a legacy table missing all three newer columns.
+- ERROR CORRECTED: an edit to `db.ts` dropped the `position` backfill block
+  and left the file syntactically broken (`export const {` fused into the
+  migration `if`). Caught by reading the file, repaired immediately, `check`
+  green after. Lesson: after every edit to a migration block, read the
+  surrounding lines before running gates — a half-applied edit fails in a
+  way `check` reports far from the cause.

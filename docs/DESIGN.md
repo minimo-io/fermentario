@@ -31,9 +31,9 @@ A `0.5rem` rhythm. The values already in use:
 | `gap-3` | 0.75rem | card internals |
 | `mt-2` / `mb-2` | 0.5rem | chip rows, small separators |
 | `mb-4` | 1rem | day sections, card groups |
-| `pt-14` | 3.5rem | page top, clears the fixed header zone |
+| `pt-14` | 3.5rem | legacy page top (retired: no fixed header anymore; the page uses `pt-[max(1rem,env(safe-area-inset-top))]`) |
 | `pb-24` | 6rem | page bottom |
-| `px-6` | 1.5rem | horizontal page and composer padding |
+| `px-6` | 1.5rem | horizontal page and composer padding (page uses `px-2` below `sm`) |
 
 Do not introduce a new spacing value without checking this table first.
 

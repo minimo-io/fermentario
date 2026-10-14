@@ -136,10 +136,11 @@
 			{#each group.items as n (n.id)}
 				<li>
 					<div
-						class="flex items-start gap-3 rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3 {n.pending ? 'opacity-60' : ''}"
+						class="flex items-start gap-3 rounded-2xl border bg-white/70 px-4 py-3 max-sm:flex-col max-sm:gap-1 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80'}"
 						aria-busy={n.pending ? 'true' : undefined}
 					>
 						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}<a href="/notes/{n.id}" title="Open this note" class="hover:text-stone-600 hover:underline">{n.hour}</a></span>
+						<div class="flex min-w-0 flex-1 items-start gap-3">
 						<div class="min-w-0 flex-1">
 							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{n.content}</p>
 							{#if n.video}
@@ -183,6 +184,7 @@
 								<EllipsisVertical class="h-5 w-5" />
 							</button>
 						{/if}
+						</div>
 					</div>
 				</li>
 			{/each}

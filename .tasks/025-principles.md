@@ -24,3 +24,6 @@ Status: [DONE]
 - `principles` table (`position` ordering), 6 helpers in `journal.ts`, re-exported + client type. Routes: `GET/POST/PUT /api/principles` (PUT takes full ordered id list, one transaction), `PATCH/DELETE /api/principles/[id]`.
 - `PrinciplesTab.svelte`: numbered rows, add/edit/delete, pointer drag (mouse immediate, touch 280ms hold), order persists via PUT.
 - Verified live on throwaway DB: reorder Third:0,First:1,Second:2; edit; delete; final list correct. Gates: check 0/0, build + `build/index.js`, test 28/28, `GET /` 200. Touch-drag needs a real device to feel.
+
+### Follow-up — own bottom bar
+- The add form moved into the shared `FixedBottomBar` (single row, compact mobile padding). The note composer no longer renders in Principles. Gates re-run green.

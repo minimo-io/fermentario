@@ -559,7 +559,7 @@ function langTag(p: Lang): string {
 </svelte:head>
 
 <main class="min-h-dvh">
-	<div class="mx-auto {contentClass} px-6 pt-[max(3.5rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)]">		<header class="mb-5">
+	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">		<header class="mb-5">
 			<p class="mt-1 text-sm text-stone-500">your voice journal — life &amp; the bootstrapped thing.</p>
 			<div class="mt-4 flex flex-wrap items-center gap-2">
 				{#if week && dismissed}
@@ -650,9 +650,9 @@ function langTag(p: Lang): string {
 				onDelete={handleDeleteAsk}
 			/>
 		{:else if view === 'todo'}
-			<TodoTab onError={(m) => showToast(m)} lang={config.entriesLang} />
+			<TodoTab onError={(m) => showToast(m)} lang={config.entriesLang} widthClass={contentClass} />
 		{:else if view === 'principles'}
-			<PrinciplesTab onError={(m) => showToast(m)} />
+			<PrinciplesTab onError={(m) => showToast(m)} widthClass={contentClass} />
 		{:else}
 			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
 		{/if}
@@ -677,6 +677,7 @@ function langTag(p: Lang): string {
 			</div>
 		{/if}
 
+		{#if view === 'notes' || view === 'ask'}
 		<Composer
 			onNote={handleNote}
 			onAsk={handleAsk}
@@ -692,6 +693,7 @@ function langTag(p: Lang): string {
 			{apple}
 			widthClass={contentClass}
 		/>
+		{/if}
 
 		{#if showSettings}
 			<SettingsModal
@@ -718,6 +720,7 @@ function langTag(p: Lang): string {
 					});
 				}}
 				onSaveLanguages={(p) => saveConfig(p)}
+				onModelLang={(v) => saveConfig({ modelLang: v })}
 				onWidth={(w) => saveConfig({ contentWidth: w })}
 				onSections={(ids) => saveConfig({ sections: ids })}
 				onRestoreStart={runRestore}

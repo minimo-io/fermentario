@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
+	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Star from '@lucide/svelte/icons/star';
@@ -39,8 +41,9 @@
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 	onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
+	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
-	<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl">
+	<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 		<div class="px-3.5 pb-2 pt-3">
 			<h2 class="text-sm font-semibold text-stone-900">Note actions</h2>
 			<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{note.content}</p>

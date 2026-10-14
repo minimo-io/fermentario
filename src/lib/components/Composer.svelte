@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { createSpeech, requestMicPermission, browserSupportsSpeech } from '$lib/speech';
 	import { splitTrailingHashtags } from '$lib/hashtags';
@@ -42,6 +43,16 @@
 	let speech = $state<ReturnType<typeof createSpeech> | null>(null);
 	let pendingTags = $derived(view === 'notes' ? splitTrailingHashtags(text).tags : []);
 	const focusHint = $derived(apple ? '⇧⌘L' : 'Ctrl+⇧L');
+	// Long placeholder text overflows the bar on phones. Shorten it below sm.
+	let compact = $state(true);
+	onMount(() => {
+		if (typeof window === 'undefined' || !('matchMedia' in window)) return;
+		const mq = window.matchMedia('(max-width: 639px)');
+		const apply = () => (compact = mq.matches);
+		apply();
+		mq.addEventListener('change', apply);
+		return () => mq.removeEventListener('change', apply);
+	});
 
 	let field = $state<HTMLTextAreaElement | null>(null);
 	let bar = $state<HTMLDivElement | null>(null);
@@ -139,7 +150,7 @@
 					class={FIELD_CLASS}
 					value={text}
 					oninput={(e) => { onText(e.currentTarget.value); autosize(); }}
-					placeholder={interim || `${lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…'} (${focusHint})`}
+					placeholder={interim || (compact ? (lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…') : `${lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…'} (${focusHint})`)}
 					onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } }}
 				></textarea>
 				<div class="flex shrink-0 items-center gap-2">
@@ -156,7 +167,7 @@
 					class={FIELD_CLASS}
 					value={question}
 					oninput={(e) => { onQuestion(e.currentTarget.value); autosize(); }}
-					placeholder={interim || `Ask about your notes… (${focusHint})`}
+					placeholder={interim || (compact ? 'Ask…' : `Ask about your notes… (${focusHint})`)}
 					onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAsk(); } }}
 				></textarea>
 				<div class="flex shrink-0 items-center gap-2">

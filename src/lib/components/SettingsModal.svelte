@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
+	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import type { ChatModelOption } from '$lib/chat-models';
 	import type { ContentWidth } from '$lib/display';
 	import LanguagePanel from '$lib/components/LanguagePanel.svelte';
@@ -24,7 +26,8 @@
 		onRerun: () => void;
 		onModelChange: (id: string) => void;
 		onPromptChange: (value: string) => void;
-		onSaveLanguages: (p: { modelLang: Lang; entriesLang: Lang }) => void;
+		onSaveLanguages: (p: { entriesLang: Lang }) => void;
+		onModelLang: (lang: Lang) => void;
 		onWidth: (w: ContentWidth) => void;
 		onSections: (ids: string[]) => void;
 		onRestoreStart: (file: File) => void;
@@ -32,7 +35,7 @@
 	let {
 		modelLang, entriesLang, contentWidth, sections,
 		summaryLoading, week, model, models, prompt, tab,
-		onTab, onClose, onRerun, onModelChange, onPromptChange,
+		onTab, onClose, onRerun, onModelChange, onModelLang, onPromptChange,
 		onSaveLanguages, onWidth, onSections, onRestoreStart
 	}: Props = $props();
 
@@ -59,8 +62,9 @@
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 	onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
+	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
-	<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+	<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-sm font-semibold text-stone-900">Settings</h2>
 			<button class="text-stone-400 hover:text-stone-600" aria-label="Close" onclick={onClose}>&times;</button>
@@ -83,9 +87,9 @@
 		>
 			<div bind:this={bodyEl}>
 				{#if tab === 'language'}
-					<LanguagePanel {modelLang} {entriesLang} {contentWidth} {sections} onSave={onSaveLanguages} {onWidth} {onSections} />
+					<LanguagePanel {entriesLang} {contentWidth} {sections} onSave={onSaveLanguages} {onWidth} {onSections} />
 				{:else if tab === 'models'}
-					<ModelsPanel {summaryLoading} {week} {model} {models} {prompt} {onRerun} {onModelChange} {onPromptChange} />
+					<ModelsPanel {summaryLoading} {week} {model} {models} {modelLang} {prompt} {onRerun} {onModelChange} {onModelLang} {onPromptChange} />
 				{:else}
 					<DatabasePanel {onRestoreStart} />
 				{/if}

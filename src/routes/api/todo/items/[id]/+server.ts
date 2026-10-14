@@ -5,7 +5,7 @@ import { splitTrailingHashtags } from '$lib/hashtags';
 export async function PATCH({ params, request }) {
 	const body = await request.json();
 	if (!getTodoItem(params.id)) return json({ error: 'item not found' }, { status: 404 });
-	const patch: { content?: string; done?: boolean } = {};
+	const patch: { content?: string; done?: boolean; inProgress?: boolean } = {};
 	// Editing text re-parses trailing hashtags, exactly like notes.
 	if (typeof body?.content === 'string') {
 		const { content, tags } = splitTrailingHashtags(body.content);
@@ -14,6 +14,7 @@ export async function PATCH({ params, request }) {
 		setTodoItemTags(params.id, tags);
 	}
 	if (typeof body?.done === 'boolean') patch.done = body.done;
+	if (typeof body?.inProgress === 'boolean') patch.inProgress = body.inProgress;
 	const item = updateTodoItem(params.id, patch);
 	if (!item) return json({ error: 'item not found' }, { status: 404 });
 	return json({ item });

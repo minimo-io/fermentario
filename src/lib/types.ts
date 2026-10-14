@@ -40,6 +40,7 @@ export interface TodoItem {
 	content: string;
 	done: boolean;
 	done_at: number;
+	inProgress?: boolean;
 	position: number;
 	created_at: number;
 	updated_at: number;

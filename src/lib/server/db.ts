@@ -28,6 +28,11 @@ if (!noteCols.some((c) => c.name === 'featured')) {
 if (!noteCols.some((c) => c.name === 'video')) {
 	db.exec("ALTER TABLE notes ADD COLUMN video TEXT NOT NULL DEFAULT ''");
 }
+// The notes in-progress experiment shipped and was reverted: tasks own that
+// concept now. Drop the column where it exists; fresh tables never had it.
+if (noteCols.some((c) => c.name === 'in_progress')) {
+	db.exec('ALTER TABLE notes DROP COLUMN in_progress');
+}
 
 // To-Do items created before position/done_at backfill in creation order,
 // so the visible list does not reshuffle under the user.
@@ -44,6 +49,9 @@ if (!itemCols.some((c) => c.name === 'position')) {
 	db.transaction(() => {
 		ids.forEach((r, i) => upd.run(i, r.id));
 	});
+}
+if (!itemCols.some((c) => c.name === 'in_progress')) {
+	db.exec('ALTER TABLE todo_items ADD COLUMN in_progress INTEGER NOT NULL DEFAULT 0');
 }
 
 export const {

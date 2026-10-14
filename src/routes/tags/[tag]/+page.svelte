@@ -212,7 +212,12 @@
 									class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
 									onclick={() => void toggleTodo(item)}
 								><span class="text-[11px] leading-none">✓</span></button>
-								<span class="min-w-0 flex-1 text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}">{item.content}</span>
+								<span class="min-w-0 flex-1">
+									<span class="block text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}">{item.content}</span>
+									{#if item.inProgress}
+										<span class="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+									{/if}
+								</span>
 							</li>
 						{/each}
 					</ul>

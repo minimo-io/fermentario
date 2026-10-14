@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
+	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	type Props = {
 		title: string;
 		message: string;
@@ -27,8 +29,9 @@
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
 	onkeydown={(e) => { if (e.key === 'Escape') onCancel(); }}
+	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
-	<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl">
+	<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 		<h2 id="confirm-title" class="text-sm font-semibold text-stone-900">{title}</h2>
 		<p class="mt-1.5 text-sm leading-relaxed text-stone-600">{message}</p>
 		<div class="mt-5 flex justify-end gap-2">

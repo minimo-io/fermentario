@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
+	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import type { Note } from '$lib/types';
 
 	type Props = {
@@ -40,8 +42,9 @@
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget && !saving) onCancel(); }}
 	onkeydown={(e) => { if (e.key === 'Escape' && !saving) onCancel(); }}
+	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
-	<div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+	<div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 		<h2 id="edit-title" class="text-sm font-semibold text-stone-900">Edit note</h2>
 		<textarea
 			class="mt-3 max-h-[50dvh] min-h-32 w-full resize-y rounded-xl border border-stone-200 bg-white p-3 text-[15px] leading-snug text-stone-800 outline-none focus:border-stone-400"

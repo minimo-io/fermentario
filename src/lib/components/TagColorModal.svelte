@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
+	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { TAG_PALETTE, type TagColorKey } from '$lib/tag-palette';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
@@ -23,8 +25,9 @@
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 	onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
+	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
-	<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl">
+	<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-sm font-semibold text-stone-900">Color for #{tag}</h2>
 			<button class="text-stone-400 hover:text-stone-600" aria-label="Close" onclick={onClose}>&times;</button>

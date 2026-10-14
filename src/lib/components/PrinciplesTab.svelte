@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { Principle } from '$lib/types';
+	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 
-	type Props = { onError: (msg: string) => void };
-	let { onError }: Props = $props();
+	type Props = { onError: (msg: string) => void; widthClass?: string };
+	let { onError, widthClass = 'max-w-2xl' }: Props = $props();
 
 	let principles = $state<Principle[]>([]);
 	let draft = $state('');
@@ -181,16 +182,20 @@
 	</ol>
 	{#if principles.length === 0}
 		<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">No principles yet — add the first one below.</p>
+	{:else}
+		<p class="mt-2 text-[11px] leading-snug text-stone-400">Press and hold a principle to drag it into a new position.</p>
 	{/if}
+</div>
 
-	<form class="mt-4 flex gap-2" onsubmit={(e) => { e.preventDefault(); void add(); }}>
+<FixedBottomBar {widthClass}>
+	<form class="flex min-w-0 flex-1 items-center gap-2" onsubmit={(e) => { e.preventDefault(); void add(); }}>
 		<input
-			class="min-w-0 flex-1 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-800 outline-none placeholder:text-stone-400"
+			class="min-h-11 w-full min-w-0 flex-1 bg-transparent px-2 py-2.5 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400"
 			placeholder="New principle…"
+			aria-label="New principle"
 			value={draft}
 			oninput={(e) => (draft = e.currentTarget.value)}
 		/>
-		<button type="submit" class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-xs font-medium text-white">Add</button>
+		<button type="submit" class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium whitespace-nowrap text-white">Add</button>
 	</form>
-	<p class="mt-1.5 text-[11px] leading-snug text-stone-400">Press and hold a principle to drag it into a new position.</p>
-</div>
+</FixedBottomBar>

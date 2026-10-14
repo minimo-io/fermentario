@@ -20,3 +20,14 @@ body {
 		cursor: not-allowed;
 	}
 }
+
+@layer utilities {
+	/* Touch-native horizontal strips: scrollable, no visible scrollbar. */
+	.no-scrollbar {
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+}

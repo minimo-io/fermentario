@@ -18,7 +18,7 @@ export async function PATCH({ params, request }) {
 	} catch {
 		return json({ error: 'invalid body' }, { status: 400 });
 	}
-	// Pinning and video touch only their own columns: no text, FTS, vector,
+	// Flags and video touch only their own columns: no text, FTS, vector,
 	// or tag work.
 	if (typeof body?.content !== 'string' && (typeof body?.featured === 'boolean' || typeof body?.video === 'string')) {
 		let note = getNote(params.id);

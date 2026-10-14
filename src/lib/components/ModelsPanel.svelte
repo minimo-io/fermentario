@@ -1,17 +1,21 @@
 <script lang="ts">
 	import type { ChatModelOption } from '$lib/chat-models';
 
+	type Lang = 'en' | 'es' | 'pt';
+
 	type Props = {
 		summaryLoading: boolean;
 		week: string | null;
 		model: string;
 		models: ChatModelOption[];
+		modelLang: Lang;
 		prompt: string;
 		onRerun: () => void;
 		onModelChange: (id: string) => void;
+		onModelLang: (lang: Lang) => void;
 		onPromptChange: (value: string) => void;
 	};
-	let { summaryLoading, week, model, models, prompt, onRerun, onModelChange, onPromptChange }: Props = $props();
+	let { summaryLoading, week, model, models, modelLang, prompt, onRerun, onModelChange, onModelLang, onPromptChange }: Props = $props();
 
 	let embedding = $state<boolean | null>(null);
 	let chat = $state<boolean | null>(null);
@@ -30,6 +34,12 @@
 	let failStreak = 0;
 
 	const EMB = 'Xenova/all-MiniLM-L6-v2';
+
+	const MODEL_LANGS: { v: Lang; label: string }[] = [
+		{ v: 'en', label: 'English' },
+		{ v: 'es', label: 'Español' },
+		{ v: 'pt', label: 'Português' }
+	];
 
 	let activeRepo = $derived(models.find((m) => m.id === model)?.repo ?? 'onnx-community/Qwen2.5-0.5B-Instruct');
 
@@ -99,6 +109,19 @@
 </script>
 
 <div class="space-y-2 text-sm">
+	<div class="rounded-xl bg-stone-50 px-3 py-2">
+		<p class="text-stone-600">Model language</p>
+		<div class="mt-2 flex gap-2">
+			{#each MODEL_LANGS as l}
+				<button
+					type="button"
+					class="rounded-full border px-3 py-1 text-xs font-medium {modelLang === l.v ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'}"
+					onclick={() => onModelLang(l.v)}
+				>{l.label}</button>
+			{/each}
+		</div>
+		<p class="mt-1.5 text-[11px] text-stone-400">The language the models answer in. Applies immediately.</p>
+	</div>
 	<div class="flex items-center justify-between gap-3 rounded-xl bg-stone-50 px-3 py-2">
 		<span class="text-stone-600">Embedding</span>
 		<span class="flex flex-col items-end gap-1 text-stone-500">

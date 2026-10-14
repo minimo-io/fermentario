@@ -36,3 +36,15 @@ Status: [DONE]
 
 ### Follow-up — visible grip handle for reorder
 - Each item row leads with a grip handle (`GripVertical`, `cursor-grab`, tooltip "Drag to reorder"). Drags start from the handle on mouse and touch (touch needs no hold there); arrow keys on the handle reorder for keyboard users. Fixed a style leak where an immediate touch drag left `touch-action: none` on the row. Gates re-run green.
+
+### Follow-up — action sheets for groups and items
+- Inline rename/× buttons replaced by ellipsis buttons opening bottom sheets modeled on `NoteActionsMenu` (overlay, `Escape`/backdrop close, `min-h-11` targets). Item sheet: Mark done/not done, Edit, Delete (still confirmed). Group sheet: Rename (opens the existing inline rename), Delete (still confirmed). Same endpoints. Gates re-run green.
+
+### Follow-up — sheet null bug (user-caught)
+- Every sheet button nulled its state before reading the `{@const}` snapshot (`menuItem = null; … m.id`), and the const re-reads live — so all six buttons threw `Cannot read properties of null`. No fetch ever fired, which is why the network tab stayed empty. Fixed by capture-then-clear in all six handlers. Rule: never null state before its snapshot is consumed. Gates re-run green.
+
+### Follow-up — in-progress items
+- `todo_items.in_progress` (schema + migration), `PATCH` accepts it, list sorts in-progress first. Sheet entry toggles it; gold tag on TodoTab and tag-page rows. Verified live: mark/unmark, ordering, legacy-DB migration. Gates re-run green.
+
+### Follow-up — own bottom bar, single line
+- The note composer no longer renders in To-Do. The add-item form moved into a shared `FixedBottomBar` (same slot, width, and `--composer-h` publishing as the composer): one row, `nowrap`, compact mobile padding. Gates re-run green.

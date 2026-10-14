@@ -82,7 +82,7 @@
 	}
 </script>
 
-<nav aria-label="Sections" class="flex snap-x gap-2 overflow-x-auto pb-1 sm:flex-wrap">
+<nav aria-label="Sections" class="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
 	{#each sections as s, i (s.id)}
 		<button
 			type="button"

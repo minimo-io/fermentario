@@ -153,10 +153,12 @@
 			</p>
 		</header>
 
-		<article class="rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3">
+		<article class="rounded-2xl border bg-white/70 px-4 py-3 {note.featured ? 'border-amber-400' : 'border-stone-200/80'}">
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
-				<p class="min-w-0 flex-1 whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{note.content}</p>
+				<div class="min-w-0 flex-1">
+					<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{note.content}</p>
+				</div>
 				<button
 					type="button"
 					class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600"
