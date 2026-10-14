@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Timeline from '$lib/components/Timeline.svelte';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
@@ -213,9 +215,12 @@
 									onclick={() => void toggleTodo(item)}
 								><span class="text-[11px] leading-none">✓</span></button>
 								<span class="min-w-0 flex-1">
-									<span class="block text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}">{item.content}</span>
+									<button type="button" class="block w-full text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
 									{#if item.inProgress}
 										<span class="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+									{/if}
+									{#if (item.commentCount ?? 0) > 0}
+										<span class="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500"><MessageCircle class="h-3 w-3" /> {item.commentCount}</span>
 									{/if}
 								</span>
 							</li>

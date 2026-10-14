@@ -81,6 +81,13 @@ export const SCHEMA = `
 		color TEXT NOT NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS task_comments (
+		id         TEXT PRIMARY KEY,
+		item_id    TEXT NOT NULL REFERENCES todo_items(id) ON DELETE CASCADE,
+		content    TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+
 	CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 		content,
 		note_id UNINDEXED,
@@ -144,6 +151,7 @@ export interface TodoItem {
 	position: number;
 	created_at: number;
 	updated_at: number;
+	commentCount: number;
 	tags: string[];
 }
 
@@ -152,6 +160,17 @@ export interface Principle {
 	content: string;
 	position: number;
 	created_at: number;
+}
+
+export interface TaskComment {
+	id: string;
+	item_id: string;
+	content: string;
+	created_at: number;
+}
+
+export interface TodoProgressItem extends TodoItem {
+	groupName: string;
 }
 
 const rowToNote = (r: NoteRow, tags: string[] = []): Note => ({
@@ -404,6 +423,7 @@ export function createJournal(db: SqlDb) {
 		position: number;
 		created_at: number;
 		updated_at: number;
+		comment_count: number;
 	}
 
 	const rowToTodoItem = (r: TodoItemRow, tags: string[] = []): TodoItem => ({
@@ -416,12 +436,16 @@ export function createJournal(db: SqlDb) {
 		position: r.position ?? 0,
 		created_at: r.created_at,
 		updated_at: r.updated_at,
+		commentCount: r.comment_count ?? 0,
 		tags
 	});
 
 	function listTodoItems(groupId: string): TodoItem[] {
 		const rows = db
-			.prepare('SELECT * FROM todo_items WHERE group_id = ? ORDER BY in_progress DESC, position ASC, created_at ASC, id ASC')
+			.prepare(
+				`SELECT i.*, (SELECT COUNT(*) FROM task_comments c WHERE c.item_id = i.id) AS comment_count
+				 FROM todo_items i WHERE i.group_id = ? ORDER BY i.in_progress DESC, i.position ASC, i.created_at ASC, i.id ASC`
+			)
 			.all(groupId) as unknown as TodoItemRow[];
 		const tags = tagsByItem(rows);
 		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
@@ -443,7 +467,7 @@ export function createJournal(db: SqlDb) {
 		db.prepare(
 			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?)'
 		).run(id, groupId, clean, max.m + 1, createdAt, createdAt);
-		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, tags: [] };
+		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, tags: [] };
 	}
 
 	/** Edit text and/or checked state. `updated_at` always moves past
@@ -472,12 +496,27 @@ export function createJournal(db: SqlDb) {
 		if (!clean) return [];
 		const rows = db
 			.prepare(
-				`SELECT i.* FROM todo_items i JOIN todo_item_tags t ON t.item_id = i.id
+				`SELECT i.*, (SELECT COUNT(*) FROM task_comments c WHERE c.item_id = i.id) AS comment_count
+				 FROM todo_items i JOIN todo_item_tags t ON t.item_id = i.id
 				 WHERE t.tag = ? ORDER BY i.created_at DESC, i.id DESC`
 			)
 			.all(clean) as unknown as TodoItemRow[];
 		const tags = tagsByItem(rows);
 		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
+	}
+
+	/** Every in-progress item across groups, with its group name attached. */
+	function listInProgressItems(): TodoProgressItem[] {
+		const rows = db
+			.prepare(
+				`SELECT i.*, g.name AS group_name,
+					(SELECT COUNT(*) FROM task_comments c WHERE c.item_id = i.id) AS comment_count
+				 FROM todo_items i JOIN todo_groups g ON g.id = i.group_id
+				 WHERE i.in_progress = 1 ORDER BY i.updated_at DESC, i.id DESC`
+			)
+			.all() as unknown as (TodoItemRow & { group_name: string })[];
+		const tags = tagsByItem(rows);
+		return rows.map((r) => ({ ...rowToTodoItem(r, tags.get(r.id) ?? []), groupName: r.group_name }));
 	}
 
 	/** Persist a full item order inside one group. Unknown ids are ignored. */
@@ -486,6 +525,31 @@ export function createJournal(db: SqlDb) {
 		db.transaction(() => {
 			ids.forEach((id, i) => upd.run(i, id, groupId));
 		});
+	}
+
+	// --- Task comments -----------------------------------------------------
+	// Append-only history of a task's evolution. Comments are never edited;
+	// deleting one needs a confirm on the client.
+
+	function listTaskComments(itemId: string): TaskComment[] {
+		return db
+			.prepare('SELECT * FROM task_comments WHERE item_id = ? ORDER BY created_at ASC, id ASC')
+			.all(itemId) as unknown as TaskComment[];
+	}
+
+	function createTaskComment(itemId: string, content: string): TaskComment | null {
+		const group = db.prepare('SELECT id FROM todo_items WHERE id = ?').get(itemId) as unknown as { id: string } | undefined;
+		if (!group) return null;
+		const clean = content.trim();
+		if (!clean) return null;
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.prepare('INSERT INTO task_comments (id, item_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, itemId, clean, now);
+		return { id, item_id: itemId, content: clean, created_at: now };
+	}
+
+	function deleteTaskComment(itemId: string, id: string): boolean {
+		return db.prepare('DELETE FROM task_comments WHERE id = ? AND item_id = ?').run(id, itemId).changes > 0;
 	}
 
 	/** Replace an item's tags. Passing an empty array clears them. */
@@ -712,6 +776,10 @@ export function createJournal(db: SqlDb) {
 		setTodoItemTags,
 		listTodoItemsByTag,
 		setTodoItemOrder,
+		listInProgressItems,
+		listTaskComments,
+		createTaskComment,
+		deleteTaskComment,
 		listPrinciples,
 		createPrinciple,
 		updatePrinciple,

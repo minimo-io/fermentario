@@ -41,6 +41,7 @@ export interface TodoItem {
 	done: boolean;
 	done_at: number;
 	inProgress?: boolean;
+	commentCount?: number;
 	position: number;
 	created_at: number;
 	updated_at: number;
@@ -52,4 +53,15 @@ export interface Principle {
 	content: string;
 	position: number;
 	created_at: number;
+}
+
+export interface TaskComment {
+	id: string;
+	item_id: string;
+	content: string;
+	created_at: number;
+}
+
+export interface TodoProgressItem extends TodoItem {
+	groupName: string;
 }

@@ -46,5 +46,16 @@ Status: [DONE]
 ### Follow-up — in-progress items
 - `todo_items.in_progress` (schema + migration), `PATCH` accepts it, list sorts in-progress first. Sheet entry toggles it; gold tag on TodoTab and tag-page rows. Verified live: mark/unmark, ordering, legacy-DB migration. Gates re-run green.
 
+### Follow-up — multiline, detail page, done section
+- Items render `whitespace-pre-wrap`; inline edit is an auto-growing textarea (`Cmd/Ctrl+Enter` saves). New `/todo/[id]` route (real 404): full content, tags, dates, toggle, comment history with add + confirmed delete. New `task_comments` table (FK cascade), `GET` single item, comment routes. Sheet + tag rows link to details.
+- Done items live in a collapsed-by-default `Done (N)` section with `slide` animation; unchecking glides back up. Verified live: multiline round-trip, comments add/list/delete, 200/404s. Gates re-run green.
+
+### Follow-up — In progress pill + group modal
+- Amber "In progress (N)" pill leads the group carousel: flat cross-group view with group names, gold tags, checkboxes, and its own action sheet (details/done/progress/delete). Backed by `listInProgressItems` + `GET /api/todo/items?inprogress=only`. Add bar hidden there (nothing to add to). Verified live across two groups.
+- Group creation left inline for the modal: `+` opens a "New group" dialog (autofocus, `Enter` creates, `Escape`/backdrop closes), same `addGroup` path.
+
+### Follow-up — New task modal
+- The bottom bar holds only a full-width "+ Add" button (same shell, same height). It opens a "New task" modal with an auto-growing textarea, tag hint, and Create/Cancel (`Cmd/Ctrl+Enter` creates, plain `Enter` is a newline). Same `addItem` path. Gates re-run green.
+
 ### Follow-up — own bottom bar, single line
 - The note composer no longer renders in To-Do. The add-item form moved into a shared `FixedBottomBar` (same slot, width, and `--composer-h` publishing as the composer): one row, `nowrap`, compact mobile padding. Gates re-run green.

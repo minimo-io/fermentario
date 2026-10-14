@@ -90,6 +90,10 @@ export const {
 	setTodoItemTags,
 	listTodoItemsByTag,
 	setTodoItemOrder,
+	listInProgressItems,
+	listTaskComments,
+	createTaskComment,
+	deleteTaskComment,
 	listPrinciples,
 	createPrinciple,
 	updatePrinciple,
@@ -99,4 +103,4 @@ export const {
 	setTagColor
 } = journal;
 
-export type { Note, NoteRow, NoteCursor, NotePage, AskRow, Ask, TodoGroup, TodoItem, Principle } from '$lib/platform/journal';
+export type { Note, NoteRow, NoteCursor, NotePage, AskRow, Ask, TodoGroup, TodoItem, TodoProgressItem, TaskComment, Principle } from '$lib/platform/journal';

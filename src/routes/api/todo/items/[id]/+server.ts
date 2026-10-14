@@ -2,6 +2,12 @@ import { json } from '@sveltejs/kit';
 import { getTodoItem, updateTodoItem, deleteTodoItem, setTodoItemTags } from '$lib/server/db';
 import { splitTrailingHashtags } from '$lib/hashtags';
 
+export async function GET({ params }) {
+	const item = getTodoItem(params.id);
+	if (!item) return json({ error: 'item not found' }, { status: 404 });
+	return json({ item });
+}
+
 export async function PATCH({ params, request }) {
 	const body = await request.json();
 	if (!getTodoItem(params.id)) return json({ error: 'item not found' }, { status: 404 });
