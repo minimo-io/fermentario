@@ -246,6 +246,23 @@ function langTag(p: Lang): string {
 		const draft = loadDraft();
 		text = draft.note;
 		question = draft.ask;
+		// And the section the user was in, so Back from a detail page lands
+		// back in To-Do (or Ask) instead of always on Notes.
+		try {
+			const v = sessionStorage.getItem('fermentario.view');
+			const ids = SECTIONS.map((s) => s.id);
+			if (v === 'ask') view = 'ask';
+			else if (v && (ids as string[]).includes(v)) {
+				lastSection = v as SectionId;
+				view = v as SectionId;
+			}
+		} catch {}
+	});
+
+	$effect(() => {
+		try {
+			sessionStorage.setItem('fermentario.view', view);
+		} catch {}
 	});
 
 	$effect(() => {

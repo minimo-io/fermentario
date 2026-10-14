@@ -102,7 +102,7 @@
 </svelte:head>
 
 <main class="min-h-dvh">
-	<div class="mx-auto {contentClass} px-6 pt-14 pb-24">
+	<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 		<header class="mb-5">
 			<button
 				type="button"

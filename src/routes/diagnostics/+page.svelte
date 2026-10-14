@@ -237,7 +237,7 @@ onMount(() => {
 
 <svelte:head><title>Diagnostics</title></svelte:head>
 
-<div class="mx-auto {contentClass} px-6 pt-14 pb-24">
+<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 	<button
 		type="button"
 		class="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500"

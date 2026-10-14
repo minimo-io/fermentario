@@ -50,6 +50,9 @@ Status: [DONE]
 - Items render `whitespace-pre-wrap`; inline edit is an auto-growing textarea (`Cmd/Ctrl+Enter` saves). New `/todo/[id]` route (real 404): full content, tags, dates, toggle, comment history with add + confirmed delete. New `task_comments` table (FK cascade), `GET` single item, comment routes. Sheet + tag rows link to details.
 - Done items live in a collapsed-by-default `Done (N)` section with `slide` animation; unchecking glides back up. Verified live: multiline round-trip, comments add/list/delete, 200/404s. Gates re-run green.
 
+### Follow-up — section survives navigation
+- Current view persists in `sessionStorage` (`fermentario.view`) on every switch and restores on mount, so Back from a task detail lands back in To-Do (or Ask), not Notes. Invalid values fall back to Notes. Gates re-run green.
+
 ### Follow-up — In progress pill + group modal
 - Amber "In progress (N)" pill leads the group carousel: flat cross-group view with group names, gold tags, checkboxes, and its own action sheet (details/done/progress/delete). Backed by `listInProgressItems` + `GET /api/todo/items?inprogress=only`. Add bar hidden there (nothing to add to). Verified live across two groups.
 - Group creation left inline for the modal: `+` opens a "New group" dialog (autofocus, `Enter` creates, `Escape`/backdrop closes), same `addGroup` path.
