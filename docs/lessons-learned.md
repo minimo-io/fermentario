@@ -1070,3 +1070,189 @@
   green after. Lesson: after every edit to a migration block, read the
   surrounding lines before running gates — a half-applied edit fails in a
   way `check` reports far from the cause.
+
+## Session: drag gestures, tag-safe editing, principles video
+- ERROR CORRECTED: the first drag probe booted `build/index.js` without
+  `FERMENTARIO_DATA_DIR`, so it ran against the live database and moved the
+  first item of a real To-Do group to the end (a temporary "Drag" test group
+  was later removed). Lesson: every test boot of the build MUST set
+  `FERMENTARIO_DATA_DIR` to a throwaway directory. No exceptions.
+- Drag handlers on a tappable pill broke taps: users could not open a list
+  because the UI read every touch as drag intent. Fix: pills open on tap,
+  drag starts only from a dedicated grip. On task rows, body drag returned
+  with capture moved to the first pointermove — capturing on pointerdown
+  retargets the click away from buttons, so taps silently stop working. If a
+  drag surface also has tappable children, never capture before movement.
+- Trailing-hashtag systems: PATCH re-parses the content, so any edit surface
+  that sends text back without the `#tags` wipes them. The task edit modal now
+  prefills `(subgroup) text #tags`. The notes edit dialog had the sibling bug:
+  it re-sent the stored bare video id, which failed URL validation on any
+  text-only edit — prefill the watch URL, not the id.
+- Validate side values (like a video URL) before mutating anything in a route:
+  a 400 after the INSERT left a phantom principle the client never saw.
+- Touch drag from a row body cannot be guaranteed: without `touch-action:
+  none` present at touchstart the browser claims the gesture as scroll and
+  fires pointercancel. A grip with a static `touch-none` is the reliable
+  touch target; body drag is for mouse.
+
+## Session: pill layout, recap button, principles grips
+- If a flex child looks vertically off in a one-line card, ask what defines
+  the line height: our 32px `h-8` ⋮ button set it, so `items-start` looked
+  right for the button and raised everything else. `sm:items-center` +
+  removing the mobile-only `mt` nudges on desktop fixed it — no magic `mt`
+  arithmetic, and multi-line rows stay consistent (everything centres).
+- Prefer spatial merging over absolute positioning for corner pills: an
+  absolutely-placed comment pill drifted onto the open thread's Add form.
+  `ml-auto` inside the last chips row keeps the pill at the same visual
+  spot, adds no line, and wraps away cleanly when the chips fill the row.
+- A working-but-invisible affordance is not a feature: principles reorder
+  was fully implemented (body drag + PUT) but nobody could find it. If a
+  gesture has no visible affordance, add one (the standard grip) before
+  assuming the code is missing.
+- Playwright target by stable handles: done rows carry no `data-item`
+  (drag-only attribute), so row locators must fall back to text/role —
+  otherwise a valid flow dead-times at `boundingBox` for 30s.
+
+## Session: comments corrected to the one modal standard
+- "Standards" means structural identity, not decoration: tasks and principles
+  had the same inline thread but the input was inline too, and one tab rode
+  left while the other rode right. The user's rule is absolute — comment
+  inputs exist ONLY in a modal, and icons sit in ONE position. When a rule
+  gets declared, apply it to every surface at once (including the detail
+  page), then sweep the codebase for violators instead of patching tabs one
+  by one.
+- Function-typed props are the modal's contract, not internal state: the
+  shared modal posts/deletes through callbacks so the caller keeps its own
+  lists, routes and count bookkeeping. Type the delete callback minimally
+  (`{ id: string }`) — the full record only invites re-wiring.
+- A shared, structurally broader prop type can silently drop to its
+  constraint (Svelte `generics` are flaky in tooling). Inheriting the widest
+  real type (`created_at: number`, not `string`) plus `Pick`-free minimal
+  handler params avoided generics entirely — plain structural types are the
+  portable choice.
+
+## Session: notes fold — invented chevron removed, tap-to-toggle instead
+- "Toggle" did not license a new control. The user never asked for a
+  chevron; "togglable notes" meant the note text itself toggles (tap to
+  fold, tap to expand). Inventing visible chrome for an operation that needs
+  none adds a placement problem ("random place" on mobile) and a consistency
+  problem (conditional rendering made it appear on some cards, not others —
+  it looked like it belonged to featured notes). Default to the content as
+  the interaction; ask before adding controls.
+- Conditional affordances blur into "arbitrary": a control that exists only
+  on multi-line rows reads as random when most rows are single-line. If a
+  needed affordance varies by content, tie it to persistent, understandable
+  rendering (the `… +N more` hint does that) rather than a floating widget
+  in icon columns.
+- Verify with anchors that SURVIVE the interaction: a live locator keyed to
+  text that folding removes (`hasText: 'Second'`) silently resolves to
+  nothing after the click, turning "hint present" into a false fail.
+  Anchor to content that stays, or snapshot before acting.
+- Seeders must match the real write path: `featured` is set via
+  `PATCH /api/notes/[id] {featured: true}`, not the create POST body — a
+  silently ignored field produces a note that looks like an app bug (missing
+  amber border) but is fixture error.
+
+## Session: fold rewrite — measure rendered lines, trust stored folds
+- The fold criterion was `content.split('\n').length > 1` — raw newlines.
+  Real notes are mostly paragraphs that WRAP without newlines, so the
+  toggle existed only on the few newline-shaped notes (read: the featured
+  ones). "Show the first line when split into lines" is a data property;
+  "show the first rendered line" is a layout property. Toggleability that
+  depends on layout must be measured from layout (height vs line-height
+  after paint, re-measured on resize), never inferred from source text.
+- Two gestures on one card is ambiguity, not convenience: text = toggle and
+  a tiny hour link = open left users guessing where to hit. One card, one
+  tap action; everything else (open, edit, copy, delete) belongs to the ⋮
+  menu. The user confirmed: open lives in the menu.
+- Chromium overflows nothing under `-webkit-line-clamp`: `scrollHeight`
+  equals `clientHeight` on the clamped box, so a re-measure keyed on the
+  folded element silently un-clamped persisted folds after reload. Trust
+  what the user persisted — measure only the unfolded state and re-measure
+  on expand.
+- Fixtures must contain the real-world shape: past verifications used
+  newline-rich notes and passed, while the user's paragraph-shaped notes
+  had no toggle at all. Seed the "ordinary" case (plain long paragraph),
+  not the convenient one.
+- Fitest fields: `featured` is PATCH `/api/notes/[id] {featured:true}` —
+  the create POST body silently ignored it.
+
+## Session: fold persistence — one storage key, two mounted timelines
+- Per-instance UI state + a shared storage key = last-writer-wins. The home
+  page mounts TWO timelines (featured section + history) that can hold the
+  same note ids; each kept its own fold map over the SAME
+  `localStorage` key, so a fold in one instance silently overwrote the
+  folds the other instance had made. When a component can be mounted
+  multiple times at once, key-backed state must live at MODULE level (one
+  record, loaded once, pruned only by explicit user action) — never
+  per-instance.
+- Storage loads must not prune: the older version re-parsed storage on
+  every notes change and intersected with ids visible to THAT instance,
+  dropping folds the instance could not see. Loading is a merge; only an
+  explicit undo (expand) deletes.
+- Reproduce complaints at the data level, not the demo level: seed the
+  user's shapes (featured-note-in-two-lists, paragraph notes) and the
+  exact gesture ORDER they did (featured first, then ordinary) — the old
+  verifications folded only inside ONE instance and could not see the
+  clobber.
+
+## Session: note comments restored — uncommitted work has no archaeology
+- "It's not in git" only proves it is not in COMMITS. This session's
+  uncommitted branches can rise and die invisibly: a later edit can revert
+  earlier uncommitted work and no diff will ever show it. The note comment
+  button fell exactly through that hole — I searched committed history for
+  the feature, found none, and concluded it never existed; the user (who
+  watched it exist) got steamrolled. When a user says a feature used to
+  be there, treat it as present-on-demand and REBUILD it rather than
+  litigating history.
+- One look at what the user can SEE (the comments standard exists for tasks
+  and principles with a modal, a pill, API and count bookkeeping) made the
+  missing piece obvious by comparison. When a feature feels "removed",
+  map its siblings first — the standard IS the spec.
+- Fixture tags follow the real write path: `POST /api/notes` takes tags
+  ONLY as trailing #hashtags inside the content. A `tags: []` body is
+  ignored, which sent a tag-page verification chasing a note that was
+  never on that page.
+
+## Session: comments — modal input-only, list on the single page
+- The comment modal was redesigned on instruction: it takes text for ONE
+  new comment and closes on success; the thread and deletes live only on
+  the single item page (`/todo/[id]`, `/notes/[id]`, and the new
+  `/principles/[id]`). The pill stays the add entry point everywhere. The
+  modal no longer fetches a thread at open — three tabs lose their whole
+  comment-cache state (`taskComments`, `commentsByPrinciple`, timeline
+  `refreshComments`), which is a net simplification, not a regression.
+- "The list lives on the single page" implies the page must EXIST and be
+  reachable: principles had neither, so the page was built and the
+  principle actions menu got "Open" as its first item. When a rule
+  references a destination, check the destination exists before wiring.
+- Detail pages need the listed nouns the user names: after this change,
+  delete affordances sit per row (`aria-label="Delete comment"`) with the
+  danger `ConfirmDialog`, not in the modal.
+- The modal header is a LABEL, not data: a "simpler title" means the plain
+  action name ("Add comment") — do not carry the item's content into the
+  dialog heading. The title prop died with that change; five call sites
+  got one line shorter each.
+- Verify scripts on a fresh `FERMENTARIO_DATA_DIR` must seed first: the
+  empty state renders no list items, no pills, no menus — every locator
+  then times out on nothing (and a nonexistent principle id poisons the
+  whole run). Seed, then browse.
+- A cross-axis `items-start` on a container that becomes
+  `max-sm:flex-col` silently stops children from stretching: each child
+  shrinks to its content width. Symptom here: short notes rendered the
+  note text (and the "bottom-right" pill row) at ~half card width, with
+  the pill row landing near the absolute ⋮'s horizontal band — described
+  by the user as the add-comments button sitting top-right left of the
+  three dots. The fix is one class (`max-sm:w-full` on the inner row).
+- Verify responsive layouts with BOTH short and long content: long
+  wrapping text fills its column and hides a shrink-to-content bug that
+  short text exposes.
+- A "top right" complaint can hide a WIDTH bug: the element that looked
+  mis-positioned was actually right-aligned inside a too-narrow column.
+  Measure the parent's box before moving anything.
+- Every card renders TWO count-pill variants (one per breakpoint, one
+  hidden by CSS). `.first()` can select the hidden one and time out on
+  click — Playwright needs the `:visible` locator
+  (`button[aria-label="…"]:visible`) rather than positional picks. A tab
+  switcher may also hide section content until its `role="tab"` is
+  clicked; verify scripts must drive the visible tab bar.

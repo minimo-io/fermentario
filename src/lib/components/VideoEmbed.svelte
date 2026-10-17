@@ -3,17 +3,18 @@
 	import { youTubeEmbedUrl, youTubeThumbnailUrl, youTubeWatchUrl } from '$lib/youtube';
 
 	/** Click-to-load player: no third-party request until the user asks, and
-	 *  the thumbnail reserves the 16:9 slot so the card never jumps. */
-	type Props = { id: string };
-	let { id }: Props = $props();
+	 *  the thumbnail reserves the 16:9 slot so the card never jumps. With
+	 *  autoplay the caller already asks: go straight to the player, playing. */
+	type Props = { id: string; autoplay?: boolean };
+	let { id, autoplay = false }: Props = $props();
 
 	let loaded = $state(false);
 </script>
 
-{#if loaded}
+{#if autoplay || loaded}
 	<iframe
 		class="aspect-video w-full rounded-xl"
-		src={youTubeEmbedUrl(id)}
+		src={youTubeEmbedUrl(id) + (autoplay ? '?autoplay=1' : '')}
 		title="YouTube video"
 		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
 		allowfullscreen

@@ -48,6 +48,7 @@ export const SCHEMA = `
 	CREATE TABLE IF NOT EXISTS todo_groups (
 		id         TEXT PRIMARY KEY,
 		name       TEXT NOT NULL,
+		position   INTEGER NOT NULL DEFAULT 0,
 		created_at INTEGER NOT NULL
 	);
 
@@ -58,6 +59,7 @@ export const SCHEMA = `
 		done       INTEGER NOT NULL DEFAULT 0,
 		done_at    INTEGER NOT NULL DEFAULT 0,
 		in_progress INTEGER NOT NULL DEFAULT 0,
+		subgroup   TEXT NOT NULL DEFAULT '',
 		position   INTEGER NOT NULL DEFAULT 0,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
@@ -73,7 +75,21 @@ export const SCHEMA = `
 		id         TEXT PRIMARY KEY,
 		content    TEXT NOT NULL,
 		position   INTEGER NOT NULL,
-		created_at INTEGER NOT NULL
+		created_at INTEGER NOT NULL,
+		video      TEXT NOT NULL DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS principle_tags (
+		principle_id TEXT NOT NULL REFERENCES principles(id) ON DELETE CASCADE,
+		tag          TEXT NOT NULL,
+		PRIMARY KEY (principle_id, tag)
+	);
+
+	CREATE TABLE IF NOT EXISTS principle_comments (
+		id           TEXT PRIMARY KEY,
+		principle_id TEXT NOT NULL REFERENCES principles(id) ON DELETE CASCADE,
+		content      TEXT NOT NULL,
+		created_at   INTEGER NOT NULL
 	);
 
 	CREATE TABLE IF NOT EXISTS tag_colors (
@@ -84,6 +100,13 @@ export const SCHEMA = `
 	CREATE TABLE IF NOT EXISTS task_comments (
 		id         TEXT PRIMARY KEY,
 		item_id    TEXT NOT NULL REFERENCES todo_items(id) ON DELETE CASCADE,
+		content    TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS note_comments (
+		id         TEXT PRIMARY KEY,
+		note_id    TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
 		content    TEXT NOT NULL,
 		created_at INTEGER NOT NULL
 	);
@@ -103,6 +126,8 @@ export interface Note {
 	featured: boolean;
 	video: string;
 	tags: string[];
+	/** Comments live in note_comments; batched with the tags query. */
+	commentCount?: number;
 }
 
 export interface NoteRow {
@@ -138,6 +163,7 @@ export type Ask = ReturnType<typeof rowToAsk>;
 export interface TodoGroup {
 	id: string;
 	name: string;
+	position: number;
 	created_at: number;
 }
 
@@ -152,6 +178,7 @@ export interface TodoItem {
 	created_at: number;
 	updated_at: number;
 	commentCount: number;
+	subgroup: string;
 	tags: string[];
 }
 
@@ -159,6 +186,16 @@ export interface Principle {
 	id: string;
 	content: string;
 	position: number;
+	created_at: number;
+	video: string;
+	tags: string[];
+	commentCount: number;
+}
+
+export interface PrincipleComment {
+	id: string;
+	principle_id: string;
+	content: string;
 	created_at: number;
 }
 
@@ -169,18 +206,26 @@ export interface TaskComment {
 	created_at: number;
 }
 
+export interface NoteComment {
+	id: string;
+	note_id: string;
+	content: string;
+	created_at: number;
+}
+
 export interface TodoProgressItem extends TodoItem {
 	groupName: string;
 }
 
-const rowToNote = (r: NoteRow, tags: string[] = []): Note => ({
+const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0): Note => ({
 	id: r.id,
 	content: r.content,
 	created_at: r.created_at,
 	updated_at: r.updated_at,
 	featured: r.featured === 1,
 	video: r.video ?? '',
-	tags
+	tags,
+	commentCount: comments
 });
 
 const rowToAsk = (r: AskRow) => ({
@@ -216,9 +261,23 @@ export function createJournal(db: SqlDb) {
 		return map;
 	}
 
+	/** Comment totals per note id, batched the way tagsByNote batches tags. */
+	function commentsByNote(rows: { id: string }[]): Map<string, number> {
+		const map = new Map<string, number>();
+		if (rows.length === 0) return map;
+		const ids = rows.map((r) => r.id);
+		const placeholders = ids.map(() => '?').join(',');
+		const countRows = db
+			.prepare(`SELECT note_id, COUNT(*) AS c FROM note_comments WHERE note_id IN (${placeholders}) GROUP BY note_id`)
+			.all(...ids) as unknown as { note_id: string; c: number }[];
+		for (const row of countRows) map.set(row.note_id, row.c);
+		return map;
+	}
+
 	function withTags(rows: NoteRow[]): Note[] {
 		const tags = tagsByNote(rows);
-		return rows.map((r) => rowToNote(r, tags.get(r.id) ?? []));
+		const comments = commentsByNote(rows);
+		return rows.map((r) => rowToNote(r, tags.get(r.id) ?? [], comments.get(r.id) ?? 0));
 	}
 
 	function createNote(content: string, createdAt: number): Note {
@@ -236,7 +295,10 @@ export function createJournal(db: SqlDb) {
 
 	function deleteNote(id: string): boolean {
 		const done = db.prepare('DELETE FROM notes WHERE id = ?').run(id).changes > 0;
-		if (done) db.prepare('DELETE FROM notes_fts WHERE note_id = ?').run(id);
+		if (done) {
+			db.prepare('DELETE FROM notes_fts WHERE note_id = ?').run(id);
+			db.prepare('DELETE FROM note_comments WHERE note_id = ?').run(id);
+		}
 		return done;
 	}
 
@@ -371,7 +433,7 @@ export function createJournal(db: SqlDb) {
 
 	function listTodoGroups(): TodoGroup[] {
 		return db
-			.prepare('SELECT * FROM todo_groups ORDER BY created_at ASC, id ASC')
+			.prepare('SELECT * FROM todo_groups ORDER BY position ASC, created_at ASC, id ASC')
 			.all() as unknown as TodoGroup[];
 	}
 
@@ -380,8 +442,17 @@ export function createJournal(db: SqlDb) {
 		if (!clean) return null;
 		const now = Date.now();
 		const id = crypto.randomUUID();
-		db.prepare('INSERT INTO todo_groups (id, name, created_at) VALUES (?, ?, ?)').run(id, clean, now);
-		return { id, name: clean, created_at: now };
+		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM todo_groups').get() as { m: number };
+		db.prepare('INSERT INTO todo_groups (id, name, position, created_at) VALUES (?, ?, ?, ?)').run(id, clean, max.m + 1, now);
+		return { id, name: clean, position: max.m + 1, created_at: now };
+	}
+
+	/** Persist a full group order. Unknown ids are ignored. */
+	function setTodoGroupOrder(ids: string[]): void {
+		const upd = db.prepare('UPDATE todo_groups SET position = ? WHERE id = ?');
+		db.transaction(() => {
+			ids.forEach((id, i) => upd.run(i, id));
+		});
 	}
 
 	/** Rename a group. Items follow because they reference the group id, which
@@ -420,6 +491,7 @@ export function createJournal(db: SqlDb) {
 		done: number;
 		done_at: number;
 		in_progress: number;
+		subgroup: string;
 		position: number;
 		created_at: number;
 		updated_at: number;
@@ -437,6 +509,7 @@ export function createJournal(db: SqlDb) {
 		created_at: r.created_at,
 		updated_at: r.updated_at,
 		commentCount: r.comment_count ?? 0,
+		subgroup: r.subgroup ?? '',
 		tags
 	});
 
@@ -457,7 +530,7 @@ export function createJournal(db: SqlDb) {
 		return rowToTodoItem(r, tagsByItem([r]).get(r.id) ?? []);
 	}
 
-	function createTodoItem(groupId: string, content: string, createdAt: number): TodoItem | null {
+	function createTodoItem(groupId: string, content: string, createdAt: number, subgroup = ''): TodoItem | null {
 		const group = db.prepare('SELECT id FROM todo_groups WHERE id = ?').get(groupId) as unknown as { id: string } | undefined;
 		if (!group) return null;
 		const clean = content.trim();
@@ -465,24 +538,35 @@ export function createJournal(db: SqlDb) {
 		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM todo_items WHERE group_id = ?').get(groupId) as { m: number };
 		const id = crypto.randomUUID();
 		db.prepare(
-			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?)'
-		).run(id, groupId, clean, max.m + 1, createdAt, createdAt);
-		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, tags: [] };
+			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, subgroup, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?)'
+		).run(id, groupId, clean, subgroup, max.m + 1, createdAt, createdAt);
+		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, subgroup, tags: [] };
 	}
 
 	/** Edit text and/or checked state. `updated_at` always moves past
 	 *  `created_at`. Checking stamps `done_at`; unchecking clears it.
 	 *  Returns null when the item does not exist. */
-	function updateTodoItem(id: string, patch: { content?: string; done?: boolean; inProgress?: boolean }): TodoItem | null {
+	function updateTodoItem(id: string, patch: { content?: string; done?: boolean; inProgress?: boolean; subgroup?: string; group_id?: string }): TodoItem | null {
 		const existing = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as unknown as TodoItemRow | undefined;
 		if (!existing) return null;
 		const content = patch.content !== undefined ? patch.content.trim() : existing.content;
 		if (!content) return null;
+		// Moving groups appends at the end of the target list.
+		let groupId = existing.group_id;
+		let position = existing.position ?? 0;
+		if (patch.group_id !== undefined && patch.group_id !== existing.group_id) {
+			const target = db.prepare('SELECT id FROM todo_groups WHERE id = ?').get(patch.group_id) as unknown as { id: string } | undefined;
+			if (!target) return null;
+			const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM todo_items WHERE group_id = ?').get(patch.group_id) as { m: number };
+			groupId = patch.group_id;
+			position = max.m + 1;
+		}
 		const done = patch.done !== undefined ? (patch.done ? 1 : 0) : existing.done;
 		const now = Math.max(Date.now(), existing.created_at + 1);
 		const doneAt = patch.done !== undefined ? (patch.done ? now : 0) : (existing.done_at ?? 0);
 		const inProgress = patch.inProgress !== undefined ? (patch.inProgress ? 1 : 0) : (existing.in_progress ?? 0);
-		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, in_progress = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, inProgress, now, id);
+		const subgroup = patch.subgroup !== undefined ? patch.subgroup : (existing.subgroup ?? '');
+		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, in_progress = ?, subgroup = ?, group_id = ?, position = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, inProgress, subgroup, groupId, position, now, id);
 		return getTodoItem(id);
 	}
 
@@ -552,6 +636,29 @@ export function createJournal(db: SqlDb) {
 		return db.prepare('DELETE FROM task_comments WHERE id = ? AND item_id = ?').run(id, itemId).changes > 0;
 	}
 
+	function listNoteComments(noteId: string): NoteComment[] {
+		return db
+			.prepare('SELECT * FROM note_comments WHERE note_id = ? ORDER BY created_at ASC, id ASC')
+			.all(noteId) as unknown as NoteComment[];
+	}
+
+	function createNoteComment(noteId: string, content: string): NoteComment | null {
+		const note = db.prepare('SELECT id FROM notes WHERE id = ?').get(noteId) as unknown as
+			| { id: string }
+			| undefined;
+		if (!note) return null;
+		const clean = content.trim();
+		if (!clean) return null;
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.prepare('INSERT INTO note_comments (id, note_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, noteId, clean, now);
+		return { id, note_id: noteId, content: clean, created_at: now };
+	}
+
+	function deleteNoteComment(noteId: string, id: string): boolean {
+		return db.prepare('DELETE FROM note_comments WHERE id = ? AND note_id = ?').run(id, noteId).changes > 0;
+	}
+
 	/** Replace an item's tags. Passing an empty array clears them. */
 	function setTodoItemTags(itemId: string, tags: string[]): void {
 		const clean = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 12);
@@ -568,10 +675,44 @@ export function createJournal(db: SqlDb) {
 	// derives 1..N from it. Reorder writes the whole order in one
 	// transaction so numbers can never gap.
 
+	function tagsByPrinciple(rows: { id: string }[]): Map<string, string[]> {
+		const map = new Map<string, string[]>();
+		if (rows.length === 0) return map;
+		const ids = rows.map((r) => r.id);
+		const placeholders = ids.map(() => '?').join(',');
+		const tagRows = db
+			.prepare(`SELECT principle_id, tag FROM principle_tags WHERE principle_id IN (${placeholders}) ORDER BY tag`)
+			.all(...ids) as unknown as { principle_id: string; tag: string }[];
+		for (const t of tagRows) {
+			if (!map.has(t.principle_id)) map.set(t.principle_id, []);
+			map.get(t.principle_id)!.push(t.tag);
+		}
+		return map;
+	}
+
 	function listPrinciples(): Principle[] {
-		return db
-			.prepare('SELECT * FROM principles ORDER BY position ASC, created_at ASC, id ASC')
-			.all() as unknown as Principle[];
+		const rows = db
+			.prepare(
+				`SELECT p.*, (SELECT COUNT(*) FROM principle_comments c WHERE c.principle_id = p.id) AS comment_count
+				 FROM principles p ORDER BY p.position ASC, p.created_at ASC, p.id ASC`
+			)
+			.all() as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video'> & { video: string; comment_count: number })[];
+		const tags = tagsByPrinciple(rows);
+		return rows.map((r) => ({ ...r, video: r.video ?? '', tags: tags.get(r.id) ?? [], commentCount: r.comment_count ?? 0 }));
+	}
+
+	function listPrinciplesByTag(tag: string): Principle[] {
+		const clean = tag.trim().toLowerCase();
+		if (!clean) return [];
+		const rows = db
+			.prepare(
+				`SELECT p.*, (SELECT COUNT(*) FROM principle_comments c WHERE c.principle_id = p.id) AS comment_count
+				 FROM principles p JOIN principle_tags t ON t.principle_id = p.id
+				 WHERE t.tag = ? ORDER BY p.position ASC, p.created_at ASC, p.id ASC`
+			)
+			.all(clean) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video'> & { video: string; comment_count: number })[];
+		const tags = tagsByPrinciple(rows);
+		return rows.map((r) => ({ ...r, video: r.video ?? '', tags: tags.get(r.id) ?? [], commentCount: r.comment_count ?? 0 }));
 	}
 
 	function createPrinciple(content: string): Principle | null {
@@ -586,7 +727,7 @@ export function createJournal(db: SqlDb) {
 			max.m + 1,
 			now
 		);
-		return { id, content: clean, position: max.m + 1, created_at: now };
+		return { id, content: clean, position: max.m + 1, created_at: now, video: '', tags: [], commentCount: 0 };
 	}
 
 	function updatePrinciple(id: string, content: string): Principle | null {
@@ -594,11 +735,61 @@ export function createJournal(db: SqlDb) {
 		if (!clean) return null;
 		const done = db.prepare('UPDATE principles SET content = ? WHERE id = ?').run(clean, id).changes > 0;
 		if (!done) return null;
-		return db.prepare('SELECT * FROM principles WHERE id = ?').get(id) as unknown as Principle;
+		return updatePrincipleKeepTags(id);
+	}
+
+	/** Set or clear the YouTube video id. Empty clears. Touches only its column. */
+	function setPrincipleVideo(id: string, video: string): Principle | null {
+		const done = db.prepare('UPDATE principles SET video = ? WHERE id = ?').run(video, id).changes > 0;
+		if (!done) return null;
+		return updatePrincipleKeepTags(id);
+	}
+
+	function updatePrincipleKeepTags(id: string): Principle | null {
+		const row = db.prepare('SELECT * FROM principles WHERE id = ?').get(id) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video'> & { video: string } | undefined);
+		if (!row) return null;
+		const count = db.prepare('SELECT COUNT(*) AS c FROM principle_comments WHERE principle_id = ?').get(id) as { c: number };
+		return { ...row, video: row.video ?? '', tags: tagsByPrinciple([row]).get(id) ?? [], commentCount: count.c ?? 0 };
+	}
+
+	/** Replace a principle's tags. Passing an empty array clears them. */
+	function setPrincipleTags(principleId: string, tags: string[]): void {
+		const clean = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 12);
+		db.prepare('DELETE FROM principle_tags WHERE principle_id = ?').run(principleId);
+		if (clean.length === 0) return;
+		const ins = db.prepare('INSERT INTO principle_tags (principle_id, tag) VALUES (?, ?)');
+		db.transaction(() => {
+			for (const t of clean) ins.run(principleId, t);
+		});
 	}
 
 	function deletePrinciple(id: string): boolean {
 		return db.prepare('DELETE FROM principles WHERE id = ?').run(id).changes > 0;
+	}
+
+	// --- Principle comments ---------------------------------------------------
+	// Append-only history, mirroring task comments. Never edited; deleting one
+	// needs a confirm on the client.
+
+	function listPrincipleComments(principleId: string): PrincipleComment[] {
+		return db
+			.prepare('SELECT * FROM principle_comments WHERE principle_id = ? ORDER BY created_at ASC, id ASC')
+			.all(principleId) as unknown as PrincipleComment[];
+	}
+
+	function createPrincipleComment(principleId: string, content: string): PrincipleComment | null {
+		const exists = db.prepare('SELECT id FROM principles WHERE id = ?').get(principleId) as unknown as { id: string } | undefined;
+		if (!exists) return null;
+		const clean = content.trim();
+		if (!clean) return null;
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.prepare('INSERT INTO principle_comments (id, principle_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, principleId, clean, now);
+		return { id, principle_id: principleId, content: clean, created_at: now };
+	}
+
+	function deletePrincipleComment(principleId: string, id: string): boolean {
+		return db.prepare('DELETE FROM principle_comments WHERE id = ? AND principle_id = ?').run(id, principleId).changes > 0;
 	}
 
 	/** Persist a full order. Unknown ids are ignored; missing rows keep
@@ -768,6 +959,7 @@ export function createJournal(db: SqlDb) {
 		createTodoGroup,
 		renameTodoGroup,
 		deleteTodoGroup,
+		setTodoGroupOrder,
 		listTodoItems,
 		getTodoItem,
 		createTodoItem,
@@ -780,11 +972,20 @@ export function createJournal(db: SqlDb) {
 		listTaskComments,
 		createTaskComment,
 		deleteTaskComment,
+		listNoteComments,
+		createNoteComment,
+		deleteNoteComment,
 		listPrinciples,
 		createPrinciple,
 		updatePrinciple,
 		deletePrinciple,
 		setPrincipleOrder,
+		setPrincipleVideo,
+		listPrinciplesByTag,
+		setPrincipleTags,
+		listPrincipleComments,
+		createPrincipleComment,
+		deletePrincipleComment,
 		listTagColors,
 		setTagColor
 	};

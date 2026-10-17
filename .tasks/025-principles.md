@@ -27,3 +27,22 @@ Status: [DONE]
 
 ### Follow-up — own bottom bar
 - The add form moved into the shared `FixedBottomBar` (single row, compact mobile padding). The note composer no longer renders in Principles. Gates re-run green.
+
+### Follow-up — principle tags + add modal
+- `principle_tags` link table (FK cascade), same normalization as notes/tasks. Tags parse on create/edit, strip from stored text, return on every principle; chips render in the list, tag route gains a Principles group (`GET /api/principles?tag=`). New tables need no migration.
+- Creation moved to a "New principle" modal (same pattern as tasks). Verified live: tag/edit/untag, grouped lookup. Gates re-run green.
+
+### Follow-up — principle action sheet + comments
+- Ellipsis opens the task-style sheet (Edit, Delete with confirm; delete also confirms now, previously immediate). Expandable per-row comment thread (count pill, slide, add form, confirmed delete) backed by `principle_comments` (FK cascade) + 3 routes. Verified live: add/list/delete. Gates re-run green.
+### Follow-up — optional YouTube video
+- `principles.video` stores the 11-char id (schema + `PRAGMA` migration for older tables). Create/edit accept a URL, validated by `extractYouTubeId` **before** any write, so a bad URL can never leave a phantom principle or a half-saved edit; empty string clears.
+- Card shows the click-to-load `VideoEmbed` at the bottom; both modals carry a "YouTube URL (optional)" field, prefilled with the watch URL on edit.
+- Mutual fix: the notes edit dialog re-sent the stored bare video id, so any text-only edit of a note with a video failed validation. It now prefills the watch URL and compares against it.
+- Verified live: create with URL, text-only edit keeps video, bad patch 400 + content unchanged, bad create 400 + no phantom, clear works, embed renders, edit prefill correct. Gates re-run green (check 0/0, build + `build/index.js`, test 31/31, `GET /` 200).
+
+### Follow-up — visible reorder grips
+- Reordering existed (mouse body-drag, 280ms long-press on touch, `PUT /api/principles` with the full id list) but was invisible. Each card now carries the To-Do-standard drag grip before the number; a grip press engages the drag at once for mouse **and** touch (guaranteed drag), while press-and-hold on the body stays the touch fallback and `setPointerCapture` now engages on first move (the click-retarget fix the task rows already had). Arrow-up/down on the focusable grip reorders by keyboard.
+- Verified live: 3 grips render; mouse body drag moves "P one" under "P two"; CDP-touch grip drag moves the last card to the top; a plain tap still opens the edit modal (no retarget). Gates re-run green.
+
+### Follow-up — one comments standard (supersedes the inline thread above)
+- The inline thread + inline age form on principle cards is gone. The count pill opens the shared `CommentModal` (`aria-haspopup="dialog"`); desktop tags + pill moved into the title line right-aligned before the ⋮ (`sm:items-center`, grip/number `sm:mt-0`), mobile tags row keeps its right alignment with the pill at the row end (bottom-right edge), bare card right-aligns the pill on its own line. Delete and add live only in the modal (delete with the internal danger confirm); the card pill's count follows. Verified live: pill right edge on the card padding line on the tags row and on the bare card; modal open, add (0→1), delete with confirm (1→0), tap still opens the edit modal. Gates re-run green.

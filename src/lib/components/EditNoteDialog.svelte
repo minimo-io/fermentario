@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { youTubeWatchUrl } from '$lib/youtube';
 	import type { Note } from '$lib/types';
 
 	type Props = {
@@ -17,7 +18,7 @@
 	let saving = $state(false);
 	let err = $state('');
 
-	const unchanged = $derived(content.trim() === note.content.trim() && video.trim() === (note.video ?? ''));
+	const unchanged = $derived(content.trim() === note.content.trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : ''));
 	const empty = $derived(content.trim().length === 0);
 
 	async function save() {

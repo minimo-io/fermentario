@@ -579,9 +579,6 @@ function langTag(p: Lang): string {
 	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">		<header class="mb-5">
 			<p class="mt-1 text-sm text-stone-500">your voice journal — life &amp; the bootstrapped thing.</p>
 			<div class="mt-4 flex flex-wrap items-center gap-2">
-				{#if week && dismissed}
-					<button class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100" onclick={() => (dismissed = false)}>Weekly recap &#9662;</button>
-				{/if}
 				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
 				<span class="ml-auto inline-flex items-center gap-2">
 					<button

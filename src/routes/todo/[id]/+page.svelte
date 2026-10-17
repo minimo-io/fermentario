@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import TagChip from '$lib/components/TagChip.svelte';
+	import CommentModal from '$lib/components/CommentModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
@@ -15,9 +17,8 @@
 	let comments = $state<TaskComment[]>(data.comments);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
-	let draft = $state('');
+	let addingComment = $state(false);
 	let err = $state('');
-	let confirmingComment = $state<TaskComment | null>(null);
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
 
@@ -68,33 +69,34 @@
 		}
 	}
 
-	async function addComment() {
-		if (!draft.trim()) return;
+	async function addComment(text: string): Promise<boolean> {
 		try {
 			const res = await fetch(`/api/todo/items/${item.id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: draft })
+				body: JSON.stringify({ content: text })
 			});
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
-			draft = '';
 			comments = [...comments, d.comment];
+			return true;
 		} catch (e) {
 			fail((e as Error)?.message ?? 'Failed to add comment.');
+			return false;
 		}
 	}
 
-	async function deleteComment(c: TaskComment) {
+	async function deleteComment(c: { id: string }) {
 		try {
 			const res = await fetch(`/api/todo/items/${item.id}/comments/${c.id}`, { method: 'DELETE' });
 			if (!res.ok) throw new Error('Failed to delete comment.');
-			confirmingComment = null;
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch (e) {
 			fail((e as Error)?.message ?? 'Failed to delete comment.');
 		}
 	}
+
+	let confirmingComment = $state<TaskComment | null>(null);
 </script>
 
 <svelte:head>
@@ -143,7 +145,15 @@
 		</article>
 
 		<section class="mt-6" aria-label="History">
-			<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400">History</h2>
+			<div class="mb-1 flex items-center justify-between gap-2">
+				<h2 class="text-xs font-medium uppercase tracking-widest text-stone-400">History</h2>
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					aria-haspopup="dialog"
+					onclick={() => (addingComment = true)}
+				><MessageCircle class="h-3.5 w-3.5" /> Add comment</button>
+			</div>
 			{#if comments.length === 0}
 				<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500">
 					No comments yet — narrate how this task evolves.
@@ -155,35 +165,36 @@
 							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{c.content}</p>
 							<div class="mt-1 flex items-center justify-between gap-2">
 								<span class="text-[11px] tabular-nums text-stone-400">{fmt(c.created_at)}</span>
-								<button type="button" aria-label="Delete comment" class="text-stone-300 hover:text-rose-600" onclick={() => (confirmingComment = c)}>×</button>
+								<button
+									type="button"
+									aria-label="Delete comment"
+									class="shrink-0 text-stone-300 hover:text-rose-600"
+									onclick={() => (confirmingComment = c)}
+								>&times;</button>
 							</div>
 						</li>
 					{/each}
 				</ul>
 			{/if}
-			<form class="mt-3 flex gap-2" onsubmit={(e) => { e.preventDefault(); void addComment(); }}>
-				<input
-					class="min-w-0 flex-1 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-800 outline-none placeholder:text-stone-400"
-					placeholder="Add a comment…"
-					aria-label="Add a comment"
-					value={draft}
-					oninput={(e) => (draft = e.currentTarget.value)}
-				/>
-				<button type="submit" class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-xs font-medium whitespace-nowrap text-white">Add</button>
-			</form>
 		</section>
 	</div>
 </main>
 
+{#if addingComment}
+	<CommentModal
+		onAdd={addComment}
+		onClose={() => (addingComment = false)}
+	/>
+{/if}
+
 {#if confirmingComment}
-	{@const c = confirmingComment}
 	<ConfirmDialog
 		title="Delete this comment?"
-		message="The comment will be permanently removed. The task itself stays."
+		message="The comment is removed from this task only. Everything else stays."
 		confirmLabel="Delete comment"
 		cancelLabel="Cancel"
 		confirmTone="danger"
-		onConfirm={() => { const cc = confirmingComment; confirmingComment = null; if (cc) void deleteComment(cc); }}
+		onConfirm={() => { const c = confirmingComment; confirmingComment = null; if (c) void deleteComment(c); }}
 		onCancel={() => (confirmingComment = null)}
 	/>
 {/if}

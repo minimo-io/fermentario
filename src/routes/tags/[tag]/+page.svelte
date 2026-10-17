@@ -8,13 +8,14 @@
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import TagColorModal from '$lib/components/TagColorModal.svelte';
 	import { contentWidthClass } from '$lib/display';
-	import type { Note, TodoItem } from '$lib/types';
+	import type { Note, TodoItem, Principle } from '$lib/types';
 
 	let { data } = $props();
 	const pager = new NotePager();
 	pager.featured = 'exclude';
 	let pinned = $state<Note[]>([]);
 	let todoItems = $state<TodoItem[]>([]);
+	let principleItems = $state<Principle[]>([]);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let err = $state('');
@@ -30,6 +31,7 @@
 		});
 		pinned = data.pinned ?? [];
 		todoItems = data.todoItems ?? [];
+		principleItems = data.principleItems ?? [];
 	});
 
 	onMount(() => {
@@ -178,7 +180,7 @@
 			</section>
 		{/if}
 
-		{#if pager.notes.length === 0 && pinned.length === 0 && todoItems.length === 0}
+		{#if pager.notes.length === 0 && pinned.length === 0 && todoItems.length === 0 && principleItems.length === 0}
 			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500">
 				No notes carry this tag yet.
 			</p>
@@ -226,6 +228,16 @@
 							</li>
 						{/each}
 					</ul>
+				</section>
+			{/if}
+			{#if principleItems.length > 0}
+				<section class="mt-5" aria-label="Principles with this tag">
+					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400">Principles</h2>
+					<ol class="space-y-2">
+						{#each principleItems as p (p.id)}
+							<li class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-[15px] text-stone-800">{p.content}</li>
+						{/each}
+					</ol>
 				</section>
 			{/if}
 		{/if}

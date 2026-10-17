@@ -4,17 +4,22 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import Star from '@lucide/svelte/icons/star';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import TagChip from '$lib/components/TagChip.svelte';
-	import VideoEmbed from '$lib/components/VideoEmbed.svelte';
+	import { inlineMarkdown } from '$lib/markdown-inline';
+	import VideoPill from '$lib/components/VideoPill.svelte';
 	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
+	import CommentModal from '$lib/components/CommentModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
-	import type { Note } from '$lib/types';
+	import type { Note, NoteComment } from '$lib/types';
 
 	let { data } = $props();
 	// svelte-ignore state_referenced_locally
 	let note = $state<Note>(data.note);
+	// svelte-ignore state_referenced_locally
+	let comments = $state<NoteComment[]>(data.comments);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let err = $state('');
@@ -24,9 +29,12 @@
 	let confirming = $state(false);
 	let menuOpen = $state(false);
 	let reading = $state(false);
+	let addingComment = $state(false);
+	let confirmingComment = $state<NoteComment | null>(null);
 
 	$effect(() => {
 		note = data.note;
+		comments = data.comments;
 	});
 
 	onMount(() => {
@@ -40,15 +48,46 @@
 		} catch {}
 	});
 
-	function fail(msg: string) {
-		err = msg;
-		setTimeout(() => (err = ''), 4000);
-	}
-
 	async function refresh() {
 		const res = await fetch(`/api/notes/${note.id}`);
 		if (res.ok) note = ((await res.json()).note as Note) ?? note;
+		const cres = await fetch(`/api/notes/${note.id}/comments`);
+		if (cres.ok) {
+			const d = (await cres.json()) as { comments?: NoteComment[] };
+			comments = d.comments ?? [];
+		}
 		await invalidateAll();
+	}
+
+	async function addComment(text: string): Promise<boolean> {
+		try {
+			const res = await fetch(`/api/notes/${note.id}/comments`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ content: text })
+			});
+			const d = await res.json();
+			if (!res.ok) return false;
+			comments = [...comments, d.comment as NoteComment];
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async function deleteComment(c: { id: string }) {
+		const res = await fetch(`/api/notes/${note.id}/comments/${c.id}`, { method: 'DELETE' });
+		if (!res.ok) {
+			fail('Failed to delete comment.');
+			return;
+		}
+		comments = comments.filter((x) => x.id !== c.id);
+		await refresh();
+	}
+
+	function fail(msg: string) {
+		err = msg;
+		setTimeout(() => (err = ''), 4000);
 	}
 
 	async function saveEdit(content: string, video: string) {
@@ -153,15 +192,15 @@
 			</p>
 		</header>
 
-		<article class="rounded-2xl border bg-white/70 px-4 py-3 {note.featured ? 'border-amber-400' : 'border-stone-200/80'}">
+		<article class="relative rounded-2xl border bg-white/70 px-4 py-3 {note.featured ? 'border-amber-400' : 'border-stone-200/80'}">
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
-					<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{note.content}</p>
+					<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{@html inlineMarkdown(note.content)}</p>
 				</div>
 				<button
 					type="button"
-					class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600"
+					class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600"
 					aria-label="Note actions"
 					onclick={() => (menuOpen = true)}
 				>
@@ -176,11 +215,66 @@
 				</div>
 			{/if}
 			{#if note.video}
-				<div class="mt-2"><VideoEmbed id={note.video} /></div>
+				<div class="mt-2"><VideoPill id={note.video} /></div>
 			{/if}
 		</article>
+
+		<section class="mt-6" aria-label="Comments on this note">
+			<div class="mb-1 flex items-center justify-between gap-2">
+				<h2 class="text-xs font-medium uppercase tracking-widest text-stone-400">Comments</h2>
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					aria-haspopup="dialog"
+					onclick={() => (addingComment = true)}
+				><MessageCircle class="h-3.5 w-3.5" /> Add comment</button>
+			</div>
+			{#if comments.length === 0}
+				<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500">
+					No comments yet — narrate how this note evolves.
+				</p>
+			{:else}
+				<ul class="space-y-2">
+					{#each comments as c (c.id)}
+						<li class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5">
+							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{c.content}</p>
+							<div class="mt-1 flex items-center justify-between gap-2">
+								<span class="text-[11px] tabular-nums text-stone-400">
+									{new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+								</span>
+								<button
+									type="button"
+									aria-label="Delete comment"
+									class="shrink-0 text-stone-300 hover:text-rose-600"
+									onclick={() => (confirmingComment = c)}
+								>&times;</button>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 	</div>
 </main>
+
+{#if addingComment}
+	<CommentModal
+		onAdd={addComment}
+		onClose={() => (addingComment = false)}
+	/>
+{/if}
+
+{#if confirmingComment}
+	<ConfirmDialog
+		title="Delete this comment?"
+		message="The comment is removed from this note only. Everything else stays."
+		confirmLabel="Delete comment"
+		cancelLabel="Cancel"
+		confirmTone="danger"
+		onConfirm={() => { const c = confirmingComment; confirmingComment = null; if (c) void deleteComment(c); }}
+		onCancel={() => (confirmingComment = null)}
+	/>
+{/if}
 
 {#if menuOpen}
 	<NoteActionsMenu

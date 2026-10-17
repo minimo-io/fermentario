@@ -37,3 +37,61 @@ User asked for a simple Load more button, not infinite scroll, and for the tag p
 - Timeline: `onLoadMore` / `hasMore` / `loadingMore` props with a full-width "Load more" button (spinner + disabled while loading, hidden when there is no next page). Day grouping is now one `Map` pass instead of `filter` per day.
 - Verified live: 60 seeded `#pagetest` notes gave pages of 50 and 10, all 60 unique, every appended note carrying the tag; unknown tag returned 0. With 1063 notes the cursor walk took 22 pages, yielded 1063 unique ids and zero duplicates. All 1060 seeded rows deleted afterwards, no orphan tag/FTS/vector rows, the user's 3 notes untouched. `pnpm run check` 0/0, `pnpm run build` clean, `GET /` and `/tags/garden` 200.
 - Not done on purpose: no IntersectionObserver, no `withTags` placeholder chunking (1000 is far below SQLite's 32766 limit), the Ask history thread is still unlimited.
+
+### Follow-up — fold persistence clobber (fix)
+- Bug: folds vanished on reload when folding across the two timelines the
+  home page mounts at once (featured section + history). Each instance had
+  its OWN `collapsed` map but they wrote the SAME storage key, so the
+  latest write replaced the whole array (featured fold kept, earlier
+  ordinary folds lost — exactly what was reported).
+- Fix: the fold map is module state in `Timeline.svelte` (`<script
+  module>`), one shared record for every instance; storage is loaded once
+  per page view (no per-instance re-parse) and pruned only by an explicit
+  expand. Verified: fold featured in the featured section + three ordinary
+  notes in the history section → storage holds all 4, reload keeps every
+  fold (featured folded in BOTH lists, same shared map), expand prunes to
+  3. Gates green (check 0/0, build + `build/index.js`, test 31/31,
+  `GET /` 200).
+
+### Follow-up — foldable notes + inline markdown (revised: measured tap-to-fold)
+- Any note longer than ONE RENDERED line folds on tap of the note text;
+  long paragraphs without newlines are foldable too. Foldability is
+  measured from the unfolded rendered height (height ÷ line-height > 1.5),
+  re-measured on `resize`; a persisted fold is trusted as-is — Chromium
+  does not overflow-report `scrollHeight` on a `-webkit-line-clamp` box, so
+  re-measuring folded content wrongly unfolded it. Folded = native
+  `line-clamp-1` (ellipsis for free; no first-line string split, no
+  `+N more` hint). Short notes stay plain non-tappable text.
+- Fold state persists in `localStorage` key `ferm:collapsed-notes`
+  (array), read client-side with try/catch, pruned to current ids, cleared
+  on expand. Default expanded; SSR/first paint expanded.
+- Gestures: the note text is the ONLY fold toggle; opening a note moved
+  into the ⋮ menu ("Open note", first item; `NoteActionsMenu` gained an
+  optional `onOpen`, the note's own page does not pass it). The hour stamp
+  is no longer a link. On mobile the ⋮ (and pending spinner) float
+  absolute top-right inside the card (`max-sm:top-1 max-sm:right-2`, white
+  circle backdrop) and the text spans the full card width; desktop keeps
+  the inline ⋮ after the text. The `edited` marker is `text-left` on
+  mobile, `sm:text-right`.
+- Follow-up — mobile stretch fix: the inner content row needed
+  `max-sm:w-full`. Under `items-start` + `max-sm:flex-col` a flex child
+  shrinks to its CONTENT width — short notes made the row ~half card
+  wide: text did not span the card and the bottom-right pill row
+  "right-aligned" against a mid-card edge, visually crowding the ⋮'s
+  band. Earlier verification used long wrapping text (whose row happens
+  to fill) and missed it. Now measured with short + long notes: row 340px
+  and pill right edge = content right edge on both; desktop pill still
+  inline left of the ⋮ (887 < 899).
+- Markdown: `inlineMarkdown(src)` (`src/lib/markdown-inline.ts`) — escape
+  `<>&` first, then `**x**` → `<strong>`, `*x*` → `<em>` (delimiters hug
+  non-space chars, one line; `3*4` stays literal). Applied to the timeline
+  (folded and full) and `/notes/[id]`; tasks and principles stay plain.
+  Edit dialog, copy and export keep raw markers.
+- Verified live on 390px and 1280px: wrapper-free long paragraphs fold and
+  clamp (scrollHeight > clientHeight), fold survives reload with clamp
+  intact, expand clears storage; short note plain; featured star + amber
+  border survive folding; mobile ⋮ absolute (top Δ5/right Δ9) with full-width
+  text; desktop ⋮ static inline; menu first item "Open note" navigates to
+  the note page, note-page menu lacks it; edited marker left on mobile,
+  right on desktop. Gates green (check 0/0, build + `build/index.js`,
+  test 31/31, `GET /` 200).

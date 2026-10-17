@@ -4,12 +4,15 @@
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import type { TodoGroup, TodoItem, TodoProgressItem } from '$lib/types';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import CommentModal from '$lib/components/CommentModal.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
+	import Kbd from '$lib/components/Kbd.svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
+	import { withSubgroupPrefix } from '$lib/subgroups';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
 	type Props = { onError: (msg: string) => void; lang?: string; widthClass?: string };
@@ -26,8 +29,10 @@
 	let newItem = $state('');
 	let renaming = $state<string | null>(null);
 	let renameText = $state('');
+	let renameField = $state<HTMLInputElement | null>(null);
 	let editing = $state<string | null>(null);
 	let editText = $state('');
+	let editGroup = $state('');
 	let editField = $state<HTMLTextAreaElement | null>(null);
 	let doneOpen = $state(false);
 	let confirmingGroup = $state<TodoGroup | null>(null);
@@ -36,11 +41,59 @@
 	let itemField = $state<HTMLTextAreaElement | null>(null);
 	const openItems = $derived(items.filter((x) => !x.done));
 	const doneItems = $derived(items.filter((x) => x.done));
+	const ungrouped = $derived(openItems.filter((x) => !x.subgroup));
+	const subgroupNames = $derived([...new Set(openItems.map((x) => x.subgroup).filter(Boolean))]);
+	let collapsed = $state<Record<string, boolean>>({});
 	let progressView = $state(false);
 	let progressItems = $state<TodoProgressItem[]>([]);
 	let menuGroup = $state<TodoGroup | null>(null);
 	let menuItem = $state<TodoItem | null>(null);
 	let menuProgressItem = $state<TodoProgressItem | null>(null);
+	// Comments live in one modal — the same standard in every list.
+	let commenting = $state<TodoItem | TodoProgressItem | null>(null);
+
+	// Add-task shortcut: desktop pointers only. ⌘⇧A on Mac, Ctrl+Shift+A
+	// elsewhere — none of these is reserved by browsers or the OS shell.
+	const isMac = navigator.userAgent.includes('Mac');
+	const canKeyShortcut = matchMedia('(hover: hover) and (pointer: fine)').matches;
+	const addShortcutKeys = isMac ? ['⌘', '⇧', 'A'] : ['Ctrl', 'Shift', 'A'];
+
+	function handleAddShortcut(e: KeyboardEvent) {
+		if (!canKeyShortcut) return;
+		if (!activeGroup || progressView) return;
+		// Never stack on an open modal of this tab.
+		if (addingItem || addingGroup || editing || renaming || menuItem || menuProgressItem || menuGroup || confirmingItem || confirmingGroup || moveConfirm || commenting) return;
+		const t = e.target as HTMLElement | null;
+		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+		if (e.isComposing) return;
+		if (e.key.toLowerCase() !== 'a' || !e.shiftKey) return;
+		if (isMac ? !e.metaKey || e.altKey : !e.ctrlKey || e.altKey) return;
+		e.preventDefault();
+		newItem = '';
+		addingItem = true;
+	}
+
+	async function openCommentModal(item: TodoItem | TodoProgressItem) {
+		commenting = item;
+	}
+
+	async function addTaskComment(item: TodoItem | TodoProgressItem, text: string): Promise<boolean> {
+		try {
+			const res = await fetch(`/api/todo/items/${item.id}/comments`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ content: text })
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
+			items = items.map((x) => (x.id === item.id ? { ...x, commentCount: (x.commentCount ?? 0) + 1 } : x));
+			progressItems = progressItems.map((x) => (x.id === item.id ? { ...x, commentCount: (x.commentCount ?? 0) + 1 } : x));
+			return true;
+		} catch (e) {
+			onError((e as Error)?.message ?? 'Failed to add comment.');
+			return false;
+		}
+	}
 
 	async function toggleProgressViewItem(item: TodoProgressItem) {
 		try {
@@ -235,21 +288,39 @@
 		}
 	}
 
+	function openEdit(item: TodoItem) {
+		editing = item.id;
+		// The modal edits the full line: subgroup prefix and trailing hashtags
+		// included, so saving never silently drops either.
+		const base = withSubgroupPrefix(item.subgroup, item.content);
+		editText = item.tags.length ? `${base} ${item.tags.map((t) => `#${t}`).join(' ')}` : base;
+		editGroup = item.group_id;
+	}
+
 	async function saveEdit(item: TodoItem) {
 		if (!editText.trim()) {
 			editing = null;
 			return;
 		}
+		const target = editGroup && editGroup !== item.group_id ? editGroup : null;
 		try {
 			const res = await fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: editText })
+				body: JSON.stringify(target ? { content: editText, group_id: target } : { content: editText })
 			});
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save item.');
 			editing = null;
-			items = items.map((x) => (x.id === item.id ? d.item : x));
+			if (target) {
+				// It left the visible list; refresh both views so it shows up in
+				// its new place.
+				items = items.filter((x) => x.id !== item.id);
+				if (activeGroup) await loadItems(activeGroup);
+				void loadProgress();
+			} else {
+				items = items.map((x) => (x.id === item.id ? d.item : x));
+			}
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to save item.');
 		}
@@ -287,6 +358,12 @@
 	let overId = $state<string | null>(null);
 	let dragEl: HTMLElement | null = null;
 	let suppressClick = false;
+	let dropGroupId = $state<string | null>(null);
+	let moveConfirm = $state<{ item: TodoItem; group: TodoGroup } | null>(null);
+	let gDragId = $state<string | null>(null);
+	let gOverId = $state<string | null>(null);
+	let gDragEl: HTMLElement | null = null;
+	let gPending: { id: string; x: number; y: number; timer: ReturnType<typeof setTimeout> | null; el: HTMLElement } | null = null;
 	let pending: { id: string; x: number; y: number; timer: ReturnType<typeof setTimeout> | null; el: HTMLElement } | null = null;
 
 	function clearPending() {
@@ -301,14 +378,28 @@
 		el.style.touchAction = 'none';
 	}
 
+	function markSuppressed() {
+		// A commit may end with a click aimed at the row; swallow only that one,
+		// briefly, so a later unrelated tap is never eaten.
+		suppressClick = true;
+		setTimeout(() => (suppressClick = false), 350);
+	}
+
 	function endDrag(commit: boolean) {
-		if (dragId && commit && overId && overId !== dragId) {
+		if (dragId && commit && dropGroupId && dropGroupId !== activeGroup) {
+			const target = groups.find((g) => g.id === dropGroupId);
+			const dragged = items.find((x) => x.id === dragId);
+			if (target && dragged) {
+				markSuppressed();
+				moveConfirm = { item: dragged, group: target };
+			}
+		} else if (dragId && commit && overId && overId !== dragId) {
 			const ids = items.map((x) => x.id);
 			const from = ids.indexOf(dragId);
 			const to = ids.indexOf(overId);
 			if (from >= 0 && to >= 0) {
 				ids.splice(to, 0, ...ids.splice(from, 1));
-				suppressClick = true;
+				markSuppressed();
 				void persistOrder(ids);
 			}
 		}
@@ -322,6 +413,7 @@
 		}
 		dragId = null;
 		overId = null;
+		dropGroupId = null;
 	}
 
 	function onDown(e: PointerEvent, id: string, immediate = false) {
@@ -344,9 +436,126 @@
 			return;
 		}
 		if (!dragId) return;
-		const t = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-item]');
+		// Capture only once the pointer moves. Capturing on pointerdown retargets
+		// the following click away from buttons, so plain taps stop opening
+		// things. A real drag engages capture here and keeps its events.
+		if (dragEl) {
+			try {
+				dragEl.setPointerCapture(e.pointerId);
+			} catch {}
+		}
+		const el = document.elementFromPoint(e.clientX, e.clientY);
+		const g = el?.closest?.('[data-group]');
+		const gid = g?.getAttribute('data-group');
+		dropGroupId = gid && gid !== activeGroup ? gid : null;
+		if (dropGroupId) {
+			overId = null;
+			return;
+		}
+		const t = el?.closest?.('[data-item]');
 		const id = t?.getAttribute('data-item');
 		if (id) overId = id;
+	}
+
+	function clearGPending() {
+		if (gPending?.timer) clearTimeout(gPending.timer);
+		gPending = null;
+	}
+
+	function endGroupDrag(commit: boolean) {
+		clearGPending();
+		if (gDragId && commit && gOverId && gOverId !== gDragId) {
+			const ids = groups.map((g) => g.id);
+			const from = ids.indexOf(gDragId);
+			const to = ids.indexOf(gOverId);
+			if (from >= 0 && to >= 0) {
+				ids.splice(to, 0, ...ids.splice(from, 1));
+				markSuppressed();
+				void persistGroupOrder(ids);
+			}
+		}
+		if (gPending) {
+			gPending.el.style.touchAction = '';
+			clearGPending();
+		}
+		if (gDragEl) {
+			gDragEl.style.touchAction = '';
+			gDragEl = null;
+		}
+		gDragId = null;
+		gOverId = null;
+	}
+
+	function onGroupDown(e: PointerEvent, id: string) {
+		if (e.pointerType === 'mouse' && e.button !== 0) return;
+		const el = e.currentTarget as HTMLElement;
+		const capture = () => {
+			try {
+				el.setPointerCapture(e.pointerId);
+			} catch {}
+		};
+		if (e.pointerType === 'mouse') {
+			gDragId = id;
+			gOverId = id;
+			gDragEl = el;
+			el.style.touchAction = 'none';
+			capture();
+			return;
+		}
+		clearGPending();
+		const timer = setTimeout(() => {
+			if (gPending) {
+				gDragId = id;
+				gOverId = id;
+				gDragEl = el;
+				el.style.touchAction = 'none';
+				capture();
+			}
+		}, 280);
+		gPending = { id, x: e.clientX, y: e.clientY, timer, el };
+	}
+
+	function onGroupMove(e: PointerEvent) {
+		if (gPending && !gDragId) {
+			if (Math.hypot(e.clientX - gPending.x, e.clientY - gPending.y) > 12) clearGPending();
+			return;
+		}
+		if (!gDragId) return;
+		const t = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-group]');
+		const id = t?.getAttribute('data-group');
+		if (id) gOverId = id;
+	}
+
+	async function persistGroupOrder(ids: string[]) {
+		try {
+			const res = await fetch('/api/todo/groups', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ ids })
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to reorder.');
+			groups = Array.isArray(d.groups) ? d.groups : groups;
+		} catch (e) {
+			onError((e as Error)?.message ?? 'Failed to reorder.');
+		}
+	}
+
+	async function moveItemToGroup(item: TodoItem, group: TodoGroup) {
+		try {
+			const res = await fetch(`/api/todo/items/${item.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ group_id: group.id })
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to move item.');
+			moveConfirm = null;
+			if (activeGroup) await loadItems(activeGroup);
+			await loadProgress();
+		} catch (e) {
+			onError((e as Error)?.message ?? 'Failed to move item.');
+		}
 	}
 
 	$effect(() => {
@@ -356,6 +565,17 @@
 
 	$effect(() => {
 		if (addingGroup && groupField) groupField.focus();
+	});
+
+	$effect(() => {
+		if (renaming && renameField) renameField.focus();
+	});
+
+	$effect(() => {
+		if (editing && editField) {
+			editField.focus();
+			autosizeEdit();
+		}
 	});
 
 	$effect(() => {
@@ -378,93 +598,35 @@
 	});
 </script>
 
-<div>
-	<div class="no-scrollbar -mx-1 mb-4 flex snap-x items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-		<button
-			type="button"
-			aria-label="New group"
-			title="New group"
-			class="grid h-7 w-7 shrink-0 snap-start place-items-center rounded-full border border-dashed border-stone-300 bg-white text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-			onclick={() => { newGroup = ''; addingGroup = true; }}
-		><Plus class="h-4 w-4" /></button>
-		<button
-			type="button"
-			aria-label="In-progress tasks"
-			title="In-progress tasks"
-			class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium {progressView ? 'border-stone-900 bg-stone-900 text-white' : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'}"
-			onclick={openProgress}
-		><span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span> In progress ({progressItems.length})</button>
-		{#each groups as g (g.id)}
-			{#if renaming === g.id}
-				<span class="inline-flex shrink-0 snap-start items-center gap-1 rounded-full border border-stone-300 bg-white px-2 py-1">
-					<input
-						class="w-28 bg-transparent text-xs text-stone-800 outline-none"
-						value={renameText}
-						oninput={(e) => (renameText = e.currentTarget.value)}
-						onkeydown={(e) => { if (e.key === 'Enter') void saveRename(g); if (e.key === 'Escape') renaming = null; }}
-					/>
-					<button type="button" class="text-xs font-medium text-stone-600 hover:text-stone-900" onclick={() => void saveRename(g)}>Save</button>
-				</span>
-			{:else}
-				<span class="inline-flex shrink-0 snap-start items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium {activeGroup === g.id && !progressView ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'}">
-					<button type="button" onclick={() => openGroup(g.id)}>{g.name}</button>
-					<button type="button" aria-label="Group actions" class="opacity-60 hover:opacity-100" onclick={() => (menuGroup = g)}><EllipsisVertical class="h-3.5 w-3.5" /></button>
-				</span>
-			{/if}
-		{/each}
-	</div>
+<svelte:window onkeydown={handleAddShortcut} />
 
-	{#if progressView}
-		{#if progressItems.length === 0}
-			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">Nothing in progress.</p>
-		{:else}
-			<ul class="space-y-2">
-				{#each progressItems as item (item.id)}
-					<li class="rounded-2xl border border-stone-200 bg-white px-3 py-2.5">
-						<div class="flex items-start gap-1.5">
-							<button
-								type="button"
-								role="checkbox"
-								aria-checked={item.done}
-								aria-label={item.done ? 'Mark not done' : 'Mark done'}
-								class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
-								onclick={() => void toggleProgressViewItem(item)}
-							><span class="text-[11px] leading-none">✓</span></button>
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
-							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuProgressItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
-						</div>
-						<div class="mt-1.5 flex flex-wrap items-center gap-1 pl-12">
-							<span class="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">{item.groupName}</span>
-							<span class="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
-							{#each item.tags as t (t)}
-								<TagChip tag={t} />
-							{/each}
-							{#if (item.commentCount ?? 0) > 0}
-								<button type="button" class="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 hover:bg-stone-200" aria-label="{item.commentCount} comments" onclick={() => void goto(`/todo/${item.id}`)}><MessageCircle class="h-3 w-3" /> {item.commentCount}</button>
-							{/if}
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	{:else if activeGroup}
-		<ul class="space-y-2">
-			{#each openItems as item (item.id)}
+{#snippet commentPill(item: TodoItem | TodoProgressItem)}
+	<button
+		type="button"
+		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 hover:bg-stone-200"
+		aria-haspopup="dialog"
+		aria-label="Comments on this task"
+		onclick={() => void openCommentModal(item)}
+	><MessageCircle class="h-3 w-3" /> {(item.commentCount ?? 0)}</button>
+{/snippet}
+
+{#snippet itemrow(item: TodoItem)}
 				<li
 					data-item={item.id}
 					class="rounded-2xl border border-stone-200 bg-white px-3 py-2.5 select-none {dragId === item.id ? 'opacity-40' : ''} {dragId && overId === item.id && dragId !== item.id ? 'ring-1 ring-stone-900' : ''}"
 					style={dragId ? 'touch-action: none' : ''}
+					onpointerdown={(e) => onDown(e, item.id)}
 					onpointermove={onMove}
 					onpointerup={() => endDrag(true)}
 					onpointercancel={() => endDrag(false)}
 				>
-					<div class="flex items-start gap-1.5">
+					<div class="flex items-start gap-1.5 sm:items-center">
 						<span
 							role="button"
 							tabindex="0"
 							aria-label="Drag to reorder"
 							title="Drag to reorder"
-							class="mt-1 shrink-0 cursor-grab touch-none text-stone-300 hover:text-stone-600 active:cursor-grabbing"
+							class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 hover:text-stone-600 active:cursor-grabbing"
 							onpointerdown={(e) => onDown(e, item.id, true)}
 							onkeydown={(e) => {
 								if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -482,44 +644,157 @@
 							role="checkbox"
 							aria-checked={item.done}
 							aria-label={item.done ? 'Mark not done' : 'Mark done'}
-							class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
+							class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
 							onclick={() => void toggleItem(item)}
 						><span class="text-[11px] leading-none">✓</span></button>
 						{#if editing === item.id}
-							<span class="flex min-w-0 flex-1 gap-2">
-								<textarea
-									bind:this={editField}
-									rows="2"
-									class="max-h-[40dvh] min-w-0 flex-1 resize-none bg-transparent text-[15px] leading-snug text-stone-800 outline-none"
-									value={editText}
-									oninput={(e) => { editText = e.currentTarget.value; autosizeEdit(); }}
-									onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(item); if (e.key === 'Escape') editing = null; }}
-								></textarea>
-								<button type="button" class="shrink-0 self-start text-xs font-medium text-stone-600 hover:text-stone-900" onclick={() => void saveEdit(item)}>Save</button>
-							</span>
+							<span class="min-w-0 flex-1 text-[15px] text-stone-400">Editing…</span>
 						{:else}
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) { editing = item.id; editText = item.content; } }}>{item.content}</button>
+							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(item); }}>{item.content}</button>
+							<!-- sm+: pills share the title line, right-aligned before the ⋮ -->
+							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
+								{#if item.inProgress}
+									<span class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+								{/if}
+								{#each item.tags as t (t)}
+									<TagChip tag={t} />
+								{/each}
+								{@render commentPill(item)}
+							</div>
 							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 						{/if}
 					</div>
-					{#if item.inProgress}
-						<span class="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
-					{/if}
-					{#if item.tags.length > 0}
-						<div class="mt-1.5 flex flex-wrap gap-1 pl-12">
+					{#if item.inProgress || item.tags.length > 0}
+						<!-- Mobile: status, tags and the comment count share one row; the
+						     pill rides at the bottom-right edge of the card (ml-auto). -->
+						<div class="mt-1.5 flex flex-wrap items-start gap-1 pl-12 sm:hidden">
+							{#if item.inProgress}
+								<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+							{/if}
 							{#each item.tags as t (t)}
 								<TagChip tag={t} />
 							{/each}
+							<div class="ml-auto">{@render commentPill(item)}</div>
 						</div>
-					{/if}
-					{#if (item.commentCount ?? 0) > 0}
-						<div class="mt-1.5 pl-12">
-							<button type="button" class="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 hover:bg-stone-200" aria-label="{item.commentCount} comments" onclick={() => void goto(`/todo/${item.id}`)}><MessageCircle class="h-3 w-3" /> {item.commentCount}</button>
-						</div>
+					{:else}
+						<!-- Mobile, bare row: pill alone is right-aligned on its own line. -->
+						<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(item)}</div>
 					{/if}
 				</li>
-			{/each}
+{/snippet}
+
+<div>
+	<div class="no-scrollbar -mx-1 mb-4 flex snap-x items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+		<button
+			type="button"
+			aria-label="New group"
+			title="New group"
+			class="grid h-7 w-7 shrink-0 snap-start place-items-center rounded-full border border-dashed border-stone-300 bg-white text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+			onclick={() => { newGroup = ''; addingGroup = true; }}
+		><Plus class="h-4 w-4" /></button>
+		<button
+			type="button"
+			aria-label="In-progress tasks"
+			title="In-progress tasks"
+			class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium {progressView ? 'border-stone-900 bg-stone-900 text-white' : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'}"
+			onclick={openProgress}
+		><span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span> In progress ({progressItems.length})</button>
+		{#each groups as g (g.id)}
+			<span
+				data-group={g.id}
+				class="inline-flex shrink-0 snap-start select-none items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium {activeGroup === g.id && !progressView ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'} {gDragId === g.id ? 'opacity-40' : ''} {dropGroupId === g.id || (gDragId && gOverId === g.id && gDragId !== g.id) ? 'ring-1 ring-stone-900' : ''}"
+				style={gDragId ? 'touch-action: none' : ''}
+			>
+				<span
+					role="button"
+					tabindex="0"
+					aria-label="Drag to reorder {g.name}"
+					title="Drag to reorder"
+					class="cursor-grab touch-none text-stone-300 hover:text-stone-600 active:cursor-grabbing {activeGroup === g.id && !progressView ? 'text-stone-400' : ''}"
+					onpointerdown={(e) => onGroupDown(e, g.id)}
+					onpointermove={onGroupMove}
+					onpointerup={() => endGroupDrag(true)}
+					onpointercancel={() => endGroupDrag(false)}
+					onkeydown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
+						else if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+						else {
+							e.preventDefault();
+							const ids = groups.map((x) => x.id);
+							const from = ids.indexOf(g.id);
+							const to = from + (e.key === 'ArrowLeft' ? -1 : 1);
+							if (from < 0 || to < 0 || to >= ids.length) return;
+							ids.splice(to, 0, ...ids.splice(from, 1));
+							void persistGroupOrder(ids);
+						}
+					}}
+				><GripVertical class="h-3.5 w-3.5" /></span>
+				<button type="button" onclick={() => { if (suppressClick) { suppressClick = false; return; } openGroup(g.id); }}>{g.name}</button>
+				<button type="button" aria-label="Group actions" class="opacity-60 hover:opacity-100" onclick={() => (menuGroup = g)}><EllipsisVertical class="h-3.5 w-3.5" /></button>
+			</span>
+		{/each}
+	</div>
+
+	{#if progressView}
+		{#if progressItems.length === 0}
+			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">Nothing in progress.</p>
+		{:else}
+			<ul class="space-y-2">
+				{#each progressItems as item (item.id)}
+					<li class="rounded-2xl border border-stone-200 bg-white px-3 py-2.5">
+						<div class="flex items-start gap-1.5 sm:items-center">
+							<button
+								type="button"
+								role="checkbox"
+								aria-checked={item.done}
+								aria-label={item.done ? 'Mark not done' : 'Mark done'}
+								class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
+								onclick={() => void toggleProgressViewItem(item)}
+							><span class="text-[11px] leading-none">✓</span></button>
+							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
+							<!-- sm+: group, status and tags share the title line, right-aligned before the ⋮ -->
+							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
+								<span class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">{item.groupName}</span>
+								<span class="inline-block shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+								{#each item.tags as t (t)}
+									<TagChip tag={t} />
+								{/each}
+								{@render commentPill(item)}
+							</div>
+							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuProgressItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
+						</div>
+						<div class="mt-1.5 flex flex-wrap items-center gap-1 pl-12 sm:hidden">
+							<span class="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">{item.groupName}</span>
+							<span class="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+							{#each item.tags as t (t)}
+								<TagChip tag={t} />
+							{/each}
+							<div class="ml-auto">{@render commentPill(item)}</div>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	{:else if activeGroup}
+		<ul class="space-y-2">
+			{#each ungrouped as item (item.id)}{@render itemrow(item)}{/each}
 		</ul>
+		{#each subgroupNames as sg (sg)}
+			{@const sgItems = openItems.filter((x) => x.subgroup === sg)}
+			<div class="mt-3">
+				<button
+					type="button"
+					class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					aria-expanded={!collapsed[sg]}
+					onclick={() => (collapsed[sg] = !collapsed[sg])}
+				><span aria-hidden="true">{collapsed[sg] ? '▸' : '▾'}</span> {sg} ({sgItems.length})</button>
+				{#if !collapsed[sg]}
+					<ul class="mt-2 space-y-2" transition:slide={{ duration: motionMs(180) }}>
+						{#each sgItems as item (item.id)}{@render itemrow(item)}{/each}
+					</ul>
+				{/if}
+			</div>
+		{/each}
 		{#if openItems.length === 0 && doneItems.length === 0}
 			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">Nothing here yet.</p>
 		{/if}
@@ -536,13 +811,13 @@
 					<ul class="mt-2 space-y-2" transition:slide={{ duration: motionMs(180) }}>
 						{#each doneItems as item (item.id)}
 							<li class="rounded-2xl border border-stone-200/70 bg-white/70 px-3 py-2.5">
-								<div class="flex items-start gap-1.5">
+								<div class="flex items-start gap-1.5 sm:items-center">
 									<button
 										type="button"
 										role="checkbox"
 										aria-checked={true}
 										aria-label="Mark not done"
-										class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-stone-900 bg-stone-900 text-white"
+										class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-stone-900 bg-stone-900 text-white"
 										onclick={() => void toggleItem(item)}
 									><span class="text-[11px] leading-none">✓</span></button>
 									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 line-through" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
@@ -643,7 +918,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
-					onclick={() => { const item = menuItem; menuItem = null; if (item) { editing = item.id; editText = item.content; } }}
+					onclick={() => { const item = menuItem; menuItem = null; if (item) openEdit(item); }}
 				>Edit</button>
 				<button
 					type="button"
@@ -726,6 +1001,127 @@
 	</div>
 {/if}
 
+{#if editing}
+	{@const ep = items.find((x) => x.id === editing) ?? progressItems.find((x) => x.id === editing)}
+	{#if ep}
+		<div
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Edit task"
+			tabindex="-1"
+			onclick={(e) => { if (e.target === e.currentTarget) editing = null; }}
+			onkeydown={(e) => { if (e.key === 'Escape') editing = null; }}
+			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
+		>
+			<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+				<h2 class="text-sm font-semibold text-stone-900">Edit task</h2>
+				<textarea
+					bind:this={editField}
+					rows="3"
+					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 bg-white p-3 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+					aria-label="Task text"
+					value={editText}
+					oninput={(e) => { editText = e.currentTarget.value; autosizeEdit(); }}
+					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
+				></textarea>
+				<p class="mt-1.5 text-[11px] leading-snug text-stone-400">Leading (subgroup) moves it inside the list; trailing #tags retag it.</p>
+				{#if groups.length > 1}
+					<div class="mt-3">
+						<label class="block text-xs font-medium text-stone-500" for="edit-group">Group</label>
+						<select
+							id="edit-group"
+							class="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-stone-400"
+							aria-label="Group"
+							bind:value={editGroup}
+							onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
+						>
+							{#each groups as g (g.id)}
+								<option value={g.id}>{g.name}</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+				<div class="mt-4 flex justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+						onclick={() => (editing = null)}
+					>Cancel</button>
+					<button
+						type="button"
+						class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+						disabled={!editText.trim()}
+						onclick={() => void saveEdit(ep)}
+					>Save</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+{/if}
+
+{#if renaming}
+	{@const rg = groups.find((x) => x.id === renaming)}
+	{#if rg}
+		<div
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Rename group"
+			tabindex="-1"
+			onclick={(e) => { if (e.target === e.currentTarget) renaming = null; }}
+			onkeydown={(e) => { if (e.key === 'Escape') renaming = null; }}
+			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
+		>
+			<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+				<h2 class="text-sm font-semibold text-stone-900">Rename group</h2>
+				<input
+					bind:this={renameField}
+					class="mt-3 w-full rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+					aria-label="Group name"
+					value={renameText}
+					oninput={(e) => (renameText = e.currentTarget.value)}
+					onkeydown={(e) => { if (e.key === 'Enter') void saveRename(rg); }}
+				/>
+				<div class="mt-4 flex justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+						onclick={() => (renaming = null)}
+					>Cancel</button>
+					<button
+						type="button"
+						class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+						disabled={!renameText.trim()}
+						onclick={() => void saveRename(rg)}
+					>Save</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+{/if}
+
+{#if moveConfirm}
+	{@const mc = moveConfirm}
+	<ConfirmDialog
+		title="Move this task?"
+		message="{mc.item.content} will move to {mc.group.name}, at the end of its list. Tags and comments move with it."
+		confirmLabel="Move task"
+		cancelLabel="Cancel"
+		confirmTone="default"
+		onConfirm={() => void moveItemToGroup(mc.item, mc.group)}
+		onCancel={() => (moveConfirm = null)}
+	/>
+{/if}
+
+{#if commenting}
+	{@const t = commenting}
+	<CommentModal
+		onAdd={(text) => addTaskComment(t, text)}
+		onClose={() => (commenting = null)}
+	/>
+{/if}
+
 {#if confirmingItem}
 	<ConfirmDialog
 		title="Delete this item?"
@@ -756,7 +1152,8 @@
 			type="button"
 			class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
 			onclick={() => { newItem = ''; addingItem = true; }}
-		><Plus class="h-4 w-4" /> Add</button>
+			aria-keyshortcuts={isMac ? 'Meta+Shift+A' : 'Control+Shift+A'}
+		><Plus class="h-4 w-4" /> Add<Kbd keys={addShortcutKeys} tone="dark" /></button>
 	</FixedBottomBar>
 {/if}
 

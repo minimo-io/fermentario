@@ -57,8 +57,92 @@ Status: [DONE]
 - Amber "In progress (N)" pill leads the group carousel: flat cross-group view with group names, gold tags, checkboxes, and its own action sheet (details/done/progress/delete). Backed by `listInProgressItems` + `GET /api/todo/items?inprogress=only`. Add bar hidden there (nothing to add to). Verified live across two groups.
 - Group creation left inline for the modal: `+` opens a "New group" dialog (autofocus, `Enter` creates, `Escape`/backdrop closes), same `addGroup` path.
 
+### Follow-up — subgroups via (name) prefix
+- `src/lib/subgroups.ts` parses a leading `(v1)` token (lowercase alnum/dots/dashes); stored stripped alongside hashtag parsing on create + edit, so retyping the prefix moves the item and deleting it ungroups. `subgroup` column + migration (old rows ungrouped).
+- List renders ungrouped items plus one togglable section per subgroup (count, slide, session-open). Edit field recomposes the prefix so it stays visible. Verified live: assign/move/clear, prefix-only 400, invalid chars left as text, legacy migration. Gates re-run green.
+
 ### Follow-up — New task modal
 - The bottom bar holds only a full-width "+ Add" button (same shell, same height). It opens a "New task" modal with an auto-growing textarea, tag hint, and Create/Cancel (`Cmd/Ctrl+Enter` creates, plain `Enter` is a newline). Same `addItem` path. Gates re-run green.
 
+### Follow-up — task edit modal, group reorder, rename modal, cross-group move
+- Inline task editing replaced by a modal (auto-growing text, subgroup/tag hints, Save/Cancel, `Cmd/Ctrl+Enter`); row tap + sheet Edit open it.
+- Group pills drag to reorder (mouse immediate, touch hold, arrows for keyboard) with persisted `position` + migration. Rename moved to a modal (autofocus, `Enter` saves).
+- Dropping a task on another group pill arms a "Move to X?" confirm; confirm reassigns (appends at target end, tags/comments intact), bad groups 404. Pointer capture added so drops land. Verified live: move, reorder, rename, legacy migration. Gates re-run green.
+
 ### Follow-up — own bottom bar, single line
 - The note composer no longer renders in To-Do. The add-item form moved into a shared `FixedBottomBar` (same slot, width, and `--composer-h` publishing as the composer): one row, `nowrap`, compact mobile padding. Gates re-run green.
+### Follow-up — edit modal owns the full line; explicit group moves; drag fixes
+- The edit modal now lists Group pills; picking another moves the task on Save (`PATCH group_id`, appends at the target's end, content/subgroup/tags intact).
+- Edit prefills `(subgroup) text #tags` — PATCH re-parses the content, so a prefilled-without-tags edit silently wiped them (fixed).
+- Mouse drags start anywhere on a task row again; pointer capture now engages on the first pointermove instead of pointerdown, because capturing on pointerdown retargets the subsequent click away from buttons (taps stopped opening the modal). `suppressClick` self-clears after 350 ms. Group pills and their grips stay tap-safe: pills open lists, grips reorder.
+- Touch: hold the grip for a guaranteed drag; hold on a row body is best-effort (the browser may claim the gesture as scroll). Taps always work.
+- Verified live (mouse + CDP touch): tap-to-edit, checkbox toggle, body reorder, drop-on-pill confirm→move, group reorder via grip, edit-modal group move; gates green.
+- Follow-up: the edit modal's Group picker is now a native dropdown (`select`, one option per group) instead of pills — hundreds of groups stay usable. Same `editGroup` state and PATCH path. Verified live: preselected source, switch + save moves the task with tags intact. Gates re-run green.
+- Follow-up — add shortcut + inline comments (principles standard): the Add button carries the desktop shortcut `⌘⇧A` (Mac) / `Ctrl+Shift+A` (Win/Linux) shown via `Kbd` (mobile hides the hint); the window listener registers only with `hover: hover` + `pointer: fine`, skips editable targets/composing, modals, and non-list contexts. Comment threads moved into the rows: always-visible count pill opens an inline thread (comment cards + date + confirmed `×` delete + add form), identical to principles; open rows, subgroup rows, and the in-progress list; done list stays compact; single task page unchanged. Verified live: shortcut opens the modal, typing inside a modal never re-triggers it, no shortcut on the touch context, hint visible on desktop; comment add bumps the count (1→2), confirmed delete removes it (→0), thread opens from the list. Gates re-run green.
+- Follow-up — pill placement is responsive: on mobile (< `sm`) pills keep their own lines under the title (status, tags, comment count, `pl-12` indent); on desktop the same pills move inline into the title line, right-aligned just before the `⋮` button — in the In-progress view that line reads "task · AA Home · In progress · #tags · 💬 n · ⋮". Each existing pill renders twice in the DOM (one per breakpoint, hidden by `sm:hidden` / `hidden sm:flex`). Verified live: pills on the title line at desktop (Δtop 0 from the text, right of text, left of ⋮), stacked blocks `display:none` on desktop, inline group hidden on mobile with stacked blocks below the title as before; thread still opens below the row from the inline pill; progress view shows group-name + status + tags inline. Gates re-run green. Desktop-only `sm:items-center` on the three title lines (open, in-progress, done) with `sm:mt-0` on grip/checkbox — mobile keeps first-line alignment; desktop title, tags and pills now measure dead-on the ⋮ centre.
+- Follow-up — comments corrected to ONE standard (supersedes the inline-thread line above): no inline thread, no inline input in any list. The count pill (`commentPill` snippet, `aria-haspopup="dialog"`) opens the shared `CommentModal` (thread + confirmed `×` delete + input/Add, `max-w-sm`, internal delete-confirm). Mobile pill stays bottom-right via the merged chips row; desktop pill stays inline before `⋮`; add/delete bump/adjust counts on the cards. Verified live: modal open, add (count 0→1), internal confirm delete (1→0), pill re-renders, no inline input anywhere on mobile or desktop. Gates re-run green.
+
+### Follow-up — the comment standard now covers notes
+- The note card was left out of the comments standard during the fold
+  rewrites; it is back in, end to end: `note_comments` table
+  (id, note_id, content, created_at — FK cascade plus an explicit cleanup
+  in `deleteNote`), `Note.commentCount` computed in a batched query next to
+  the tags batch (`commentsByNote`), exported `list/create/delete note
+  comment`, routes `/api/notes/[id]/comments(+/[commentId])`
+  (GET/POST/DELETE, 404 on unknown note or empty comment), a count pill on
+  note cards in every mounted timeline (bottom row on mobile, inline before
+  the ⋮ on desktop, `aria-haspopup="dialog"`) opening the shared
+  `CommentModal` (title = first line of the note, thread + confirmed
+  delete + Add), and a read-only "Comments" history with an "Add comment"
+  button on `/notes/[id]` (deletes only in the modal; the load fetches
+  comments alongside the note). Delta counts are module state so the
+  featured + history timelines stay in step without a reload.
+- The ⋮ on the single-note page now uses the same absolute top-right
+  placement on mobile as the list cards (`relative` article +
+  `max-sm:top-1 max-sm:right-2 max-sm:bg-white/90`).
+- Verified live: API POST/GET/DELETE 200/201/200, count changes in
+  `/api/notes`; pill bottom-right (Δright 17 / Δbottom 13 ≈ card padding);
+  modal add (1→2) and confirmed delete (2→1); pill shows the shared count
+  after modal close; detail history renders, Add via modal appends (1→2);
+  detail ⋮ absolute top-right (Δtop 5, Δright 9); tag page shows the pill
+  with the server count. Gate note for future fixtures:
+  create-note tags come from trailing #hashtags inside the content — the
+  POST body has no tags field, so seeding a tag page requires the
+  hashtag form. Gates green: check 0/0, build + `build/index.js`, test 31/31
+  (baseline updated for the new `commentCount` fields, diff reviewed),
+  `GET /` 200.
+
+### Follow-up — the modal is input-only; the list lives on the single page
+- The comment standard changed again (supersedes every thread-in-modal line
+  above): `CommentModal` now holds ONLY the input — plain "Add comment"
+  heading (no item content in the title; the `title` prop is gone),
+  textarea, Add button BELOW the textarea, right-aligned like the
+  other form dialogs (`mt-3 flex justify-end`, disabled until text) — and
+  closes itself after the comment is stored. No thread, no delete, no
+  locale prop.
+  Lists kept the pill as the add entry point; add bumps the count on the
+  card state (todo items + progress items, principles, timeline delta map).
+- The comment list moved to the single item pages as read-only rows
+  (content, date, confirmed `×` delete via danger `ConfirmDialog` with
+  `aria-label="Delete comment"`, confirm label "Delete comment") plus the
+  existing "Add comment" button: `/notes/[id]` (was there without the row
+  delete), `/todo/[id]`, and the NEW `/principles/[id]` — principle
+  content, tags, video, created date, comments section. The page resolves
+  the principle from `GET /api/principles` (the list stays small; no new
+  single-principle endpoint) and fetches
+  `/api/principles/[id]/comments`.
+- The principle card actions menu gained "Open" as its first item
+  (`goto /principles/[id]`) so the list is reachable; Edit and Delete
+  follow as before. Principle list state no longer keeps
+  `commentsByPrinciple`; the tab only counts.
+- Verified live (fresh temp data, seeded): note pill → input-only modal →
+  add closes it and bumps the count; `/notes/[id]` row delete
+  2→1 with confirm; `/principles/[id]` renders content + comments, add
+  1→2, delete 2→1; principles tab pill 2→3 through the modal; ⋮ "Open"
+  navigates to the principle page; `/todo/[id]` input-only add 1→2,
+  confirmed delete 2→1; no page errors. Gates green: check 0/0, build +
+  `build/index.js`, test 31/31, `GET /` 200.
+- Verify-script lessons recorded in `docs/lessons-learned.md`: a fresh
+  `FERMENTARIO_DATA_DIR` is empty (empty state has no targets to click),
+  and every card renders two pill/menu variants (one per breakpoint) —
+  Playwright needs the `:visible` locator, not `.first()`.
