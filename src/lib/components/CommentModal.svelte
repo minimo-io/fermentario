@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { showToast } from '$lib/toast.svelte';
 
 	// The modal takes text for ONE new comment and closes on success. The
 	// comment list lives on the single item page (task, principle, note) —
@@ -14,6 +15,7 @@
 
 	let draft = $state('');
 	let saving = $state(false);
+	let error = $state('');
 	let draftField = $state<HTMLTextAreaElement | null>(null);
 
 	$effect(() => {
@@ -24,8 +26,14 @@
 		const text = draft.trim();
 		if (!text || saving) return;
 		saving = true;
-		if (await onAdd(text)) onClose();
-		else saving = false;
+		error = '';
+		if (await onAdd(text)) {
+			showToast('Comment added.', 'success');
+			onClose();
+		} else {
+			error = 'Could not add the comment.';
+			saving = false;
+		}
 	}
 </script>
 
@@ -53,15 +61,18 @@
 				placeholder="Add a comment…"
 				aria-label="Add a comment"
 				value={draft}
-				oninput={(e) => (draft = e.currentTarget.value)}
+				oninput={(e) => { draft = e.currentTarget.value; if (error) error = ''; }}
 				bind:this={draftField}
 			></textarea>
+			{#if error}
+				<p class="mt-2 text-xs text-rose-600" role="alert">{error}</p>
+			{/if}
 			<div class="mt-3 flex justify-end">
 				<button
 					type="submit"
 					class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium whitespace-nowrap text-white hover:bg-stone-800 disabled:opacity-50"
 					disabled={!draft.trim() || saving}
-				>Add</button>
+				>{saving ? 'Saving…' : 'Add'}</button>
 			</div>
 		</form>
 	</div>

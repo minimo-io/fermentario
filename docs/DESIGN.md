@@ -123,6 +123,9 @@ Do not introduce a new spacing value without checking this table first.
 - Section headers: `text-xs font-medium uppercase tracking-widest text-stone-400`.
 - Day headers in the timeline are the exception: normal case, because they read
   as words ("Today", "Yesterday").
+- Single-item content (note, task, principle detail pages) is
+  `text-[15px] font-semibold`. Comments stay normal weight so the item reads as
+  the page subject.
 
 ## Component widths
 
@@ -143,8 +146,9 @@ Pick an existing size instead of inventing a new one:
   through `ConfirmDialog` in `danger` tone.
 - **Overlays** are `fixed inset-0 z-50` with a `stone-900/40` backdrop; the
   backdrop click and `Escape` close them, except while a long operation runs.
-- **Toasts** are `fixed inset-x-0 bottom-28 z-30`, auto-clearing (4 s error,
-  8 s success).
+- **Toasts** come from `$lib/toast.svelte` and render once from the root layout
+  (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
+  never for progress or background work. Auto-clear: 4 s error, 8 s success.
 - **Loading feedback**: a static pill in `app.html` covers hydration no Svelte
   code can see. `NavigationLoader` removes it on mount and takes over: the first
   tracked wait shows at once, later route changes and data waits keep the 120 ms
@@ -153,6 +157,11 @@ Pick an existing size instead of inventing a new one:
   `$lib/loading.svelte`; never track quiet work (tag colors, summary refresh,
   polling, optimistic saves). Keep contextual busy states such as the Heatmap
   button and `RestoreOverlay`; do not add per-route spinners.
+- **Dictation**: while the microphone is active, the composer button switches
+  from `Mic` to a filled `rose-600` stop button with a pulsing ring, and a
+  `Listening…` pill with a pulsing dot appears above the bar. Reduced motion
+  turns the pulses off. The active state comes from the parent; never assign
+  the prop inside the composer.
 - **Hover-only controls** must also appear on `focus-visible` so keyboard users
   can reach them.
 - **Auto-growing inputs** grow with their content and publish their height so the
@@ -160,6 +169,8 @@ Pick an existing size instead of inventing a new one:
 
 ## Content rules
 
+- The hour in a timeline row links to the note's single page. Pending notes
+  keep a plain hour until the save completes.
 - Day headers in the timeline show `Today` / `Yesterday` as English literals and
   older days in the configured language's format (`Intl` output only, no
   hand-written translations).

@@ -266,7 +266,7 @@
 						class="relative flex items-start gap-3 rounded-2xl border bg-white/70 px-4 py-3 max-sm:flex-col max-sm:gap-1 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80'}"
 						aria-busy={n.pending ? 'true' : undefined}
 					>
-						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}<span class="">{n.hour}</span></span>
+						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 hover:text-stone-600 focus-visible:bg-stone-100 focus-visible:text-stone-600 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
 						<div class="flex min-w-0 flex-1 items-start gap-3 max-sm:w-full">
 						<div class="min-w-0 flex-1">
 							{#if n.id in collapsed}

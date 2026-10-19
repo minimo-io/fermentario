@@ -1330,3 +1330,23 @@
   navigations from its embedded `web-vitals` copy. The stack has only anonymous
   `VM*` frames. It is a DevTools bug (fixed in Chrome 153), not app code: close
   DevTools or disable `chrome://flags/#soft-navigation-heuristics` to stop it.
+
+## Session: Action feedback, toasts and dictation
+- `CommentModal` had a `saving` flag but the button text never changed, so a
+  comment POST looked dead. Show `Saving…`, toast on success and an inline error
+  on failure; the open modal is the right place for the failure message, so
+  callers should only return `false`, never duplicate the error.
+- Home, the tag page and all three detail pages each had their own error pill.
+  Replace them with one `$lib/toast.svelte` store and a single `<Toasts />` in
+  the root layout. Fire toasts only for final action results, not for progress.
+- Never assign a prop inside the child. `end: () => { listening = false }` in
+  Composer only changed the local prop; after an automatic speech end the
+  parent still thought dictation was active. Call `onListen(false)` in `end`,
+  `error` and the unmount cleanup.
+- A mic that only turns rose is too subtle. Active dictation needs three
+  signals: changed icon (`Square` in a filled rose button), motion (pulsing
+  ring/dot, disabled under reduced motion) and a text label ("Listening…").
+- The timeline hour is a link to `/notes/[id]`; use an `<a href>` so middle
+  click and no-JS behavior work. Skip the link while the note is pending.
+- Single-item pages show the item's own content in `font-semibold`; comments
+  stay normal weight so the page subject is obvious.

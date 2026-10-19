@@ -14,6 +14,7 @@
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { loading } from '$lib/loading.svelte';
+	import { showToast } from '$lib/toast.svelte';
 	import type { Note, NoteComment } from '$lib/types';
 
 	let { data } = $props();
@@ -23,7 +24,6 @@
 	let comments = $state<NoteComment[]>(data.comments);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
-	let err = $state('');
 	let editing = $state(false);
 	let editContent = $state('');
 	let editVideo = $state('');
@@ -79,16 +79,11 @@
 	async function deleteComment(c: { id: string }) {
 		const res = await loading.track(fetch(`/api/notes/${note.id}/comments/${c.id}`, { method: 'DELETE' }));
 		if (!res.ok) {
-			fail('Failed to delete comment.');
+			showToast('Failed to delete comment.');
 			return;
 		}
 		comments = comments.filter((x) => x.id !== c.id);
 		await refresh();
-	}
-
-	function fail(msg: string) {
-		err = msg;
-		setTimeout(() => (err = ''), 4000);
 	}
 
 	async function saveEdit(content: string, video: string) {
@@ -106,7 +101,7 @@
 	async function remove() {
 		const res = await loading.track(fetch(`/api/notes/${note.id}`, { method: 'DELETE' }));
 		if (!res.ok) {
-			fail('Failed to delete note.');
+			showToast('Failed to delete note.');
 			return;
 		}
 		await loading.track(invalidateAll());
@@ -116,7 +111,7 @@
 	async function removeTag(tag: string) {
 		const res = await loading.track(fetch(`/api/notes/${note.id}/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' }));
 		if (!res.ok) {
-			fail('Failed to remove the tag.');
+			showToast('Failed to remove the tag.');
 			return;
 		}
 		await refresh();
@@ -130,7 +125,7 @@
 			body: JSON.stringify({ featured: !note.featured })
 		}));
 		if (!res.ok) {
-			fail('Failed to update note.');
+			showToast('Failed to update note.');
 			return;
 		}
 		await refresh();
@@ -142,7 +137,7 @@
 			if (!navigator.clipboard) throw new Error('clipboard unavailable');
 			await navigator.clipboard.writeText(note.content);
 		} catch {
-			fail('Could not copy — clipboard unavailable.');
+			showToast('Could not copy — clipboard unavailable.');
 		}
 	}
 
@@ -197,7 +192,7 @@
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
-					<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{@html inlineMarkdown(note.content)}</p>
+					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800">{@html inlineMarkdown(note.content)}</p>
 				</div>
 				<button
 					type="button"
@@ -312,8 +307,3 @@
 	/>
 {/if}
 
-{#if err}
-	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-30 flex justify-center px-6">
-		<p class="rounded-full bg-rose-50 px-4 py-1.5 text-xs text-rose-600 shadow-sm">{err}</p>
-	</div>
-{/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import NavigationLoader from '$lib/components/NavigationLoader.svelte';
+	import Toasts from '$lib/components/Toasts.svelte';
 	let { children } = $props();
 </script>
 
@@ -17,3 +18,4 @@
 
 {@render children()}
 <NavigationLoader />
+<Toasts />

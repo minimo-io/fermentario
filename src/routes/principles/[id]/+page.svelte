@@ -9,6 +9,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { loading } from '$lib/loading.svelte';
+	import { showToast } from '$lib/toast.svelte';
 	import type { Principle, PrincipleComment } from '$lib/types';
 
 	let { data } = $props();
@@ -18,7 +19,6 @@
 	let comments = $state<PrincipleComment[]>(data.comments);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
-	let err = $state('');
 	let addingComment = $state(false);
 	let confirmingComment = $state<PrincipleComment | null>(null);
 
@@ -37,11 +37,6 @@
 			}
 		} catch {}
 	});
-
-	function fail(msg: string) {
-		err = msg;
-		setTimeout(() => (err = ''), 4000);
-	}
 
 	async function refresh() {
 		const res = await loading.track(fetch(`/api/principles`));
@@ -80,7 +75,7 @@
 			if (!res.ok) throw new Error('Failed to delete comment.');
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch (e) {
-			fail((e as Error)?.message ?? 'Failed to delete comment.');
+			showToast((e as Error)?.message ?? 'Failed to delete comment.');
 		}
 	}
 </script>
@@ -110,7 +105,7 @@
 		</header>
 
 		<article class="rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3">
-			<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{principle.content}</p>
+			<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800">{principle.content}</p>
 			{#if (principle.tags ?? []).length > 0}
 				<div class="mt-2 flex flex-wrap gap-1">
 					{#each principle.tags ?? [] as tag (tag)}
@@ -180,8 +175,3 @@
 	/>
 {/if}
 
-{#if err}
-	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-30 flex justify-center px-6">
-		<p class="rounded-full bg-rose-50 px-4 py-1.5 text-xs text-rose-600 shadow-sm">{err}</p>
-	</div>
-{/if}

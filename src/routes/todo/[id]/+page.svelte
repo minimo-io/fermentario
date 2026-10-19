@@ -9,6 +9,7 @@
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { loading } from '$lib/loading.svelte';
+	import { showToast } from '$lib/toast.svelte';
 	import type { TodoItem, TaskComment } from '$lib/types';
 
 	let { data } = $props();
@@ -19,7 +20,6 @@
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let addingComment = $state(false);
-	let err = $state('');
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
 
@@ -39,11 +39,6 @@
 			}
 		} catch {}
 	});
-
-	function fail(msg: string) {
-		err = msg;
-		setTimeout(() => (err = ''), 4000);
-	}
 
 	function fmt(at: number): string {
 		return new Date(at).toLocaleString(locale, {
@@ -66,7 +61,7 @@
 			if (!res.ok || !d.item) throw new Error(d?.error ?? 'Failed to update task.');
 			item = d.item;
 		} catch (e) {
-			fail((e as Error)?.message ?? 'Failed to update task.');
+			showToast((e as Error)?.message ?? 'Failed to update task.');
 		}
 	}
 
@@ -81,8 +76,7 @@
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
 			comments = [...comments, d.comment];
 			return true;
-		} catch (e) {
-			fail((e as Error)?.message ?? 'Failed to add comment.');
+		} catch {
 			return false;
 		}
 	}
@@ -93,7 +87,7 @@
 			if (!res.ok) throw new Error('Failed to delete comment.');
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch (e) {
-			fail((e as Error)?.message ?? 'Failed to delete comment.');
+			showToast((e as Error)?.message ?? 'Failed to delete comment.');
 		}
 	}
 
@@ -127,7 +121,7 @@
 					onclick={toggle}
 				><span class="text-[11px] leading-none">✓</span></button>
 				<div class="min-w-0 flex-1">
-					<p class="whitespace-pre-wrap text-[15px] leading-snug {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}">{item.content}</p>
+					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}">{item.content}</p>
 					{#if item.inProgress}
 						<span class="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
 					{/if}
@@ -200,8 +194,3 @@
 	/>
 {/if}
 
-{#if err}
-	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-30 flex justify-center px-6">
-		<p class="rounded-full bg-rose-50 px-4 py-1.5 text-xs text-rose-600 shadow-sm">{err}</p>
-	</div>
-{/if}

@@ -6,6 +6,7 @@
 	import Timeline from '$lib/components/Timeline.svelte';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
+	import { showToast } from '$lib/toast.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import TagColorModal from '$lib/components/TagColorModal.svelte';
 	import { contentWidthClass } from '$lib/display';
@@ -19,7 +20,6 @@
 	let principleItems = $state<Principle[]>([]);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
-	let err = $state('');
 	let colorOpen = $state(false);
 
 	$effect(() => {
@@ -47,11 +47,6 @@
 		} catch {}
 	});
 
-	function fail(e: unknown, fallback: string) {
-		err = (e as Error)?.message ?? fallback;
-		setTimeout(() => (err = ''), 4000);
-	}
-
 	async function remove(id: string) {
 		try {
 			const res = await loading.track(fetch(`/api/notes/${id}`, { method: 'DELETE' }));
@@ -59,7 +54,7 @@
 			pager.remove(id);
 			pinned = pinned.filter((n) => n.id !== id);
 		} catch (e) {
-			fail(e, 'Failed to delete note.');
+			showToast((e as Error)?.message ?? 'Failed to delete note.');
 		}
 	}
 
@@ -81,7 +76,7 @@
 				pager.prepend(saved);
 			}
 		} catch (e) {
-			fail(e, 'Failed to update note.');
+			showToast((e as Error)?.message ?? 'Failed to update note.');
 		}
 	}
 
@@ -96,7 +91,7 @@
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
 			todoItems = todoItems.map((x) => (x.id === item.id ? d.item : x));
 		} catch (e) {
-			fail(e, 'Failed to update item.');
+			showToast((e as Error)?.message ?? 'Failed to update item.');
 		}
 	}
 
@@ -110,7 +105,7 @@
 			// Removing the tag this page filters by takes the note out of the list.
 			pager.remove(noteId);
 		} catch (e) {
-			fail(e, 'Failed to remove the tag.');
+			showToast((e as Error)?.message ?? 'Failed to remove the tag.');
 		}
 	}
 
@@ -131,7 +126,7 @@
 			else pager.remove(id);
 			pinned = pinned.map((x) => (x.id === note.id ? note : x));
 		} catch (e) {
-			fail(e, 'Failed to save note.');
+			showToast((e as Error)?.message ?? 'Failed to save note.');
 			throw e;
 		}
 	}
@@ -249,8 +244,3 @@
 	<TagColorModal tag={data.tag} onClose={() => (colorOpen = false)} />
 {/if}
 
-{#if err}
-	<div class="pointer-events-none fixed inset-x-0 bottom-10 z-30 flex justify-center px-6">
-		<p class="rounded-full bg-rose-50 px-4 py-1.5 text-xs text-rose-600 shadow-sm">{err}</p>
-	</div>
-{/if}

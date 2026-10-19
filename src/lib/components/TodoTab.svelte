@@ -90,8 +90,7 @@
 			items = items.map((x) => (x.id === item.id ? { ...x, commentCount: (x.commentCount ?? 0) + 1 } : x));
 			progressItems = progressItems.map((x) => (x.id === item.id ? { ...x, commentCount: (x.commentCount ?? 0) + 1 } : x));
 			return true;
-		} catch (e) {
-			onError((e as Error)?.message ?? 'Failed to add comment.');
+		} catch {
 			return false;
 		}
 	}

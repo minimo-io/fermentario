@@ -15,6 +15,7 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { splitTrailingHashtags } from '$lib/hashtags';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
+	import { showToast } from '$lib/toast.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { formatNotesForClipboard } from '$lib/note-export';
 	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
@@ -234,15 +235,7 @@ function langTag(p: Lang): string {
 		}
 	}
 	let text = $state('');
-	let toast = $state<{ text: string; tone: 'error' | 'success' } | null>(null);
-	function showToast(text: string, tone: 'error' | 'success' = 'error') {
-		toast = { text, tone };
-	}
 	let listening = $state(false);
-	let micErr = $state('');
-	// voice-entry
-	let speech = $state<{ stop: () => void; abort: () => void } | null>(null);
-	let interim = $state('');
 
 	$effect(() => {
 		loadNotes();
@@ -291,12 +284,6 @@ function langTag(p: Lang): string {
 		}
 	} catch {}
 });
-
-	$effect(() => {
-		if (!toast) return;
-		const timer = setTimeout(() => (toast = null), toast.tone === 'success' ? 8000 : 4000);
-		return () => clearTimeout(timer);
-	});
 
 	async function loadNotes() {
 		try {
@@ -693,12 +680,6 @@ function langTag(p: Lang): string {
 			/>
 		{/if}
 
-		{#if toast}
-			<div class="pointer-events-none fixed inset-x-0 bottom-28 z-30 flex justify-center px-6">
-				<p class="rounded-full px-4 py-1.5 text-xs shadow-sm {toast.tone === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}">{toast.text}</p>
-			</div>
-		{/if}
-
 		{#if view === 'notes' || view === 'ask'}
 		<Composer
 			onNote={handleNote}
@@ -706,7 +687,6 @@ function langTag(p: Lang): string {
 			onStop={stopAsk}
 			view={composerView}
 			{listening} onListen={onListenIm}
-			{micErr}
 			{question} onQuestion={onQuestionIm}
 			{answering}
 			{text} onText={onTextIm}

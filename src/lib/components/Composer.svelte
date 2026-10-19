@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { createSpeech, requestMicPermission, browserSupportsSpeech } from '$lib/speech';
+	import { createSpeech, browserSupportsSpeech } from '$lib/speech';
+	import { showToast } from '$lib/toast.svelte';
 	import { splitTrailingHashtags } from '$lib/hashtags';
 	import Mic from '@lucide/svelte/icons/mic';
 	import Square from '@lucide/svelte/icons/square';
@@ -14,7 +15,6 @@
 		view: 'notes' | 'ask';
 		listening: boolean;
 		onListen: (on: boolean) => void;
-		micErr: string;
 		question: string;
 		onQuestion: (q: string) => void;
 		answering: boolean;
@@ -29,7 +29,6 @@
 		onNote, onAsk, onStop,
 		view,
 		listening, onListen,
-		micErr,
 		question, onQuestion,
 		answering,
 		text, onText,
@@ -43,15 +42,24 @@
 	let speech = $state<ReturnType<typeof createSpeech> | null>(null);
 	let pendingTags = $derived(view === 'notes' ? splitTrailingHashtags(text).tags : []);
 	const focusHint = $derived(apple ? '⇧⌘L' : 'Ctrl+⇧L');
+	const listeningLabel = $derived(lang === 'es' ? 'Escuchando…' : lang === 'pt' ? 'A ouvir…' : 'Listening…');
 	// Long placeholder text overflows the bar on phones. Shorten it below sm.
 	let compact = $state(true);
 	onMount(() => {
-		if (typeof window === 'undefined' || !('matchMedia' in window)) return;
+		const stop = () => {
+			speech?.abort();
+			speech = null;
+			onListen(false);
+		};
+		if (typeof window === 'undefined' || !('matchMedia' in window)) return stop;
 		const mq = window.matchMedia('(max-width: 639px)');
 		const apply = () => (compact = mq.matches);
 		apply();
 		mq.addEventListener('change', apply);
-		return () => mq.removeEventListener('change', apply);
+		return () => {
+			mq.removeEventListener('change', apply);
+			stop();
+		};
 	});
 
 	let field = $state<HTMLTextAreaElement | null>(null);
@@ -110,12 +118,25 @@
 	});
 
 	function startListening() {
-		if (!browserSupportsSpeech()) { micErr = 'Not supported here.'; return; }
-		speech = createSpeech({ interim: (t) => { interim = t; }, final: (t) => { if (view === 'ask') onQuestion(question + t); else onText(text + t); }, end: () => { listening = false; }, error: (m) => { micErr = m; } }, lang);
+		if (!browserSupportsSpeech()) {
+			showToast('Speech input is not supported in this browser.');
+			return;
+		}
+		speech = createSpeech({
+			interim: (t) => { interim = t; },
+			final: (t) => { if (view === 'ask') onQuestion(question + t); else onText(text + t); },
+			end: () => { speech = null; interim = ''; onListen(false); },
+			error: (m) => { speech = null; interim = ''; onListen(false); showToast(m); }
+		}, lang);
 		speech.start();
 		onListen(true);
 	}
-	function stopListening() { speech?.stop(); onListen(false); }
+	function stopListening() {
+		speech?.stop();
+		speech = null;
+		interim = '';
+		onListen(false);
+	}
 	function saveNote() {
 		const c = text.trim();
 		if (!c) return;
@@ -131,8 +152,33 @@
 	}
 </script>
 
+{#snippet micButton()}
+	<button
+		type="button"
+		class="relative rounded-full p-2.5 transition-colors {listening ? 'bg-rose-600 text-white hover:bg-rose-700' : 'text-stone-500 hover:bg-stone-200'}"
+		aria-label={listening ? 'Stop dictation' : 'Dictate'}
+		aria-pressed={listening}
+		onclick={listening ? stopListening : startListening}
+	>
+		{#if listening}
+			<span class="pointer-events-none absolute inset-0 rounded-full ring-2 ring-rose-400 animate-pulse motion-reduce:animate-none"></span>
+			<Square class="relative h-4 w-4 fill-current" />
+		{:else}
+			<Mic class="h-4 w-4" />
+		{/if}
+	</button>
+{/snippet}
+
 <div class="pointer-events-none fixed inset-x-0 bottom-0 z-20">
 	<div class="pointer-events-auto mx-auto {widthClass} px-6 pb-8">
+		{#if listening}
+			<div class="mb-2 flex items-center px-3">
+				<span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600">
+					<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-600 motion-reduce:animate-none"></span>
+					{listeningLabel}
+				</span>
+			</div>
+		{/if}
 		{#if pendingTags.length > 0}
 			<div class="mb-2 flex flex-wrap items-center gap-1 px-3">
 				{#each pendingTags as tag (tag)}
@@ -155,7 +201,7 @@
 				></textarea>
 				<div class="flex shrink-0 items-center gap-2">
 					<button class="rounded-full p-2.5 text-stone-500 hover:bg-stone-200" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
-					<button class="rounded-full p-2.5 text-stone-500 hover:bg-stone-200 {listening ? 'text-rose-600' : ''}" aria-label={listening ? 'Stop speech input' : 'Speech input'} onclick={listening ? stopListening : startListening}><Mic class="h-4 w-4" /></button>
+					{@render micButton()}
 					<button class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white" onclick={saveNote} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
 				</div>
 			{:else}
@@ -172,7 +218,7 @@
 				></textarea>
 				<div class="flex shrink-0 items-center gap-2">
 					<button class="rounded-full p-2.5 text-stone-500 hover:bg-stone-200" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
-					<button class="rounded-full p-2.5 text-stone-500 hover:bg-stone-200 {listening ? 'text-rose-600' : ''}" aria-label={listening ? 'Stop speech input' : 'Speech input'} onclick={listening ? stopListening : startListening}><Mic class="h-4 w-4" /></button>
+					{@render micButton()}
 					{#if answering}
 						<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100" onclick={onStop}>
 							<Square class="h-3 w-3 fill-current" /> Stop
@@ -185,8 +231,6 @@
 		</div>
 	</div>
 </div>
-
-{#if micErr}<div class="pointer-events-none fixed inset-x-0 bottom-20 z-10 flex justify-center"><p class="rounded-full bg-rose-50 px-4 py-1.5 text-xs text-rose-600">{micErr}</p></div>{/if}
 
 {#if expanded}
 	<div
