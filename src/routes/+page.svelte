@@ -14,6 +14,7 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { isAppleDevice } from '$lib/platform';
 	import { splitTrailingHashtags } from '$lib/hashtags';
 	import { NotePager } from '$lib/note-pager.svelte';
+	import { loading } from '$lib/loading.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { formatNotesForClipboard } from '$lib/note-export';
 	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
@@ -242,8 +243,6 @@ function langTag(p: Lang): string {
 	// voice-entry
 	let speech = $state<{ stop: () => void; abort: () => void } | null>(null);
 	let interim = $state('');
-	// timeline
-	let notesLoading = $state(false);
 
 	$effect(() => {
 		loadNotes();
@@ -309,7 +308,7 @@ function langTag(p: Lang): string {
 
 	async function loadFeatured() {
 		try {
-			const d = await (await fetch('/api/notes?limit=100&featured=only')).json();
+			const d = await (await loading.track(fetch('/api/notes?limit=100&featured=only'))).json();
 			featured = Array.isArray(d.notes) ? d.notes : [];
 		} catch {
 			showToast('Failed to load featured notes.');
@@ -318,11 +317,11 @@ function langTag(p: Lang): string {
 
 	async function handleFeature(n: Note) {
 		try {
-			const res = await fetch(`/api/notes/${n.id}`, {
+			const res = await loading.track(fetch(`/api/notes/${n.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ featured: !n.featured })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update note.');
 			const saved = d.note as Note;
@@ -343,7 +342,7 @@ function langTag(p: Lang): string {
 
 	async function loadAsks() {
 		try {
-			const d = await (await fetch('/api/asks')).json();
+			const d = await (await loading.track(fetch('/api/asks'))).json();
 			asks = Array.isArray(d.asks) ? d.asks : [];
 		} catch {}
 	}
@@ -424,7 +423,7 @@ function langTag(p: Lang): string {
 	}
 
 	function handleDelete(id: string) {
-		fetch(`/api/notes/${id}`, { method: 'DELETE' })
+		loading.track(fetch(`/api/notes/${id}`, { method: 'DELETE' }))
 			.then((r) => r.json())
 			.then(() => {
 				pager.remove(id);
@@ -436,10 +435,10 @@ function langTag(p: Lang): string {
 
 	async function removeTag(noteId: string, tag: string) {
 		try {
-			const res = await fetch(
+			const res = await loading.track(fetch(
 				`/api/notes/${noteId}/tags/${encodeURIComponent(tag)}`,
 				{ method: 'DELETE' }
-			);
+			));
 			if (!res.ok) throw new Error('Failed to remove the tag.');
 			const note = notes.find((n) => n.id === noteId);
 			if (!note) return;
@@ -458,11 +457,11 @@ function langTag(p: Lang): string {
 	async function handleEdit(id: string, content: string, video?: string) {
 		const body: { content: string; video?: string } = { content };
 		if (video !== undefined) body.video = video;
-		const res = await fetch(`/api/notes/${id}`, {
+		const res = await loading.track(fetch(`/api/notes/${id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(body)
-		});
+		}));
 		const d = await res.json();
 		if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
 		pager.patch(d.note as Note);

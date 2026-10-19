@@ -5,6 +5,7 @@
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Timeline from '$lib/components/Timeline.svelte';
 	import { NotePager } from '$lib/note-pager.svelte';
+	import { loading } from '$lib/loading.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import TagColorModal from '$lib/components/TagColorModal.svelte';
 	import { contentWidthClass } from '$lib/display';
@@ -53,7 +54,7 @@
 
 	async function remove(id: string) {
 		try {
-			const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/notes/${id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete note.');
 			pager.remove(id);
 			pinned = pinned.filter((n) => n.id !== id);
@@ -64,11 +65,11 @@
 
 	async function feature(n: Note) {
 		try {
-			const res = await fetch(`/api/notes/${n.id}`, {
+			const res = await loading.track(fetch(`/api/notes/${n.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ featured: !n.featured })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update note.');
 			const saved = d.note as Note;
@@ -86,11 +87,11 @@
 
 	async function toggleTodo(item: TodoItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ done: !item.done })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
 			todoItems = todoItems.map((x) => (x.id === item.id ? d.item : x));
@@ -101,10 +102,10 @@
 
 	async function removeTag(noteId: string, tag: string) {
 		try {
-			const res = await fetch(
+			const res = await loading.track(fetch(
 				`/api/notes/${noteId}/tags/${encodeURIComponent(tag)}`,
 				{ method: 'DELETE' }
-			);
+			));
 			if (!res.ok) throw new Error('Failed to remove the tag.');
 			// Removing the tag this page filters by takes the note out of the list.
 			pager.remove(noteId);
@@ -117,11 +118,11 @@
 		try {
 			const body: { content: string; video?: string } = { content };
 			if (video !== undefined) body.video = video;
-			const res = await fetch(`/api/notes/${id}`, {
+			const res = await loading.track(fetch(`/api/notes/${id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(body)
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
 			const note = d.note as Note;

@@ -8,6 +8,7 @@
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { contentWidthClass } from '$lib/display';
+	import { loading } from '$lib/loading.svelte';
 	import type { Principle, PrincipleComment } from '$lib/types';
 
 	let { data } = $props();
@@ -43,27 +44,27 @@
 	}
 
 	async function refresh() {
-		const res = await fetch(`/api/principles`);
+		const res = await loading.track(fetch(`/api/principles`));
 		if (res.ok) {
 			const d = (await res.json()) as { principles?: Principle[] };
 			const found = d.principles?.find((p) => p.id === principle.id);
 			if (found) principle = found;
 		}
-		const cres = await fetch(`/api/principles/${principle.id}/comments`);
+		const cres = await loading.track(fetch(`/api/principles/${principle.id}/comments`));
 		if (cres.ok) {
 			const c = (await cres.json()) as { comments?: PrincipleComment[] };
 			comments = c.comments ?? [];
 		}
-		await invalidateAll();
+		await loading.track(invalidateAll());
 	}
 
 	async function addComment(text: string): Promise<boolean> {
 		try {
-			const res = await fetch(`/api/principles/${principle.id}/comments`, {
+			const res = await loading.track(fetch(`/api/principles/${principle.id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: text })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) return false;
 			comments = [...comments, d.comment as PrincipleComment];
@@ -75,7 +76,7 @@
 
 	async function deleteComment(c: { id: string }) {
 		try {
-			const res = await fetch(`/api/principles/${principle.id}/comments/${c.id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/principles/${principle.id}/comments/${c.id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete comment.');
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch (e) {

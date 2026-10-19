@@ -145,6 +145,14 @@ Pick an existing size instead of inventing a new one:
   backdrop click and `Escape` close them, except while a long operation runs.
 - **Toasts** are `fixed inset-x-0 bottom-28 z-30`, auto-clearing (4 s error,
   8 s success).
+- **Loading feedback**: a static pill in `app.html` covers hydration no Svelte
+  code can see. `NavigationLoader` removes it on mount and takes over: the first
+  tracked wait shows at once, later route changes and data waits keep the 120 ms
+  anti-flash delay. The pill is `pointer-events-none`, has no backdrop, and never
+  blocks input. Track loads and mutations with `loading.track()` from
+  `$lib/loading.svelte`; never track quiet work (tag colors, summary refresh,
+  polling, optimistic saves). Keep contextual busy states such as the Heatmap
+  button and `RestoreOverlay`; do not add per-route spinners.
 - **Hover-only controls** must also appear on `focus-visible` so keyboard users
   can reach them.
 - **Auto-growing inputs** grow with their content and publish their height so the

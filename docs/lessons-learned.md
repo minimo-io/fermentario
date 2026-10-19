@@ -1287,3 +1287,46 @@
   puts month labels at the right edge of their blocks. Reverse the flat day list
   before packing it seven per column, so time runs newest-to-oldest both across
   and down. The short final column stays at the bottom right.
+
+## Session: Global navigation loader
+- `navigating` is the only common signal for a route change in flight; a direct
+  `goto()` from a card has no callback shared with the other links. One
+  `NavigationLoader` in the root layout covers notes, tasks, principles and all
+  other client-side routes.
+- Delay the pill by ~120 ms and make it `pointer-events-none`: instant
+  navigations must not flash, and the indicator must not block the page below.
+- Changing `node_modules` while the dev server runs can leave SvelteKit's
+  module-level `app` undefined; every `goto()` then throws on `app.hash`.
+  Restart the server instead of patching the call sites.
+
+## Session: Global loader for data waits
+- One `loading.pending` counter in `$lib/loading.svelte.ts` feeds the same
+  `NavigationLoader` as route changes. Use `loading.track()` on the fetch of
+  each user-triggered load or mutation; nested entries are safe because the
+  pill hides only when the counter reaches zero.
+- Track the wait, not the work: skip quiet calls such as tag-color loading,
+  summary refresh, model polling, `pager.sync()`, diagnostics probes and
+  fire-and-forget status writes. Tracking them makes the pill flash while the
+  user is not waiting.
+- Do not wrap an entire multi-fetch function with one entry unless it can be
+  done without touching error paths; separate tracked fetches keep the counter
+  above zero through the short gaps between sequential requests.
+- `rg` skips `node_modules` by default, so a dependency search can wrongly look
+  empty. Use `rg -uu` when checking whether an unfamiliar function comes from a
+  package.
+- No Svelte code runs before hydration, so the pre-hydration pill must live in
+  `app.html`. Keep it outside the app tree and remove it from
+  `NavigationLoader`, the component that owns the live pill, so there is no gap
+  between the two indicators.
+- The 120 ms anti-flash delay hid the initial load on a fast local API: the pill
+  never appeared. Show the first tracked wait at once and keep the delay only
+  for later waits.
+- A reactive counter mutated synchronously inside `$effect` makes the effect
+  depend on that counter and retrigger itself: `effect_update_depth_exceeded`.
+  Hydration aborted, `NavigationLoader` never mounted, and the static
+  `#boot-loader` stayed on screen blocking the whole page. Update the counter
+  inside `untrack()`; readers such as `NavigationLoader` still react normally.
+- Chromium 152 DevTools throws `reportAllChanges` / `startTime` errors on soft
+  navigations from its embedded `web-vitals` copy. The stack has only anonymous
+  `VM*` frames. It is a DevTools bug (fixed in Chrome 153), not app code: close
+  DevTools or disable `chrome://flags/#soft-navigation-heuristics` to stop it.

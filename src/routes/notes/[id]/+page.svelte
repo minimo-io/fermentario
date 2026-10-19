@@ -13,6 +13,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
+	import { loading } from '$lib/loading.svelte';
 	import type { Note, NoteComment } from '$lib/types';
 
 	let { data } = $props();
@@ -49,23 +50,23 @@
 	});
 
 	async function refresh() {
-		const res = await fetch(`/api/notes/${note.id}`);
+		const res = await loading.track(fetch(`/api/notes/${note.id}`));
 		if (res.ok) note = ((await res.json()).note as Note) ?? note;
-		const cres = await fetch(`/api/notes/${note.id}/comments`);
+		const cres = await loading.track(fetch(`/api/notes/${note.id}/comments`));
 		if (cres.ok) {
 			const d = (await cres.json()) as { comments?: NoteComment[] };
 			comments = d.comments ?? [];
 		}
-		await invalidateAll();
+		await loading.track(invalidateAll());
 	}
 
 	async function addComment(text: string): Promise<boolean> {
 		try {
-			const res = await fetch(`/api/notes/${note.id}/comments`, {
+			const res = await loading.track(fetch(`/api/notes/${note.id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: text })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) return false;
 			comments = [...comments, d.comment as NoteComment];
@@ -76,7 +77,7 @@
 	}
 
 	async function deleteComment(c: { id: string }) {
-		const res = await fetch(`/api/notes/${note.id}/comments/${c.id}`, { method: 'DELETE' });
+		const res = await loading.track(fetch(`/api/notes/${note.id}/comments/${c.id}`, { method: 'DELETE' }));
 		if (!res.ok) {
 			fail('Failed to delete comment.');
 			return;
@@ -91,11 +92,11 @@
 	}
 
 	async function saveEdit(content: string, video: string) {
-		const res = await fetch(`/api/notes/${note.id}`, {
+		const res = await loading.track(fetch(`/api/notes/${note.id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ content, video })
-		});
+		}));
 		const d = await res.json();
 		if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
 		editing = false;
@@ -103,17 +104,17 @@
 	}
 
 	async function remove() {
-		const res = await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
+		const res = await loading.track(fetch(`/api/notes/${note.id}`, { method: 'DELETE' }));
 		if (!res.ok) {
 			fail('Failed to delete note.');
 			return;
 		}
-		await invalidateAll();
+		await loading.track(invalidateAll());
 		await goto('/');
 	}
 
 	async function removeTag(tag: string) {
-		const res = await fetch(`/api/notes/${note.id}/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' });
+		const res = await loading.track(fetch(`/api/notes/${note.id}/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' }));
 		if (!res.ok) {
 			fail('Failed to remove the tag.');
 			return;
@@ -123,11 +124,11 @@
 
 	async function toggleFeature() {
 		menuOpen = false;
-		const res = await fetch(`/api/notes/${note.id}`, {
+		const res = await loading.track(fetch(`/api/notes/${note.id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ featured: !note.featured })
-		});
+		}));
 		if (!res.ok) {
 			fail('Failed to update note.');
 			return;

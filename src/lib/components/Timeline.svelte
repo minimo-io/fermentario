@@ -59,6 +59,7 @@
 	import TagChip from '$lib/components/TagChip.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { youTubeWatchUrl } from '$lib/youtube';
+	import { loading } from '$lib/loading.svelte';
 
 	type Props = {
 		notes: Note[];
@@ -144,11 +145,11 @@
 		if (!commenting) return false;
 		const id = commenting.id;
 		try {
-			const res = await fetch(`/api/notes/${id}/comments`, {
+			const res = await loading.track(fetch(`/api/notes/${id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: text })
-			});
+			}));
 			if (!res.ok) return false;
 			commentDelta[id] = (commentDelta[id] ?? 0) + 1;
 			return true;

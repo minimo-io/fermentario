@@ -13,6 +13,7 @@
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { loading } from '$lib/loading.svelte';
 
 	type Props = { onError: (msg: string) => void; widthClass?: string };
 	let { onError, widthClass = 'max-w-2xl' }: Props = $props();
@@ -39,7 +40,7 @@
 
 	async function load() {
 		try {
-			const d = await (await fetch('/api/principles')).json();
+			const d = await (await loading.track(fetch('/api/principles'))).json();
 			principles = Array.isArray(d.principles) ? d.principles : [];
 		} catch {
 			onError('Failed to load principles.');
@@ -49,11 +50,11 @@
 	async function add() {
 		if (!draft.trim()) return;
 		try {
-			const res = await fetch('/api/principles', {
+			const res = await loading.track(fetch('/api/principles', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: draft, video: draftVideo.trim() })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add principle.');
 			draft = '';
@@ -71,11 +72,11 @@
 			return;
 		}
 		try {
-			const res = await fetch(`/api/principles/${p.id}`, {
+			const res = await loading.track(fetch(`/api/principles/${p.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: editText, video: editVideo.trim() })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save principle.');
 			editing = null;
@@ -87,7 +88,7 @@
 
 	async function remove(p: Principle) {
 		try {
-			const res = await fetch(`/api/principles/${p.id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/principles/${p.id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete principle.');
 			confirmingPrinciple = null;
 			principles = principles.filter((x) => x.id !== p.id);
@@ -102,11 +103,11 @@
 
 	async function addPrincipleComment(p: Principle, text: string): Promise<boolean> {
 		try {
-			const res = await fetch(`/api/principles/${p.id}/comments`, {
+			const res = await loading.track(fetch(`/api/principles/${p.id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: text })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
 			principles = principles.map((x) => (x.id === p.id ? { ...x, commentCount: (x.commentCount ?? 0) + 1 } : x));
@@ -119,11 +120,11 @@
 
 	async function persistOrder(ids: string[]) {
 		try {
-			const res = await fetch('/api/principles', {
+			const res = await loading.track(fetch('/api/principles', {
 				method: 'PUT',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ ids })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to reorder.');
 			principles = d.principles;

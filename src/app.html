@@ -4,9 +4,57 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
+		<style>
+			#boot-loader {
+				position: fixed;
+				inset: 0;
+				z-index: 60;
+				display: grid;
+				place-items: center;
+				padding: 1.5rem;
+				pointer-events: none;
+				animation: boot-timeout 0.3s linear 60s forwards;
+			}
+			#boot-loader .boot-pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				border: 1px solid #e7e5e4;
+				border-radius: 9999px;
+				background: rgba(255, 255, 255, 0.95);
+				padding: 0.5rem 0.875rem;
+				font-family: ui-sans-serif, system-ui, sans-serif;
+				font-size: 0.75rem;
+				font-weight: 500;
+				line-height: 1;
+				color: #57534e;
+				box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+			}
+			#boot-loader .boot-spinner {
+				width: 1rem;
+				height: 1rem;
+				border: 2px solid #e7e5e4;
+				border-top-color: #f59e0b;
+				border-radius: 9999px;
+				animation: boot-spin 0.7s linear infinite;
+			}
+			@keyframes boot-spin {
+				to { transform: rotate(360deg); }
+			}
+			@keyframes boot-timeout {
+				to { opacity: 0; visibility: hidden; }
+			}
+			@media (prefers-reduced-motion: reduce) {
+				#boot-loader .boot-spinner { animation: none; }
+			}
+		</style>
+		<noscript><style>#boot-loader { display: none; }</style></noscript>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<div id="boot-loader" role="status" aria-live="polite">
+			<span class="boot-pill"><span class="boot-spinner"></span>Loading…</span>
+		</div>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

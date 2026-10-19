@@ -8,6 +8,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
+	import { loading } from '$lib/loading.svelte';
 	import type { TodoItem, TaskComment } from '$lib/types';
 
 	let { data } = $props();
@@ -56,11 +57,11 @@
 
 	async function toggle() {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ done: !item.done })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok || !d.item) throw new Error(d?.error ?? 'Failed to update task.');
 			item = d.item;
@@ -71,11 +72,11 @@
 
 	async function addComment(text: string): Promise<boolean> {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}/comments`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: text })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
 			comments = [...comments, d.comment];
@@ -88,7 +89,7 @@
 
 	async function deleteComment(c: { id: string }) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}/comments/${c.id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}/comments/${c.id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete comment.');
 			comments = comments.filter((x) => x.id !== c.id);
 		} catch (e) {

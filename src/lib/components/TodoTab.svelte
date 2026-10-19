@@ -13,6 +13,7 @@
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 	import { withSubgroupPrefix } from '$lib/subgroups';
+	import { loading } from '$lib/loading.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
 	type Props = { onError: (msg: string) => void; lang?: string; widthClass?: string };
@@ -79,11 +80,11 @@
 
 	async function addTaskComment(item: TodoItem | TodoProgressItem, text: string): Promise<boolean> {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}/comments`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}/comments`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: text })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
 			items = items.map((x) => (x.id === item.id ? { ...x, commentCount: (x.commentCount ?? 0) + 1 } : x));
@@ -97,11 +98,11 @@
 
 	async function toggleProgressViewItem(item: TodoProgressItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ done: !item.done })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok || !d.item) throw new Error(d?.error ?? 'Failed to update item.');
 			await loadProgress();
@@ -112,11 +113,11 @@
 
 	async function progressProgressViewItem(item: TodoProgressItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ inProgress: !item.inProgress })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok || !d.item) throw new Error(d?.error ?? 'Failed to update item.');
 			await loadProgress();
@@ -127,7 +128,7 @@
 
 	async function deleteProgressViewItem(item: TodoProgressItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete item.');
 			confirmingItem = null;
 			await loadProgress();
@@ -138,7 +139,7 @@
 
 	async function loadGroups(select?: string) {
 		try {
-			const d = await (await fetch('/api/todo/groups')).json();
+			const d = await (await loading.track(fetch('/api/todo/groups'))).json();
 			groups = Array.isArray(d.groups) ? d.groups : [];
 			const want = select ?? activeGroup;
 			activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
@@ -152,7 +153,7 @@
 
 	async function loadProgress() {
 		try {
-			const d = await (await fetch('/api/todo/items?inprogress=only')).json();
+			const d = await (await loading.track(fetch('/api/todo/items?inprogress=only'))).json();
 			progressItems = Array.isArray(d.items) ? d.items : [];
 		} catch {
 			progressItems = [];
@@ -172,7 +173,7 @@
 
 	async function loadItems(groupId: string) {
 		try {
-			const d = await (await fetch(`/api/todo/groups/${groupId}/items`)).json();
+			const d = await (await loading.track(fetch(`/api/todo/groups/${groupId}/items`))).json();
 			items = Array.isArray(d.items) ? d.items : [];
 		} catch {
 			onError('Failed to load to-do items.');
@@ -182,11 +183,11 @@
 	async function addGroup() {
 		if (!newGroup.trim()) return;
 		try {
-			const res = await fetch('/api/todo/groups', {
+			const res = await loading.track(fetch('/api/todo/groups', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ name: newGroup })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add group.');
 			newGroup = '';
@@ -203,11 +204,11 @@
 			return;
 		}
 		try {
-			const res = await fetch(`/api/todo/groups/${g.id}`, {
+			const res = await loading.track(fetch(`/api/todo/groups/${g.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ name: renameText })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to rename group.');
 			renaming = null;
@@ -219,7 +220,7 @@
 
 	async function deleteGroup(g: TodoGroup) {
 		try {
-			const res = await fetch(`/api/todo/groups/${g.id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/todo/groups/${g.id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete group.');
 			confirmingGroup = null;
 			await loadGroups();
@@ -231,11 +232,11 @@
 	async function addItem() {
 		if (!activeGroup || !newItem.trim()) return;
 		try {
-			const res = await fetch(`/api/todo/groups/${activeGroup}/items`, {
+			const res = await loading.track(fetch(`/api/todo/groups/${activeGroup}/items`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ content: newItem })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add item.');
 			newItem = '';
@@ -254,11 +255,11 @@
 
 	async function toggleItem(item: TodoItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ done: !item.done })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
 			if (!d.item) throw new Error(d?.error ?? 'The server answered without the item.');
@@ -271,11 +272,11 @@
 
 	async function progressItem(item: TodoItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ inProgress: !item.inProgress })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
 			if (!d.item) throw new Error(d?.error ?? 'The server answered without the item.');
@@ -305,11 +306,11 @@
 		}
 		const target = editGroup && editGroup !== item.group_id ? editGroup : null;
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(target ? { content: editText, group_id: target } : { content: editText })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save item.');
 			editing = null;
@@ -329,7 +330,7 @@
 
 	async function deleteItem(item: TodoItem) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, { method: 'DELETE' });
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, { method: 'DELETE' }));
 			if (!res.ok) throw new Error('Failed to delete item.');
 			confirmingItem = null;
 			items = items.filter((x) => x.id !== item.id);
@@ -342,11 +343,11 @@
 	async function persistOrder(ids: string[]) {
 		if (!activeGroup) return;
 		try {
-			const res = await fetch(`/api/todo/groups/${activeGroup}/items`, {
+			const res = await loading.track(fetch(`/api/todo/groups/${activeGroup}/items`, {
 				method: 'PUT',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ ids })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to reorder.');
 			items = Array.isArray(d.items) ? d.items : items;
@@ -529,11 +530,11 @@
 
 	async function persistGroupOrder(ids: string[]) {
 		try {
-			const res = await fetch('/api/todo/groups', {
+			const res = await loading.track(fetch('/api/todo/groups', {
 				method: 'PUT',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ ids })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to reorder.');
 			groups = Array.isArray(d.groups) ? d.groups : groups;
@@ -544,11 +545,11 @@
 
 	async function moveItemToGroup(item: TodoItem, group: TodoGroup) {
 		try {
-			const res = await fetch(`/api/todo/items/${item.id}`, {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ group_id: group.id })
-			});
+			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to move item.');
 			moveConfirm = null;

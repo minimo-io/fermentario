@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import NavigationLoader from '$lib/components/NavigationLoader.svelte';
 	let { children } = $props();
 </script>
 
@@ -15,3 +16,4 @@
 </svelte:head>
 
 {@render children()}
+<NavigationLoader />

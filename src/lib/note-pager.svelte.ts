@@ -1,4 +1,5 @@
 import type { Note } from '$lib/types';
+import { loading } from '$lib/loading.svelte';
 
 export const PAGE_SIZE = 50;
 
@@ -55,7 +56,7 @@ export class NotePager {
 	async open(): Promise<void> {
 		this.loading = true;
 		try {
-			this.seed(await this.request(null));
+			this.seed(await loading.track(this.request(null)));
 		} finally {
 			this.loading = false;
 		}
@@ -65,7 +66,7 @@ export class NotePager {
 		if (this.loading || !this.hasMore || !this.cursor) return;
 		this.loading = true;
 		try {
-			const page = await this.request(this.cursor);
+			const page = await loading.track(this.request(this.cursor));
 			// A tag pager appends only matching notes, so a stale or mismatched
 			// response can never mix unrelated notes into a tag page.
 			const incoming = this.tag
