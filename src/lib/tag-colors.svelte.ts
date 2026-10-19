@@ -21,6 +21,12 @@ class TagColorStore {
 		return this.loading;
 	}
 
+	/** A restore can replace the whole table, so drop the cached promise. */
+	async reload(): Promise<void> {
+		this.loading = null;
+		await this.load();
+	}
+
 	key(tag: string): TagColorKey {
 		const c = this.colors[tag];
 		return isTagColorKey(c) ? c : DEFAULT_TAG_COLOR;

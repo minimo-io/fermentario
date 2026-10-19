@@ -74,7 +74,8 @@
 		onclick={downloadDatabase}
 	>{exporting ? 'Downloading…' : 'Download database'}</a>
 	<p class="mt-1.5 text-[11px] leading-snug text-stone-400">
-		A SQLite file with your notes, tags, weekly recaps and ask history. Keep it somewhere safe.
+		A complete SQLite file of your journal: notes, tasks, principles, comments, tags, recaps and
+		questions. Keep it somewhere safe.
 	</p>
 	{#if exportErr}
 		<p class="mt-1.5 text-[11px] text-rose-600">{exportErr}</p>
@@ -97,8 +98,8 @@
 		>Restore…</button>
 	</div>
 	<p class="mt-1.5 text-[11px] leading-snug text-stone-400">
-		Replaces everything currently stored: notes, tags, weekly recaps and ask history. Download a backup
-		first if you want to keep what is here now.
+		Replaces everything currently stored: notes, tasks, principles, comments, tags, recaps, questions
+		and tag colors. Download a backup first if you want to keep what is here now.
 	</p>
 	{#if restoreErr}
 		<p class="mt-1.5 text-[11px] text-rose-600">{restoreErr}</p>

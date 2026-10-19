@@ -388,6 +388,109 @@
 			"ok": true
 		}
 	},
+	"PATCH /api/notes/[id] featured+video": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "11111111-1111-4111-8111-111111111102",
+				"content": "Fixed the broken chair in the hallway.",
+				"created_at": 1741089600000,
+				"updated_at": 1741089600000,
+				"featured": true,
+				"video": "dQw4w9WgXcQ",
+				"tags": [],
+				"commentCount": 0
+			}
+		}
+	},
+	"POST /api/notes/[id]/comments": {
+		"status": 201,
+		"body": {
+			"comment": {
+				"id": "<runtime>",
+				"note_id": "11111111-1111-4111-8111-111111111102",
+				"content": "Note comment that must survive a restore",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/todo/groups": {
+		"status": 201,
+		"body": {
+			"group": {
+				"id": "<runtime>",
+				"name": "Restore group",
+				"position": 0,
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/todo/groups/[id]/items": {
+		"status": 201,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"group_id": "<runtime>",
+				"content": "Task that must survive a restore",
+				"done": false,
+				"done_at": 0,
+				"inProgress": false,
+				"position": 0,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"commentCount": 0,
+				"subgroup": "",
+				"tags": [
+					"trip"
+				]
+			}
+		}
+	},
+	"POST /api/todo/items/[id]/comments": {
+		"status": 201,
+		"body": {
+			"comment": {
+				"id": "<runtime>",
+				"item_id": "<runtime>",
+				"content": "Task comment that must survive a restore",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/principles": {
+		"status": 201,
+		"body": {
+			"principle": {
+				"id": "<runtime>",
+				"content": "Principle that must survive a restore",
+				"position": 0,
+				"created_at": "<runtime>",
+				"video": "",
+				"tags": [
+					"trip"
+				],
+				"commentCount": 0
+			}
+		}
+	},
+	"POST /api/principles/[id]/comments": {
+		"status": 201,
+		"body": {
+			"comment": {
+				"id": "<runtime>",
+				"principle_id": "<runtime>",
+				"content": "Principle comment that must survive a restore",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"PUT /api/tags/[tag]": {
+		"status": 200,
+		"body": {
+			"tag": "garden",
+			"color": "violet"
+		}
+	},
 	"GET /api/export": {
 		"status": 200,
 		"contentType": "application/vnd.sqlite3",
@@ -396,14 +499,154 @@
 			"quickCheck": "ok",
 			"notes": 5,
 			"vectors": 5,
-			"fts": 5
+			"fts": 5,
+			"featured": 1,
+			"videos": 1,
+			"noteComments": 1,
+			"todoGroups": 1,
+			"todoItems": 1,
+			"taskComments": 1,
+			"principles": 1,
+			"principleComments": 1,
+			"tagColors": 1
 		}
 	},
 	"POST /api/import": {
-		"status": 403,
-		"contentType": null,
-		"phases": [],
+		"status": 200,
+		"contentType": "text/event-stream",
+		"phases": [
+			"uploading",
+			"validating",
+			"replacing",
+			"search",
+			"finishing"
+		],
 		"errors": [],
-		"done": null
+		"done": {
+			"notes": 5,
+			"tags": 5,
+			"recaps": 1,
+			"asks": 0,
+			"todoGroups": 1,
+			"todoItems": 1,
+			"principles": 1
+		}
+	},
+	"GET /api/notes/[id] after restore": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "11111111-1111-4111-8111-111111111102",
+				"content": "Fixed the broken chair in the hallway.",
+				"created_at": 1741089600000,
+				"updated_at": 1741089600000,
+				"featured": true,
+				"video": "dQw4w9WgXcQ",
+				"tags": [],
+				"commentCount": 1
+			}
+		}
+	},
+	"GET /api/notes/[id]/comments after restore": {
+		"status": 200,
+		"body": {
+			"comments": [
+				{
+					"id": "<runtime>",
+					"note_id": "11111111-1111-4111-8111-111111111102",
+					"content": "Note comment that must survive a restore",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/todo/groups after restore": {
+		"status": 200,
+		"body": {
+			"groups": [
+				{
+					"id": "<runtime>",
+					"name": "Restore group",
+					"position": 0,
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/todo/groups/[id]/items after restore": {
+		"status": 200,
+		"body": {
+			"items": [
+				{
+					"id": "<runtime>",
+					"group_id": "<runtime>",
+					"content": "Task that must survive a restore",
+					"done": false,
+					"done_at": 0,
+					"inProgress": false,
+					"position": 0,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"commentCount": 1,
+					"subgroup": "",
+					"tags": [
+						"trip"
+					]
+				}
+			]
+		}
+	},
+	"GET /api/todo/items/[id]/comments after restore": {
+		"status": 200,
+		"body": {
+			"comments": [
+				{
+					"id": "<runtime>",
+					"item_id": "<runtime>",
+					"content": "Task comment that must survive a restore",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/principles after restore": {
+		"status": 200,
+		"body": {
+			"principles": [
+				{
+					"id": "<runtime>",
+					"content": "Principle that must survive a restore",
+					"position": 0,
+					"created_at": "<runtime>",
+					"video": "",
+					"comment_count": 1,
+					"tags": [
+						"trip"
+					],
+					"commentCount": 1
+				}
+			]
+		}
+	},
+	"GET /api/principles/[id]/comments after restore": {
+		"status": 200,
+		"body": {
+			"comments": [
+				{
+					"id": "<runtime>",
+					"principle_id": "<runtime>",
+					"content": "Principle comment that must survive a restore",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/tags after restore": {
+		"status": 200,
+		"body": {
+			"colors": {
+				"garden": "violet"
+			}
+		}
 	}
 }

@@ -111,7 +111,9 @@ Do not introduce a new spacing value without checking this table first.
 - **Accent**: `amber-400/50` for the weekly recap and processing states.
 - **Video**: notes and principles can carry a YouTube video, marked with a
   `red-600` pill (the brand red — the one deliberate exception to the palette).
-  The pill toggles the click-to-load embed below it.
+  The pill toggles the click-to-load embed below it. On a principle card the
+  pill sits at the right edge from `sm` up, matching the tags and comment pill;
+  on mobile it stays left.
 
 ## Typography
 
@@ -153,7 +155,7 @@ Pick an existing size instead of inventing a new one:
 - Day headers in the timeline show `Today` / `Yesterday` as English literals and
   older days in the configured language's format (`Intl` output only, no
   hand-written translations).
-- The heatmap packs the year's days seven per column from 1 January, so the grid
-  is one rectangle with any slack at the bottom right.
+- The heatmap packs the year backwards, seven per column from 31 December, so
+  the newest days sit at the top left and any slack is at the bottom right.
 - Tag chips are links to `/tags/<tag>`; when a removal handler is present they
   also carry a hover `×` that asks for confirmation.

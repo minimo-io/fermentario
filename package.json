@@ -1,11 +1,12 @@
 {
 	"name": "fermentario",
 	"private": true,
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"start": "node scripts/start.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -34,5 +35,9 @@
 		"@huggingface/transformers": "^4.3.0",
 		"@lucide/svelte": "^1.47.0",
 		"better-sqlite3": "^13.0.3"
+	},
+	"allowScripts": {
+		"onnxruntime-node@1.30.0": true,
+		"protobufjs@7.6.6": true
 	}
 }

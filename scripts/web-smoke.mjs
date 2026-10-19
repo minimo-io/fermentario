@@ -86,6 +86,11 @@ const child = spawn(process.execPath, ['--unhandled-rejections=warn', join(ROOT,
 		...process.env,
 		PORT: String(port),
 		HOST: '127.0.0.1',
+		// adapter-node defaults the request origin to https. Without this the
+		// form POST below fails the CSRF check and the restore path is never run.
+		ORIGIN: base,
+		// Match scripts/start.mjs so the restore route can accept a real backup.
+		BODY_SIZE_LIMIT: '110M',
 		TZ: 'UTC',
 		FERMENTARIO_DATA_DIR: dataDir,
 		FERMENTARIO_MODEL_CACHE: modelCache,
@@ -256,6 +261,79 @@ if (!askId) {
 }
 await api('DELETE /api/asks/[id]', `/api/asks/${askId}`, { method: 'DELETE' });
 
+// --- Data that must survive the export/import round trip -------------------
+// The fixture has notes only. Create one row in every other section so a
+// restore that silently skips a table fails the checks below.
+const noteIdForComment = page1.body.notes[0].id;
+const flagged = await api(
+	'PATCH /api/notes/[id] featured+video',
+	`/api/notes/${noteIdForComment}`,
+	json({ featured: true, video: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }, 'PATCH')
+);
+must(
+	'PATCH /api/notes/[id] featured+video',
+	flagged,
+	(r) => r.status === 200 && r.body.note?.featured === true && r.body.note?.video === 'dQw4w9WgXcQ',
+	'200 with a featured note and a video id'
+);
+
+const noteComment = await api(
+	'POST /api/notes/[id]/comments',
+	`/api/notes/${noteIdForComment}/comments`,
+	json({ content: 'Note comment that must survive a restore' })
+);
+must('POST /api/notes/[id]/comments', noteComment, (r) => r.status === 201, '201');
+volatile.add(noteComment.body.comment.id);
+volatile.add(noteComment.body.comment.created_at);
+
+const group = await api('POST /api/todo/groups', '/api/todo/groups', json({ name: 'Restore group' }));
+must('POST /api/todo/groups', group, (r) => r.status === 201 && !!r.body.group, '201 with a group');
+const groupId = group.body.group.id;
+volatile.add(groupId);
+volatile.add(group.body.group.created_at);
+
+const item = await api(
+	'POST /api/todo/groups/[id]/items',
+	`/api/todo/groups/${groupId}/items`,
+	json({ content: 'Task that must survive a restore #trip' })
+);
+must('POST /api/todo/groups/[id]/items', item, (r) => r.status === 201 && !!r.body.item, '201 with an item');
+const itemId = item.body.item.id;
+volatile.add(itemId);
+volatile.add(item.body.item.created_at);
+volatile.add(item.body.item.updated_at);
+
+const taskComment = await api(
+	'POST /api/todo/items/[id]/comments',
+	`/api/todo/items/${itemId}/comments`,
+	json({ content: 'Task comment that must survive a restore' })
+);
+must('POST /api/todo/items/[id]/comments', taskComment, (r) => r.status === 201, '201');
+volatile.add(taskComment.body.comment.id);
+volatile.add(taskComment.body.comment.created_at);
+
+const principle = await api(
+	'POST /api/principles',
+	'/api/principles',
+	json({ content: 'Principle that must survive a restore #trip' })
+);
+must('POST /api/principles', principle, (r) => r.status === 201 && !!r.body.principle, '201 with a principle');
+const principleId = principle.body.principle.id;
+volatile.add(principleId);
+volatile.add(principle.body.principle.created_at);
+
+const principleComment = await api(
+	'POST /api/principles/[id]/comments',
+	`/api/principles/${principleId}/comments`,
+	json({ content: 'Principle comment that must survive a restore' })
+);
+must('POST /api/principles/[id]/comments', principleComment, (r) => r.status === 201, '201');
+volatile.add(principleComment.body.comment.id);
+volatile.add(principleComment.body.comment.created_at);
+
+const color = await api('PUT /api/tags/[tag]', '/api/tags/garden', json({ color: 'violet' }, 'PUT'));
+must('PUT /api/tags/[tag]', color, (r) => r.status === 200 && r.body.color === 'violet', '200 with violet');
+
 // --- Export / import round trip -------------------------------------------
 const exported = await fetch(`${base}/api/export`);
 const bytes = Buffer.from(await exported.arrayBuffer());
@@ -267,11 +345,21 @@ writeFileSync(exportedPath, bytes);
 let exportCheck;
 try {
 	const d = new Database(exportedPath, { readonly: true });
+	const count = (table) => d.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get().c;
 	exportCheck = {
 		quickCheck: d.pragma('quick_check', { simple: true }),
-		notes: d.prepare('SELECT COUNT(*) AS c FROM notes').get().c,
-		vectors: d.prepare('SELECT COUNT(*) AS c FROM note_vectors').get().c,
-		fts: d.prepare('SELECT COUNT(*) AS c FROM notes_fts').get().c
+		notes: count('notes'),
+		vectors: count('note_vectors'),
+		fts: count('notes_fts'),
+		featured: d.prepare('SELECT COUNT(*) AS c FROM notes WHERE featured = 1').get().c,
+		videos: d.prepare("SELECT COUNT(*) AS c FROM notes WHERE video != ''").get().c,
+		noteComments: count('note_comments'),
+		todoGroups: count('todo_groups'),
+		todoItems: count('todo_items'),
+		taskComments: count('task_comments'),
+		principles: count('principles'),
+		principleComments: count('principle_comments'),
+		tagColors: count('tag_colors')
 	};
 	d.close();
 } catch (e) {
@@ -319,6 +407,110 @@ results.push([
 		done: events.find((e) => e.done)?.counts ?? null
 	}
 ]);
+must(
+	'POST /api/import',
+	{
+		status: imported.status,
+		body: {
+			errors: events.filter((e) => e.error).map((e) => e.error),
+			done: events.find((e) => e.done)?.counts ?? null
+		}
+	},
+	(r) =>
+		r.status === 200 &&
+		r.body.errors.length === 0 &&
+		r.body.done?.todoGroups === 1 &&
+		r.body.done?.todoItems === 1 &&
+		r.body.done?.principles === 1,
+	'200 with a count for every restored section'
+);
+
+// Read back every section through the API. The counts above prove the rows
+// were copied; these checks prove the UI can see them.
+const restoredNote = await api(
+	'GET /api/notes/[id] after restore',
+	`/api/notes/${noteIdForComment}`
+);
+must(
+	'GET /api/notes/[id] after restore',
+	restoredNote,
+	(r) => r.status === 200 && r.body.note?.featured === true && r.body.note?.video === 'dQw4w9WgXcQ',
+	'a featured note with its video'
+);
+
+const restoredNoteComments = await api(
+	'GET /api/notes/[id]/comments after restore',
+	`/api/notes/${noteIdForComment}/comments`
+);
+must(
+	'GET /api/notes/[id]/comments after restore',
+	restoredNoteComments,
+	(r) => r.body.comments?.some((c) => c.content === 'Note comment that must survive a restore'),
+	'the note comment'
+);
+
+const restoredGroups = await api('GET /api/todo/groups after restore', '/api/todo/groups');
+must(
+	'GET /api/todo/groups after restore',
+	restoredGroups,
+	(r) => r.body.groups?.some((g) => g.id === groupId && g.name === 'Restore group'),
+	'the todo group'
+);
+
+const restoredItems = await api(
+	'GET /api/todo/groups/[id]/items after restore',
+	`/api/todo/groups/${groupId}/items`
+);
+must(
+	'GET /api/todo/groups/[id]/items after restore',
+	restoredItems,
+	(r) =>
+		r.body.items?.some(
+			(i) => i.id === itemId && i.content === 'Task that must survive a restore' && i.tags.includes('trip')
+		),
+	'the todo item and its tag'
+);
+
+const restoredTaskComments = await api(
+	'GET /api/todo/items/[id]/comments after restore',
+	`/api/todo/items/${itemId}/comments`
+);
+must(
+	'GET /api/todo/items/[id]/comments after restore',
+	restoredTaskComments,
+	(r) => r.body.comments?.some((c) => c.content === 'Task comment that must survive a restore'),
+	'the task comment'
+);
+
+const restoredPrinciples = await api('GET /api/principles after restore', '/api/principles');
+must(
+	'GET /api/principles after restore',
+	restoredPrinciples,
+	(r) =>
+		r.body.principles?.some(
+			(p) => p.id === principleId && p.content === 'Principle that must survive a restore' && p.tags.includes('trip')
+		),
+	'the principle and its tag'
+);
+
+const restoredPrincipleComments = await api(
+	'GET /api/principles/[id]/comments after restore',
+	`/api/principles/${principleId}/comments`
+);
+must(
+	'GET /api/principles/[id]/comments after restore',
+	restoredPrincipleComments,
+	(r) => r.body.comments?.some((c) => c.content === 'Principle comment that must survive a restore'),
+	'the principle comment'
+);
+
+const restoredColors = await api('GET /api/tags after restore', '/api/tags');
+must(
+	'GET /api/tags after restore',
+	restoredColors,
+	(r) => r.status === 200 && r.body.colors?.garden === 'violet',
+	'the tag color'
+);
 
 stop();
 

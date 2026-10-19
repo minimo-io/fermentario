@@ -5,7 +5,9 @@
 
 Boots the production build (`node build`) on a temporary port against a copy of
 the frozen fixture, exercises every page and every API route, and compares the
-result with `tests/baseline/web.json`. 27 checks.
+result with `tests/baseline/web.json`. 47 checks. The export/import round trip
+creates one row in every section, restores the exported file, and reads every
+section back through the API.
 
 | Command | What it does |
 | --- | --- |
@@ -20,6 +22,15 @@ Rules that keep it a real gate:
 - The model cache is an empty temp directory, so no 488 MB model loads.
 - Runtime values — fresh UUIDs, fresh timestamps, the temp path — are masked once at serialization time.
 - A changed set of check names is a failure. The golden is not silently rewritten.
+
+## `pnpm start` — production server
+`node scripts/start.mjs`
+
+Sets `BODY_SIZE_LIMIT=110M` (unless the deployment already sets it) and then
+loads `build/index.js`. adapter-node's 512 KB default rejects a real database
+restore before the route can run. `ORIGIN` is still deployment-specific: set it
+when the app runs over plain HTTP behind a proxy, or the import form fails the
+CSRF origin check.
 
 ## `pnpm run fixture` — frozen test database
 `node scripts/make-fixture.mjs [output-path]`

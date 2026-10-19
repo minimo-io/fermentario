@@ -61,13 +61,13 @@
 		)
 	);
 
-	/** One rectangle for the year: the days in calendar order, seven per
-	 *  column, starting flush at the top left with 1 January. Calendar-weekday
+	/** One rectangle for the year: the days in reverse calendar order, seven per
+	 *  column, starting flush at the top left with 31 December. Calendar-weekday
 	 *  alignment is deliberately dropped: it needs the first column to start with
-	 *  days from December, which left a cut-out corner. A year is not a multiple
+	 *  days from January, which left a cut-out corner. A year is not a multiple
 	 *  of seven, so the last column is short and the slack sits at the bottom
-	 *  right. The label array holds one month name per month, in the column that
-	 *  contains the first of that month, which is what aligns the row above. */
+	 *  right. The label array holds one month name per month, in the first column
+	 *  of that month in reading order, which is what aligns the row above. */
 	const grid = $derived.by(() => {
 		const days: Cell[] = [];
 		const cursor = new Date(year, 0, 1);
@@ -79,6 +79,8 @@
 			days.push({ key, date: new Date(cursor), count: counts.get(key) ?? 0, future: key > todayKey });
 			cursor.setDate(cursor.getDate() + 1);
 		}
+		// Newest first, so December sits on the left and January on the right.
+		days.reverse();
 
 		const columns: (Cell | null)[][] = [];
 		const labels: (string | null)[] = [];

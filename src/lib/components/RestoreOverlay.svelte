@@ -17,7 +17,7 @@
 	const STEPS: { id: RestorePhase; label: string }[] = [
 		{ id: 'uploading', label: 'Uploading the file' },
 		{ id: 'validating', label: 'Checking the database' },
-		{ id: 'replacing', label: 'Replacing notes, tags, recaps and questions' },
+		{ id: 'replacing', label: 'Replacing notes, tasks, principles, comments and tag colors' },
 		{ id: 'search', label: 'Rebuilding search' },
 		{ id: 'finishing', label: 'Finishing' }
 	];

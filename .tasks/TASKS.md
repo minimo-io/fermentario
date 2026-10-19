@@ -1,5 +1,6 @@
 # Tasks
 
+- 034 [DONE] Restore every journal table
 - 033 [DONE] Unified config button and tabbed modal
 - 032 [DONE] Single note view
 - 031 [DONE] YouTube reference on a note

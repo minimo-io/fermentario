@@ -1256,3 +1256,34 @@
   (`button[aria-label="…"]:visible`) rather than positional picks. A tab
   switcher may also hide section content until its `role="tab"` is
   clicked; verify scripts must drive the visible tab bar.
+
+## Session: Restore every journal table (task 034)
+- Export streams the WHOLE database file, so every table is already in a backup.
+  Restore must mirror that set. Copying only notes, tags, vectors, recaps and
+  asks silently left To-Do groups/items, principles, comments and tag colors
+  behind. The mismatch was invisible because the restore "succeeded".
+- Copy parents before children and rely on `foreign_keys = ON` for cascades:
+  notes own tags/vectors/comments, todo_items own tags/task comments,
+  principles own tags/comments. `notes_fts` has no foreign key, so delete and
+  rebuild it explicitly.
+- Old exports may lack later tables or columns. Inspect the uploaded connection
+  with `PRAGMA table_info` and select literal defaults (`0`, `''`) for missing
+  columns. Copy a table only when the upload has it; leave live sections
+  untouched when the backup cannot represent them.
+- A golden result of 403 for `POST /api/import` means the restore path was never
+  tested. adapter-node defaults the request origin to `https` when `ORIGIN` is
+  unset, so the plain-HTTP smoke test failed CSRF. Set `ORIGIN` to the test base
+  and assert the phases plus the restored rows, not only the status.
+- Tag colors cache their first fetch in a module-level promise. After a restore
+  replaces `tag_colors`, call `reload()`; otherwise the new colors stay hidden
+  until a full page reload.
+- adapter-node's default `BODY_SIZE_LIMIT` is 512 KB. A real 1.2 MB backup was
+  rejected before the import route ran. `scripts/start.mjs` sets 110 MB before
+  loading the build; the route still enforces its own 100 MB check. Test the
+  restore with a database larger than 512 KB, not only the small fixture.
+
+## Session: Heatmap reverse chronological order
+- Reversing only the columns leaves time running forwards inside each column and
+  puts month labels at the right edge of their blocks. Reverse the flat day list
+  before packing it seven per column, so time runs newest-to-oldest both across
+  and down. The short final column stays at the bottom right.

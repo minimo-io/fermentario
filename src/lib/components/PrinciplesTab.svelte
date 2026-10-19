@@ -281,7 +281,7 @@
 					<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(p)}</div>
 				{/if}
 				{#if p.video}
-					<div class="mt-2"><VideoPill id={p.video} /></div>
+					<div class="mt-2 text-left sm:text-right"><VideoPill id={p.video} /></div>
 				{/if}
 			</li>
 		{/each}

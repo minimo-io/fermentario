@@ -140,7 +140,15 @@ function langTag(p: Lang): string {
 	let restoreError = $state('');
 	let restoreElapsed = $state(0);
 	let restoreTimer: ReturnType<typeof setInterval> | undefined;
-	type RestoreCounts = { notes: number; tags: number; recaps: number; asks: number };
+	type RestoreCounts = {
+		notes: number;
+		tags: number;
+		recaps: number;
+		asks: number;
+		todoGroups: number;
+		todoItems: number;
+		principles: number;
+	};
 
 	function closeRestore() {
 		restorePhase = null;
@@ -210,9 +218,10 @@ function langTag(p: Lang): string {
 			}
 			await pager.open();
 			await loadAsks();
+			await tagColors.reload();
 			refreshSummaryAnswer(true, null, true);
 			showToast(
-				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.tags ?? 0} tags, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
+				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
 				'success'
 			);
 			setTimeout(closeRestore, 2500);

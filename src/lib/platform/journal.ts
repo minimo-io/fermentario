@@ -564,7 +564,14 @@ export function createJournal(db: SqlDb) {
 		const done = patch.done !== undefined ? (patch.done ? 1 : 0) : existing.done;
 		const now = Math.max(Date.now(), existing.created_at + 1);
 		const doneAt = patch.done !== undefined ? (patch.done ? now : 0) : (existing.done_at ?? 0);
-		const inProgress = patch.inProgress !== undefined ? (patch.inProgress ? 1 : 0) : (existing.in_progress ?? 0);
+		// Completing a task always ends its in-progress state.
+		const inProgress = done
+			? 0
+			: patch.inProgress !== undefined
+				? patch.inProgress
+					? 1
+					: 0
+				: (existing.in_progress ?? 0);
 		const subgroup = patch.subgroup !== undefined ? patch.subgroup : (existing.subgroup ?? '');
 		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, in_progress = ?, subgroup = ?, group_id = ?, position = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, inProgress, subgroup, groupId, position, now, id);
 		return getTodoItem(id);
@@ -596,7 +603,7 @@ export function createJournal(db: SqlDb) {
 				`SELECT i.*, g.name AS group_name,
 					(SELECT COUNT(*) FROM task_comments c WHERE c.item_id = i.id) AS comment_count
 				 FROM todo_items i JOIN todo_groups g ON g.id = i.group_id
-				 WHERE i.in_progress = 1 ORDER BY i.updated_at DESC, i.id DESC`
+				 WHERE i.in_progress = 1 AND i.done = 0 ORDER BY i.updated_at DESC, i.id DESC`
 			)
 			.all() as unknown as (TodoItemRow & { group_name: string })[];
 		const tags = tagsByItem(rows);

@@ -67,6 +67,8 @@ if (!itemCols.some((c) => c.name === 'in_progress')) {
 if (!itemCols.some((c) => c.name === 'subgroup')) {
 	db.exec("ALTER TABLE todo_items ADD COLUMN subgroup TEXT NOT NULL DEFAULT ''");
 }
+// Older data could mark an item done without clearing its in-progress flag.
+db.exec('UPDATE todo_items SET in_progress = 0 WHERE done = 1 AND in_progress = 1');
 
 const principleCols = db.prepare('PRAGMA table_info(principles)').all() as { name: string }[];
 if (!principleCols.some((c) => c.name === 'video')) {

@@ -263,6 +263,7 @@
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update item.');
 			if (!d.item) throw new Error(d?.error ?? 'The server answered without the item.');
 			items = items.map((x) => (x.id === item.id ? d.item : x));
+			void loadProgress();
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to update item.');
 		}
