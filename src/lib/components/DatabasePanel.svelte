@@ -69,50 +69,50 @@
 	<a
 		href="/api/export"
 		download="fermentario-{new Date().toISOString().slice(0, 10)}.db"
-		class="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 {exporting ? 'opacity-60' : ''}"
+		class="inline-flex items-center gap-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {exporting ? 'opacity-60' : ''}"
 		aria-disabled={exporting}
 		onclick={downloadDatabase}
 	>{exporting ? 'Downloading…' : 'Download database'}</a>
-	<p class="mt-1.5 text-[11px] leading-snug text-stone-400">
+	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
 		A complete SQLite file of your journal: notes, tasks, principles, comments, tags, recaps and
 		questions. Keep it somewhere safe.
 	</p>
 	{#if exportErr}
-		<p class="mt-1.5 text-[11px] text-rose-600">{exportErr}</p>
+		<p class="mt-1.5 text-[11px] text-rose-600 dark:text-rose-400">{exportErr}</p>
 	{/if}
 </div>
 
-<div class="mt-4 border-t border-stone-200 pt-4">
-	<p class="text-xs font-medium text-stone-500">Restore from database</p>
+<div class="mt-4 border-t border-stone-200 dark:border-stone-800 pt-4">
+	<p class="text-xs font-medium text-stone-500 dark:text-stone-400">Restore from database</p>
 	<div class="mt-2 flex flex-wrap items-center gap-2">
 		<input
 			id="restore-file"
 			type="file"
 			accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3"
-			class="max-w-full text-[11px] text-stone-500 file:mr-2 file:rounded-full file:border file:border-stone-300 file:bg-white file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-stone-600 hover:file:bg-stone-100"
+			class="max-w-full text-[11px] text-stone-500 dark:text-stone-400 file:mr-2 file:rounded-full file:border file:border-stone-300 dark:file:border-stone-700 file:bg-white dark:file:bg-stone-900 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-stone-600 dark:file:text-stone-300 hover:file:bg-stone-100 dark:hover:file:bg-stone-800"
 		/>
 		<button
 			type="button"
-			class="rounded-full border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+			class="rounded-full border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50"
 			onclick={askRestore}
 		>Restore…</button>
 	</div>
-	<p class="mt-1.5 text-[11px] leading-snug text-stone-400">
+	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
 		Replaces everything currently stored: notes, tasks, principles, comments, tags, recaps, questions
 		and tag colors. Download a backup first if you want to keep what is here now.
 	</p>
 	{#if restoreErr}
-		<p class="mt-1.5 text-[11px] text-rose-600">{restoreErr}</p>
+		<p class="mt-1.5 text-[11px] text-rose-600 dark:text-rose-400">{restoreErr}</p>
 	{/if}
 </div>
 
-<div class="mt-4 border-t border-stone-200 pt-4">
+<div class="mt-4 border-t border-stone-200 dark:border-stone-800 pt-4">
 	<a
 		href="/diagnostics"
-		class="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+		class="inline-flex items-center gap-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 		>Diagnostics</a
 	>
-	<p class="mt-1.5 text-[11px] leading-snug text-stone-400">
+	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
 		What this device supports: cross-origin isolation, WebGPU, speech, storage. Copy the report when
 		reporting a problem.
 	</p>

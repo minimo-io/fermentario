@@ -1,13 +1,22 @@
 @import 'tailwindcss';
 
+/* Theme choice lives in the config modal. Tailwind's native `dark:` variant
+   follows the `dark` class on <html>, applied before first paint from
+   localStorage or the operating-system preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @plugin 'daisyui';
 
 :root {
 	color-scheme: light;
 }
 
+html.dark {
+	color-scheme: dark;
+}
+
 body {
-	@apply bg-base-100 text-base-content antialiased;
+	@apply bg-white text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
 }
 
 @layer base {

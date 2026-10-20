@@ -240,13 +240,13 @@
 </script>
 
 {#if summaryLoading}
-	<div class="mb-2 px-2 py-1 text-xs text-amber-600">Building your weekly recap…</div>
+	<div class="mb-2 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">Building your weekly recap…</div>
 {/if}
 
 {#snippet commentPill(n: Note)}
 	<button
 		type="button"
-		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 hover:bg-stone-200"
+		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
 		aria-haspopup="dialog"
 		aria-label="Comments on this note"
 		onclick={() => (commenting = n)}
@@ -256,24 +256,24 @@
 {#each dayGroups as group (group.day)}
 	<section class="mb-4">
 		<h2
-			class="mb-1 text-xs font-medium tracking-widest text-stone-400"
+			class="mb-1 text-xs font-medium tracking-widest text-stone-400 dark:text-stone-500"
 			title={group.title}
 		>{group.label}</h2>
 		<ul class="space-y-3">
 			{#each group.items as n (n.id)}
 				<li>
 					<div
-						class="relative flex items-start gap-3 rounded-2xl border bg-white/70 px-4 py-3 max-sm:flex-col max-sm:gap-1 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80'}"
+						class="relative flex items-start gap-3 rounded-2xl border bg-white/70 dark:bg-stone-900/70 px-4 py-3 max-sm:flex-col max-sm:gap-1 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80 dark:border-stone-800/80'}"
 						aria-busy={n.pending ? 'true' : undefined}
 					>
-						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 hover:text-stone-600 focus-visible:bg-stone-100 focus-visible:text-stone-600 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
+						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
 						<div class="flex min-w-0 flex-1 items-start gap-3 max-sm:w-full">
 						<div class="min-w-0 flex-1">
 							{#if n.id in collapsed}
 								<button
 									type="button"
 									bind:this={textEls[n.id]}
-									class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 line-clamp-1"
+									class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 line-clamp-1"
 									aria-expanded="false"
 									onclick={() => toggleFolded(n.id)}
 								>
@@ -283,14 +283,14 @@
 								<button
 									type="button"
 									bind:this={textEls[n.id]}
-									class="block w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800"
+									class="block w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200"
 									aria-expanded="true"
 									onclick={() => toggleFolded(n.id)}
 								>
 									{@html inlineMarkdown(n.content)}
 								</button>
 							{:else}
-								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{@html inlineMarkdown(n.content)}</p>
+								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(n.content)}</p>
 							{/if}
 							{#if n.video}
 								<div class="mt-2"><VideoPill id={n.video} /></div>
@@ -308,7 +308,7 @@
 							{/if}
 							{#if n.updated_at > n.created_at}
 								<div
-									class="mt-1 text-left text-[10px] uppercase tracking-wide text-stone-400 sm:text-right"
+									class="mt-1 text-left text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500 sm:text-right"
 									title={new Date(n.updated_at).toLocaleString(locale, {
 										day: 'numeric',
 										month: 'short',
@@ -328,11 +328,11 @@
 							<div class="ml-auto max-sm:hidden">{@render commentPill(n)}</div>
 						{/if}
 						{#if n.pending}
-							<LoaderCircle class="max-sm:absolute max-sm:top-1 max-sm:right-2 mt-0.5 h-5 w-5 shrink-0 animate-spin text-stone-400" aria-label="Saving" />
+							<LoaderCircle class="max-sm:absolute max-sm:top-1 max-sm:right-2 mt-0.5 h-5 w-5 shrink-0 animate-spin text-stone-400 dark:text-stone-500" aria-label="Saving" />
 						{:else}
 							<button
 								type="button"
-								class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600"
+								class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 dark:max-sm:bg-stone-900/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
 								aria-label="Note actions"
 								onclick={() => (menuNote = n)}
 							>
@@ -351,7 +351,7 @@
 	<div class="flex justify-center pb-2">
 		<button
 			type="button"
-			class="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-100 disabled:opacity-60"
+			class="inline-flex items-center gap-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-2 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-60"
 			disabled={loadingMore}
 			onclick={() => onLoadMore()}
 		>

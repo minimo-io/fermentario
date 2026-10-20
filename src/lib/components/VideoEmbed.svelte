@@ -25,13 +25,13 @@
 		href={youTubeWatchUrl(id)}
 		target="_blank"
 		rel="noopener noreferrer"
-		class="relative block aspect-video w-full overflow-hidden rounded-xl bg-stone-100"
+		class="relative block aspect-video w-full overflow-hidden rounded-xl bg-stone-100 dark:bg-stone-800"
 		aria-label="Play video"
 		onclick={(e) => { e.preventDefault(); loaded = true; }}
 	>
 		<img src={youTubeThumbnailUrl(id)} alt="" class="h-full w-full object-cover" loading="lazy" />
 		<span class="absolute inset-0 grid place-items-center">
-			<span class="grid h-12 w-12 place-items-center rounded-full bg-stone-900/80 text-white"><Play class="h-5 w-5 fill-current" /></span>
+			<span class="grid h-12 w-12 place-items-center rounded-full bg-stone-900/80 dark:bg-black/60 text-white"><Play class="h-5 w-5 fill-current" /></span>
 		</span>
 	</a>
 {/if}

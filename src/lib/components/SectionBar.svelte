@@ -89,7 +89,7 @@
 			role="tab"
 			data-section={s.id}
 			aria-selected={active === s.id}
-			class="inline-flex shrink-0 snap-start items-center rounded-full px-4 py-1.5 text-sm font-medium select-none {active === s.id ? 'bg-stone-900 text-white' : 'text-stone-500 hover:bg-stone-100'} {dragId === s.id ? 'opacity-40' : ''} {dragId && overId === s.id && dragId !== s.id ? 'ring-1 ring-stone-900' : ''}"
+			class="inline-flex shrink-0 snap-start items-center rounded-full px-4 py-1.5 text-sm font-medium select-none {active === s.id ? 'bg-stone-900 dark:bg-stone-700 text-white' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'} {dragId === s.id ? 'opacity-40' : ''} {dragId && overId === s.id && dragId !== s.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
 			style={dragId ? 'touch-action: none' : ''}
 			onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) onSelect(s.id); }}
 			onpointerdown={(e) => onDown(e, s.id)}

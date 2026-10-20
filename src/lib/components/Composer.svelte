@@ -155,7 +155,7 @@
 {#snippet micButton()}
 	<button
 		type="button"
-		class="relative rounded-full p-2.5 transition-colors {listening ? 'bg-rose-600 text-white hover:bg-rose-700' : 'text-stone-500 hover:bg-stone-200'}"
+		class="relative rounded-full p-2.5 transition-colors {listening ? 'bg-rose-600 text-white hover:bg-rose-700' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'}"
 		aria-label={listening ? 'Stop dictation' : 'Dictate'}
 		aria-pressed={listening}
 		onclick={listening ? stopListening : startListening}
@@ -173,7 +173,7 @@
 	<div class="pointer-events-auto mx-auto {widthClass} px-6 pb-8">
 		{#if listening}
 			<div class="mb-2 flex items-center px-3">
-				<span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600">
+				<span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
 					<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-600 motion-reduce:animate-none"></span>
 					{listeningLabel}
 				</span>
@@ -182,11 +182,11 @@
 		{#if pendingTags.length > 0}
 			<div class="mb-2 flex flex-wrap items-center gap-1 px-3">
 				{#each pendingTags as tag (tag)}
-					<span class="rounded-full border border-dashed border-stone-300 bg-white/80 px-2 py-0.5 text-[11px] text-stone-500">#{tag}</span>
+					<span class="rounded-full border border-dashed border-stone-300 dark:border-stone-700 bg-white/80 dark:bg-stone-900/80 px-2 py-0.5 text-[11px] text-stone-500 dark:text-stone-400">#{tag}</span>
 				{/each}
 			</div>
 		{/if}
-		<div bind:this={bar} class="flex items-end gap-2 rounded-[2rem] border border-stone-200/80 bg-white/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 sm:py-3 sm:pl-5 sm:pr-3">
+		<div bind:this={bar} class="flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-white/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3">
 			{#if view === 'notes'}
 				<textarea
 					id="composer-field"
@@ -200,9 +200,9 @@
 					onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } }}
 				></textarea>
 				<div class="flex shrink-0 items-center gap-2">
-					<button class="rounded-full p-2.5 text-stone-500 hover:bg-stone-200" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
+					<button class="rounded-full p-2.5 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
 					{@render micButton()}
-					<button class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white" onclick={saveNote} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
+					<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium text-white" onclick={saveNote} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
 				</div>
 			{:else}
 				<textarea
@@ -217,14 +217,14 @@
 					onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAsk(); } }}
 				></textarea>
 				<div class="flex shrink-0 items-center gap-2">
-					<button class="rounded-full p-2.5 text-stone-500 hover:bg-stone-200" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
+					<button class="rounded-full p-2.5 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
 					{@render micButton()}
 					{#if answering}
-						<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100" onclick={onStop}>
+						<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-2 text-sm font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800" onclick={onStop}>
 							<Square class="h-3 w-3 fill-current" /> Stop
 						</button>
 					{:else}
-						<button class="shrink-0 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white" onclick={submitAsk} disabled={!question.trim()}>{answering ? '…' : 'Ask'}</button>
+						<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium text-white" onclick={submitAsk} disabled={!question.trim()}>{answering ? '…' : 'Ask'}</button>
 					{/if}
 				</div>
 			{/if}
@@ -234,7 +234,7 @@
 
 {#if expanded}
 	<div
-		class="fixed inset-0 z-40 flex flex-col bg-white"
+		class="fixed inset-0 z-40 flex flex-col bg-white dark:bg-stone-900"
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
@@ -245,30 +245,30 @@
 		<div class="mx-auto flex w-full {widthClass} items-center justify-between gap-2 px-6 pt-6">
 			<button
 				type="button"
-				class="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+				class="rounded-full border border-stone-300 dark:border-stone-700 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 				onclick={closeWide}
 			>Close</button>
 			{#if view === 'notes'}
-				<button class="shrink-0 rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { saveNote(); closeWide(); }} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
+				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { saveNote(); closeWide(); }} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
 			{:else if answering}
-				<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100" onclick={onStop}>
+				<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800" onclick={onStop}>
 					<Square class="h-3 w-3 fill-current" /> Stop
 				</button>
 			{:else}
-				<button class="shrink-0 rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { submitAsk(); closeWide(); }} disabled={!question.trim()}>Ask</button>
+				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { submitAsk(); closeWide(); }} disabled={!question.trim()}>Ask</button>
 			{/if}
 		</div>
 		{#if pendingTags.length > 0}
 			<div class="mx-auto mt-3 flex w-full {widthClass} flex-wrap items-center gap-1 px-6">
 				{#each pendingTags as tag (tag)}
-					<span class="rounded-full border border-dashed border-stone-300 bg-white px-2 py-0.5 text-[11px] text-stone-500">#{tag}</span>
+					<span class="rounded-full border border-dashed border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-2 py-0.5 text-[11px] text-stone-500 dark:text-stone-400">#{tag}</span>
 				{/each}
 			</div>
 		{/if}
 		<div class="mx-auto flex w-full {widthClass} flex-1 px-6 pb-6 pt-3">
 			<textarea
 				bind:this={wideField}
-				class="h-full w-full resize-none bg-transparent text-[15px] leading-relaxed text-stone-800 outline-none"
+				class="h-full w-full resize-none bg-transparent text-[15px] leading-relaxed text-stone-800 dark:text-stone-200 outline-none"
 				aria-label={view === 'notes' ? 'Note' : 'Question'}
 				value={wideValue}
 				oninput={(e) => onWideInput(e.currentTarget.value)}

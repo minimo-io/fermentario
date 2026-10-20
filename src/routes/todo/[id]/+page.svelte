@@ -103,29 +103,29 @@
 		<header class="mb-5">
 			<button
 				type="button"
-				class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800"
+				class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200"
 				onclick={() => { if (window.history.length > 1) window.history.back(); else goto('/'); }}
 			>
 				<ArrowLeft class="h-3.5 w-3.5" /> Back
 			</button>
 		</header>
 
-		<article class="rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3">
+		<article class="rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70 px-4 py-3">
 			<div class="flex items-start gap-2.5">
 				<button
 					type="button"
 					role="checkbox"
 					aria-checked={item.done}
 					aria-label={item.done ? 'Mark not done' : 'Mark done'}
-					class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
+					class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 					onclick={toggle}
 				><span class="text-[11px] leading-none">✓</span></button>
 				<div class="min-w-0 flex-1">
-					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}">{item.content}</p>
+					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}">{item.content}</p>
 					{#if item.inProgress}
-						<span class="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+						<span class="mt-1.5 inline-block rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 					{/if}
-					<p class="mt-1 text-[11px] tabular-nums text-stone-400">
+					<p class="mt-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
 						created {fmt(item.created_at)}{#if item.done && item.done_at} · done {fmt(item.done_at)}{/if}
 					</p>
 				</div>
@@ -141,29 +141,29 @@
 
 		<section class="mt-6" aria-label="History">
 			<div class="mb-1 flex items-center justify-between gap-2">
-				<h2 class="text-xs font-medium uppercase tracking-widest text-stone-400">History</h2>
+				<h2 class="text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">History</h2>
 				<button
 					type="button"
-					class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					aria-haspopup="dialog"
 					onclick={() => (addingComment = true)}
 				><MessageCircle class="h-3.5 w-3.5" /> Add comment</button>
 			</div>
 			{#if comments.length === 0}
-				<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500">
+				<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-6 text-center text-sm text-stone-500 dark:text-stone-400">
 					No comments yet — narrate how this task evolves.
 				</p>
 			{:else}
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
-						<li class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5">
-							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{c.content}</p>
+						<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
+							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{c.content}</p>
 							<div class="mt-1 flex items-center justify-between gap-2">
-								<span class="text-[11px] tabular-nums text-stone-400">{fmt(c.created_at)}</span>
+								<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{fmt(c.created_at)}</span>
 								<button
 									type="button"
 									aria-label="Delete comment"
-									class="shrink-0 text-stone-300 hover:text-rose-600"
+									class="shrink-0 text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-400"
 									onclick={() => (confirmingComment = c)}
 								>&times;</button>
 							</div>

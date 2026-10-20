@@ -604,7 +604,7 @@
 {#snippet commentPill(item: TodoItem | TodoProgressItem)}
 	<button
 		type="button"
-		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 hover:bg-stone-200"
+		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
 		aria-haspopup="dialog"
 		aria-label="Comments on this task"
 		onclick={() => void openCommentModal(item)}
@@ -614,7 +614,7 @@
 {#snippet itemrow(item: TodoItem)}
 				<li
 					data-item={item.id}
-					class="rounded-2xl border border-stone-200 bg-white px-3 py-2.5 select-none {dragId === item.id ? 'opacity-40' : ''} {dragId && overId === item.id && dragId !== item.id ? 'ring-1 ring-stone-900' : ''}"
+					class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2.5 select-none {dragId === item.id ? 'opacity-40' : ''} {dragId && overId === item.id && dragId !== item.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
 					style={dragId ? 'touch-action: none' : ''}
 					onpointerdown={(e) => onDown(e, item.id)}
 					onpointermove={onMove}
@@ -627,7 +627,7 @@
 							tabindex="0"
 							aria-label="Drag to reorder"
 							title="Drag to reorder"
-							class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 hover:text-stone-600 active:cursor-grabbing"
+							class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 active:cursor-grabbing"
 							onpointerdown={(e) => onDown(e, item.id, true)}
 							onkeydown={(e) => {
 								if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -645,24 +645,24 @@
 							role="checkbox"
 							aria-checked={item.done}
 							aria-label={item.done ? 'Mark not done' : 'Mark done'}
-							class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
+							class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 							onclick={() => void toggleItem(item)}
 						><span class="text-[11px] leading-none">✓</span></button>
 						{#if editing === item.id}
-							<span class="min-w-0 flex-1 text-[15px] text-stone-400">Editing…</span>
+							<span class="min-w-0 flex-1 text-[15px] text-stone-400 dark:text-stone-500">Editing…</span>
 						{:else}
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(item); }}>{item.content}</button>
+							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800 dark:text-stone-200" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(item); }}>{item.content}</button>
 							<!-- sm+: pills share the title line, right-aligned before the ⋮ -->
 							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 								{#if item.inProgress}
-									<span class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+									<span class="shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 								{/if}
 								{#each item.tags as t (t)}
 									<TagChip tag={t} />
 								{/each}
 								{@render commentPill(item)}
 							</div>
-							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
+							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 						{/if}
 					</div>
 					{#if item.inProgress || item.tags.length > 0}
@@ -670,7 +670,7 @@
 						     pill rides at the bottom-right edge of the card (ml-auto). -->
 						<div class="mt-1.5 flex flex-wrap items-start gap-1 pl-12 sm:hidden">
 							{#if item.inProgress}
-								<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+								<span class="rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 							{/if}
 							{#each item.tags as t (t)}
 								<TagChip tag={t} />
@@ -690,20 +690,20 @@
 			type="button"
 			aria-label="New group"
 			title="New group"
-			class="grid h-7 w-7 shrink-0 snap-start place-items-center rounded-full border border-dashed border-stone-300 bg-white text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+			class="grid h-7 w-7 shrink-0 snap-start place-items-center rounded-full border border-dashed border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-800 dark:hover:text-stone-200"
 			onclick={() => { newGroup = ''; addingGroup = true; }}
 		><Plus class="h-4 w-4" /></button>
 		<button
 			type="button"
 			aria-label="In-progress tasks"
 			title="In-progress tasks"
-			class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium {progressView ? 'border-stone-900 bg-stone-900 text-white' : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'}"
+			class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium {progressView ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'}"
 			onclick={openProgress}
 		><span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span> In progress ({progressItems.length})</button>
 		{#each groups as g (g.id)}
 			<span
 				data-group={g.id}
-				class="inline-flex shrink-0 snap-start select-none items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium {activeGroup === g.id && !progressView ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'} {gDragId === g.id ? 'opacity-40' : ''} {dropGroupId === g.id || (gDragId && gOverId === g.id && gDragId !== g.id) ? 'ring-1 ring-stone-900' : ''}"
+				class="inline-flex shrink-0 snap-start select-none items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium {activeGroup === g.id && !progressView ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'} {gDragId === g.id ? 'opacity-40' : ''} {dropGroupId === g.id || (gDragId && gOverId === g.id && gDragId !== g.id) ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
 				style={gDragId ? 'touch-action: none' : ''}
 			>
 				<span
@@ -711,7 +711,7 @@
 					tabindex="0"
 					aria-label="Drag to reorder {g.name}"
 					title="Drag to reorder"
-					class="cursor-grab touch-none text-stone-300 hover:text-stone-600 active:cursor-grabbing {activeGroup === g.id && !progressView ? 'text-stone-400' : ''}"
+					class="cursor-grab touch-none text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 active:cursor-grabbing {activeGroup === g.id && !progressView ? 'text-stone-400 dark:text-stone-500' : ''}"
 					onpointerdown={(e) => onGroupDown(e, g.id)}
 					onpointermove={onGroupMove}
 					onpointerup={() => endGroupDrag(true)}
@@ -738,35 +738,35 @@
 
 	{#if progressView}
 		{#if progressItems.length === 0}
-			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">Nothing in progress.</p>
+			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400">Nothing in progress.</p>
 		{:else}
 			<ul class="space-y-2">
 				{#each progressItems as item (item.id)}
-					<li class="rounded-2xl border border-stone-200 bg-white px-3 py-2.5">
+					<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2.5">
 						<div class="flex items-start gap-1.5 sm:items-center">
 							<button
 								type="button"
 								role="checkbox"
 								aria-checked={item.done}
 								aria-label={item.done ? 'Mark not done' : 'Mark done'}
-								class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
+								class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 								onclick={() => void toggleProgressViewItem(item)}
 							><span class="text-[11px] leading-none">✓</span></button>
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
+							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
 							<!-- sm+: group, status and tags share the title line, right-aligned before the ⋮ -->
 							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
-								<span class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">{item.groupName}</span>
-								<span class="inline-block shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+								<span class="shrink-0 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] text-stone-500 dark:text-stone-400">{item.groupName}</span>
+								<span class="inline-block shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 								{#each item.tags as t (t)}
 									<TagChip tag={t} />
 								{/each}
 								{@render commentPill(item)}
 							</div>
-							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuProgressItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
+							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuProgressItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 						</div>
 						<div class="mt-1.5 flex flex-wrap items-center gap-1 pl-12 sm:hidden">
-							<span class="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">{item.groupName}</span>
-							<span class="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+							<span class="rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] text-stone-500 dark:text-stone-400">{item.groupName}</span>
+							<span class="inline-block rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 							{#each item.tags as t (t)}
 								<TagChip tag={t} />
 							{/each}
@@ -785,7 +785,7 @@
 			<div class="mt-3">
 				<button
 					type="button"
-					class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					aria-expanded={!collapsed[sg]}
 					onclick={() => (collapsed[sg] = !collapsed[sg])}
 				><span aria-hidden="true">{collapsed[sg] ? '▸' : '▾'}</span> {sg} ({sgItems.length})</button>
@@ -797,35 +797,35 @@
 			</div>
 		{/each}
 		{#if openItems.length === 0 && doneItems.length === 0}
-			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">Nothing here yet.</p>
+			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400">Nothing here yet.</p>
 		{/if}
 
 		{#if doneItems.length > 0}
 			<div class="mt-4">
 				<button
 					type="button"
-					class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100"
+					class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
 					aria-expanded={doneOpen}
 					onclick={() => (doneOpen = !doneOpen)}
 				><span aria-hidden="true">{doneOpen ? '▾' : '▸'}</span> Done ({doneItems.length})</button>
 				{#if doneOpen}
 					<ul class="mt-2 space-y-2" transition:slide={{ duration: motionMs(180) }}>
 						{#each doneItems as item (item.id)}
-							<li class="rounded-2xl border border-stone-200/70 bg-white/70 px-3 py-2.5">
+							<li class="rounded-2xl border border-stone-200/70 dark:border-stone-800/70 bg-white/70 dark:bg-stone-900/70 px-3 py-2.5">
 								<div class="flex items-start gap-1.5 sm:items-center">
 									<button
 										type="button"
 										role="checkbox"
 										aria-checked={true}
 										aria-label="Mark not done"
-										class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-stone-900 bg-stone-900 text-white"
+										class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white"
 										onclick={() => void toggleItem(item)}
 									><span class="text-[11px] leading-none">✓</span></button>
-									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 line-through" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
-									<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
+									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 dark:text-stone-500 line-through" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
+									<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 								</div>
 								{#if item.done_at}
-									<p class="mt-1 pl-12 text-[11px] tabular-nums text-stone-400">
+									<p class="mt-1 pl-12 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
 										done {new Date(item.done_at).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}
 									</p>
 								{/if}
@@ -836,14 +836,14 @@
 			</div>
 		{/if}
 	{:else if groups.length === 0}
-		<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-10 text-center text-sm text-stone-500">Create a group to start your first list.</p>
+		<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400">Create a group to start your first list.</p>
 	{/if}
 </div>
 
 {#if menuProgressItem}
 	{@const pm = menuProgressItem}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Item actions"
@@ -852,30 +852,30 @@
 		onkeydown={(e) => { if (e.key === 'Escape') menuProgressItem = null; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 			<div class="px-3.5 pb-2 pt-3">
-				<h2 class="text-sm font-semibold text-stone-900">Item actions</h2>
-				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{pm.content}</p>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Item actions</h2>
+				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500 dark:text-stone-400">{pm.content}</p>
 			</div>
 			<div class="flex flex-col">
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void goto(`/todo/${item.id}`); }}
 				>Open details</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void toggleProgressViewItem(item); }}
 				>{pm.done ? 'Mark not done' : 'Mark done'}</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void progressProgressViewItem(item); }}
 				>{pm.inProgress ? 'Mark as not in progress' : 'Mark in progress'}</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
 					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void deleteProgressViewItem(item); }}
 				>Delete</button>
 			</div>
@@ -886,7 +886,7 @@
 {#if menuItem}
 	{@const m = menuItem}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Item actions"
@@ -895,35 +895,35 @@
 		onkeydown={(e) => { if (e.key === 'Escape') menuItem = null; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 			<div class="px-3.5 pb-2 pt-3">
-				<h2 class="text-sm font-semibold text-stone-900">Item actions</h2>
-				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{m.content}</p>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Item actions</h2>
+				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500 dark:text-stone-400">{m.content}</p>
 			</div>
 			<div class="flex flex-col">
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuItem; menuItem = null; if (item) void goto(`/todo/${item.id}`); }}
 				>Open details</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuItem; menuItem = null; if (item) void toggleItem(item); }}
 				>{m.done ? 'Mark not done' : 'Mark done'}</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuItem; menuItem = null; if (item) void progressItem(item); }}
 				>{m.inProgress ? 'Mark as not in progress' : 'Mark in progress'}</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const item = menuItem; menuItem = null; if (item) openEdit(item); }}
 				>Edit</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
 					onclick={() => { const item = menuItem; menuItem = null; if (item) confirmingItem = item; }}
 				>Delete</button>
 			</div>
@@ -934,7 +934,7 @@
 {#if menuGroup}
 	{@const g = menuGroup}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Group actions"
@@ -943,20 +943,20 @@
 		onkeydown={(e) => { if (e.key === 'Escape') menuGroup = null; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 			<div class="px-3.5 pb-2 pt-3">
-				<h2 class="text-sm font-semibold text-stone-900">Group actions</h2>
-				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{g.name}</p>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Group actions</h2>
+				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500 dark:text-stone-400">{g.name}</p>
 			</div>
 			<div class="flex flex-col">
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const grp = menuGroup; menuGroup = null; if (grp) { renaming = grp.id; renameText = grp.name; } }}
 				>Rename</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
 					onclick={() => { const grp = menuGroup; menuGroup = null; if (grp) confirmingGroup = grp; }}
 				>Delete</button>
 			</div>
@@ -966,7 +966,7 @@
 
 {#if addingGroup}
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New group"
@@ -975,11 +975,11 @@
 		onkeydown={(e) => { if (e.key === 'Escape') addingGroup = false; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-			<h2 class="text-sm font-semibold text-stone-900">New group</h2>
+		<div class="w-full max-w-xs rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">New group</h2>
 			<input
 				bind:this={groupField}
-				class="mt-3 w-full rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+				class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 				placeholder="Group name…"
 				aria-label="Group name"
 				value={newGroup}
@@ -989,12 +989,12 @@
 			<div class="mt-4 flex justify-end gap-2">
 				<button
 					type="button"
-					class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => (addingGroup = false)}
 				>Cancel</button>
 				<button
 					type="button"
-					class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800"
+					class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
 					onclick={() => void addGroup()}
 				>Create</button>
 			</div>
@@ -1006,7 +1006,7 @@
 	{@const ep = items.find((x) => x.id === editing) ?? progressItems.find((x) => x.id === editing)}
 	{#if ep}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Edit task"
@@ -1015,24 +1015,24 @@
 			onkeydown={(e) => { if (e.key === 'Escape') editing = null; }}
 			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 		>
-			<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-				<h2 class="text-sm font-semibold text-stone-900">Edit task</h2>
+			<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Edit task</h2>
 				<textarea
 					bind:this={editField}
 					rows="3"
-					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 bg-white p-3 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 					aria-label="Task text"
 					value={editText}
 					oninput={(e) => { editText = e.currentTarget.value; autosizeEdit(); }}
 					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
 				></textarea>
-				<p class="mt-1.5 text-[11px] leading-snug text-stone-400">Leading (subgroup) moves it inside the list; trailing #tags retag it.</p>
+				<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Leading (subgroup) moves it inside the list; trailing #tags retag it.</p>
 				{#if groups.length > 1}
 					<div class="mt-3">
-						<label class="block text-xs font-medium text-stone-500" for="edit-group">Group</label>
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-group">Group</label>
 						<select
 							id="edit-group"
-							class="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-stone-400"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2.5 text-sm text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
 							aria-label="Group"
 							bind:value={editGroup}
 							onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
@@ -1046,12 +1046,12 @@
 				<div class="mt-4 flex justify-end gap-2">
 					<button
 						type="button"
-						class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+						class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 						onclick={() => (editing = null)}
 					>Cancel</button>
 					<button
 						type="button"
-						class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
 						disabled={!editText.trim()}
 						onclick={() => void saveEdit(ep)}
 					>Save</button>
@@ -1065,7 +1065,7 @@
 	{@const rg = groups.find((x) => x.id === renaming)}
 	{#if rg}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Rename group"
@@ -1074,11 +1074,11 @@
 			onkeydown={(e) => { if (e.key === 'Escape') renaming = null; }}
 			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 		>
-			<div class="w-full max-w-xs rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-				<h2 class="text-sm font-semibold text-stone-900">Rename group</h2>
+			<div class="w-full max-w-xs rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Rename group</h2>
 				<input
 					bind:this={renameField}
-					class="mt-3 w-full rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+					class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 					aria-label="Group name"
 					value={renameText}
 					oninput={(e) => (renameText = e.currentTarget.value)}
@@ -1087,12 +1087,12 @@
 				<div class="mt-4 flex justify-end gap-2">
 					<button
 						type="button"
-						class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+						class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 						onclick={() => (renaming = null)}
 					>Cancel</button>
 					<button
 						type="button"
-						class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
 						disabled={!renameText.trim()}
 						onclick={() => void saveRename(rg)}
 					>Save</button>
@@ -1151,7 +1151,7 @@
 	<FixedBottomBar {widthClass}>
 		<button
 			type="button"
-			class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
+			class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
 			onclick={() => { newItem = ''; addingItem = true; }}
 			aria-keyshortcuts={isMac ? 'Meta+Shift+A' : 'Control+Shift+A'}
 		><Plus class="h-4 w-4" /> Add<Kbd keys={addShortcutKeys} tone="dark" /></button>
@@ -1160,7 +1160,7 @@
 
 {#if addingItem}
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New task"
@@ -1169,12 +1169,12 @@
 		onkeydown={(e) => { if (e.key === 'Escape') addingItem = false; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-			<h2 class="text-sm font-semibold text-stone-900">New task</h2>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">New task</h2>
 			<textarea
 				bind:this={itemField}
 				rows="3"
-				class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 bg-white p-3 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+				class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 				placeholder="Describe the task… (trailing #tags work too)"
 				aria-label="Task text"
 				value={newItem}
@@ -1184,12 +1184,12 @@
 			<div class="mt-4 flex justify-end gap-2">
 				<button
 					type="button"
-					class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => (addingItem = false)}
 				>Cancel</button>
 				<button
 					type="button"
-					class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+					class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
 					disabled={!newItem.trim()}
 					onclick={() => void addItem()}
 				>Create</button>

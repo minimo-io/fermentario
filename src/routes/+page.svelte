@@ -30,6 +30,7 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
 	import { SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
+	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
 
 	let heatmapLoading = $derived(navigating.to?.url.pathname === '/heatmap');
@@ -39,13 +40,14 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	let dismissed = $state(true);
 	let saving = $state(false);
 let showSettings = $state(false);
-let settingsTab = $state<'language' | 'models' | 'database'>('language');
+let settingsTab = $state<'general' | 'models' | 'database'>('general');
 type Lang = 'en' | 'es' | 'pt';
-type LangConfig = { modelLang: Lang; entriesLang: Lang; chatModel: string; summaryPrompt: string; sections: string[]; contentWidth: string };
-const DEFAULT_CONFIG: LangConfig = { modelLang: 'en', entriesLang: 'en', chatModel: DEFAULT_CHAT_MODEL_ID, summaryPrompt: '', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH };
+type LangConfig = { modelLang: Lang; entriesLang: Lang; chatModel: string; summaryPrompt: string; sections: string[]; contentWidth: string; theme: Theme };
+const DEFAULT_CONFIG: LangConfig = { modelLang: 'en', entriesLang: 'en', chatModel: DEFAULT_CHAT_MODEL_ID, summaryPrompt: '', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH, theme: DEFAULT_THEME };
 let config = $state<LangConfig>(DEFAULT_CONFIG);
 function saveConfig(p: Partial<LangConfig>) {
 	config = { ...config, ...p };
+	if (p.theme !== undefined) applyTheme(p.theme);
 	if (typeof localStorage !== 'undefined') localStorage.setItem('fermentario.config', JSON.stringify(config));
 }
 function langTag(p: Lang): string {
@@ -273,14 +275,17 @@ function langTag(p: Lang): string {
 	try {
 		const p = JSON.parse(raw) as Partial<LangConfig>;
 		if ((p.modelLang === 'en' || p.modelLang === 'es' || p.modelLang === 'pt') && (p.entriesLang === 'en' || p.entriesLang === 'es' || p.entriesLang === 'pt')) {
+			const theme = sanitizeTheme(p.theme);
 			config = {
 				modelLang: p.modelLang as Lang,
 				entriesLang: p.entriesLang as Lang,
 				chatModel: typeof p.chatModel === 'string' && CHAT_MODELS.some((m) => m.id === p.chatModel) ? p.chatModel : DEFAULT_CHAT_MODEL_ID,
 				summaryPrompt: typeof p.summaryPrompt === 'string' ? p.summaryPrompt : '',
 					sections: sanitizeSectionOrder(p.sections),
-					contentWidth: sanitizeContentWidth(p.contentWidth)
+					contentWidth: sanitizeContentWidth(p.contentWidth),
+					theme
 			};
+			applyTheme(theme);
 		}
 	} catch {}
 });
@@ -566,25 +571,24 @@ function langTag(p: Lang): string {
 </script>
 
 <svelte:head>
-	<meta name="color-scheme" content="light" />
 	<title>fermentario</title>
 </svelte:head>
 
 <main class="min-h-dvh">
 	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">		<header class="mb-5">
-			<p class="mt-1 text-sm text-stone-500">your voice journal — life &amp; the bootstrapped thing.</p>
+			<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">your voice journal — life &amp; the bootstrapped thing.</p>
 			<div class="mt-4 flex flex-wrap items-center gap-2">
-				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
+				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
 				<span class="ml-auto inline-flex items-center gap-2">
 					<button
 						type="button"
-						class="inline-flex items-center gap-1 rounded-full bg-stone-900 px-3 py-1 text-xs font-medium text-white hover:bg-stone-800"
+						class="inline-flex items-center gap-1 rounded-full bg-stone-900 dark:bg-stone-700 px-3 py-1 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
 						aria-label={view === 'ask' ? 'Close Ask' : 'Ask the archive'}
 						onclick={toggleAsk}
 					>{#if view === 'ask'}<span aria-hidden="true">×</span> Close{:else}<MessageCircle class="h-3.5 w-3.5" /> Ask{/if}</button>
 					<button
 						type="button"
-						class="grid h-7 w-7 place-items-center rounded-full border border-stone-300 bg-white text-stone-600 hover:bg-stone-100"
+						class="grid h-7 w-7 place-items-center rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 						aria-label="Settings"
 						onclick={() => (showSettings = true)}
 					><Settings class="h-3.5 w-3.5" /></button>
@@ -627,10 +631,10 @@ function langTag(p: Lang): string {
 
 			<section>
 				<div class="mb-2 flex items-center justify-between gap-2 px-1">
-					<span class="text-[11px] tabular-nums text-stone-400">{notes.length} notes loaded</span>
+					<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{notes.length} notes loaded</span>
 					<button
 						type="button"
-						class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-500 hover:bg-stone-100 disabled:opacity-40"
+						class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-[11px] font-medium text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40"
 						disabled={notes.length === 0}
 						onclick={copyLoadedNotes}
 					><Copy class="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy all'}</button>
@@ -703,6 +707,7 @@ function langTag(p: Lang): string {
 				entriesLang={config.entriesLang}
 				contentWidth={sanitizeContentWidth(config.contentWidth)}
 				sections={orderedSections}
+				theme={config.theme}
 				{summaryLoading}
 				{week}
 				tab={settingsTab}
@@ -725,6 +730,7 @@ function langTag(p: Lang): string {
 				onModelLang={(v) => saveConfig({ modelLang: v })}
 				onWidth={(w) => saveConfig({ contentWidth: w })}
 				onSections={(ids) => saveConfig({ sections: ids })}
+				onTheme={(t) => saveConfig({ theme: t })}
 				onRestoreStart={runRestore}
 			/>
 		{/if}

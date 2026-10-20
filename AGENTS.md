@@ -9,11 +9,20 @@
 - Cut filler, hedging, jargon, and repetition.
 - If precision and natural phrasing conflict, precision wins.
 
+## Testing effort
+- For small changes — CSS, Tailwind classes, markup, copy, icons, docs — do not
+  run `pnpm run check`, `pnpm run build`, `pnpm test`, or browser automation.
+  Make the edit and stop.
+- Run the four gates only for server/API, database or data handling, routing,
+  build config changes, or when the user explicitly asks.
+- Never start Chromium, Playwright, or screenshots just to verify a UI tweak.
+- If a change is ambiguous, ask before running an expensive command.
+
 ## Process
 - Never suggest to commit or push. The user alone gives that order.
-- After every change, all four gates must pass **in this order**: `pnpm run check` (0 errors, 0 warnings), `pnpm run build` (clean, and `build/index.js` actually exists), `pnpm test` (the web smoke test, 28 checks against `tests/baseline/web.json`), and `GET /` returning 200.
+- When the scope above requires the full suite, all four gates must pass **in this order**: `pnpm run check` (0 errors, 0 warnings), `pnpm run build` (clean, and `build/index.js` actually exists), `pnpm test` (the web smoke test against `tests/baseline/web.json`), and `GET /` returning 200.
 - `pnpm test` tests whatever is in `build/`, so it must run after `pnpm run build`. Testing a stale build records the old behaviour instead of the current one — that mistake put a 404 for `/diagnostics` into the golden.
-- `pnpm test` is the "the web app still works exactly as before" gate. It boots the production build against a frozen synthetic fixture in a temp directory, so it never touches `data/fermentario.db`. Run it after any change to `src/routes/api`, `src/lib/server`, or the page components. To record an intended behaviour change, run `pnpm run test:web:update` and read the diff.
+- `pnpm test` is the "the web app still works exactly as before" gate. It boots the production build against a frozen synthetic fixture in a temp directory, so it never touches `data/fermentario.db`. Run it after changes to `src/routes/api` and `src/lib/server`, or when the user asks. To record an intended behaviour change, run `pnpm run test:web:update` and read the diff.
 - A green build is not proof that a build exists. Check the output file, not only the exit code.
 - At the end of every important task, or upon making an error and correcting it, you MUST update the `docs/lessons-learned.md` file.
 - If you create a new tool like, for example, `yt-search.mjs`, document it in a `docs/TOOLS.md` file.

@@ -32,14 +32,14 @@
 
 {#if visible}
 	<div
-		class="pointer-events-none fixed inset-0 z-[60] grid place-items-center p-6"
+		class="pointer-events-none fixed inset-0 z-[60] grid place-items-center bg-white/25 p-6 backdrop-blur-md dark:bg-stone-950/25"
 		role="status"
 		aria-live="polite"
 	>
 		<div
-			class="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white/95 px-3.5 py-2 text-xs font-medium text-stone-600 shadow-lg"
+			class="inline-flex items-center gap-2 rounded-full border border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 px-3.5 py-2 text-xs font-medium text-stone-600 dark:text-stone-300 shadow-lg"
 		>
-			<LoaderCircle class="h-4 w-4 animate-spin text-amber-500 motion-reduce:animate-none" />
+			<LoaderCircle class="h-4 w-4 animate-spin text-amber-500 dark:text-amber-400 motion-reduce:animate-none" />
 			Loading…
 		</div>
 	</div>

@@ -1350,3 +1350,49 @@
   click and no-JS behavior work. Skip the link while the note is pending.
 - Single-item pages show the item's own content in `font-semibold`; comments
   stay normal weight so the page subject is obvious.
+
+## Session: Dark mode
+- Tailwind v4 needs `@custom-variant dark (&:where(.dark, .dark *));`. The
+  `dark` class on `<html>` must be set by an inline script in `app.html` before
+  the first paint; doing it only after hydration flashes the light page.
+- Persist the choice as one more key in `fermentario.config`. `saveConfig`
+  merges partials, so changing language or width must not drop the theme.
+- An automated class rewrite missed color utilities that carry opacity:
+  `bg-white/95` stayed white in dark mode while body text turned near-white.
+  The composer and inputs looked empty. Grep explicitly for `bg-white/`, and
+  test inputs and textareas in dark mode, not only cards and headings.
+- Use `bg-stone-700` for primary buttons in dark mode, not `stone-800`. On
+  `stone-900` modal panels a `stone-800` button looks disabled; `stone-700`
+  keeps the action visible while `text-white` stays legible.
+- The loading backdrop is glassy but still `pointer-events-none`: blur and tint
+  show that work is in progress without taking clicks away from the page.
+- Verify dark mode with a real browser screenshot, not only by checking that
+  `dark:` classes exist in the built CSS. The missed composer class built fine.
+- A full-screen note editor, modals and the fixed bottom bar are separate
+  surfaces. Check each one: a transparent textarea inherits the body text color,
+  so its parent bar must also have a dark background.
+
+## Session: Full-screen text dialogs
+- Long note and comment drafts need a full-screen option on mobile. Put the
+  toggle in the dialog header, left of Close, with `Maximize2` / `Minimize2`,
+  `aria-pressed`, and a label that changes to "Exit full screen".
+- Expanded, use `h-dvh` plus `max-w-none rounded-none` on the panel so it covers
+  the viewport. Keep the writing column readable on desktop with an inner
+  `mx-auto max-w-2xl` wrapper; do not stretch text across the whole monitor.
+- A growing textarea needs a flex column on every ancestor: panel, inner wrapper
+  and form get `min-h-0`, and the textarea gets `flex-1`. Without `min-h-0` the
+  textarea keeps its intrinsic height and pushes the actions off screen.
+- Keep the textarea in the same DOM branch when toggling. Reusing the element
+  preserves the draft, the cursor and the scroll position; collapsing returns
+  to the original `max-w-md` / `max-w-sm` panel.
+- `Escape` must collapse the expanded panel before it closes the dialog, so a
+  long draft does not vanish on the first key press.
+- Animate the expansion with CSS, not by remounting the panel: transition
+  `height`, `max-width` and `border-radius`, and animate the backdrop padding
+  from `p-4` to `p-0`. Use `max-w-full`, never `max-w-none`: `none` cannot
+  interpolate, so the width would snap. Add `[interpolate-size:allow-keywords]`
+  to animate `height` between `auto` and `dvh`. Add
+  `motion-reduce:transition-none`.
+- Give the transition 200 ms and `ease-out`. A longer expansion feels sluggish;
+  a shorter one looks like a snap. Test the panel rectangle at 0, 100 and 200 ms,
+  not only the end states.

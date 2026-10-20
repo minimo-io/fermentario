@@ -139,20 +139,20 @@
 <main class="min-h-dvh">
 	<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 		<header class="mb-5">
-			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800">
+			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200">
 				<ArrowLeft class="h-3.5 w-3.5" /> All notes
 			</a>
-			<h1 class="mt-3 flex items-center gap-2 text-2xl font-semibold tracking-tight text-stone-900">
+			<h1 class="mt-3 flex items-center gap-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
 				<button
 					type="button"
-					class="grid h-6 w-6 shrink-0 place-items-center rounded-full hover:bg-stone-100"
+					class="grid h-6 w-6 shrink-0 place-items-center rounded-full hover:bg-stone-100 dark:hover:bg-stone-800"
 					aria-label="Change color of #{data.tag}"
 					title="Change color"
 					onclick={() => (colorOpen = true)}
 				><span class="h-4 w-4 rounded-full {tagColors.dot(data.tag)}"></span></button>
 				#{data.tag}
 			</h1>
-			<p class="mt-1 text-sm text-stone-500">
+			<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">
 				{pager.count}
 				{pager.count === 1 ? 'note' : 'notes'} with this tag{#if todoItems.length > 0} · {todoItems.length} {todoItems.length === 1 ? 'to-do' : 'to-dos'}{/if}
 			</p>
@@ -160,7 +160,7 @@
 
 		{#if pinned.length > 0}
 			<section class="mb-5" aria-label="Featured notes">
-				<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400">Featured</h2>
+				<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Featured</h2>
 				<Timeline
 					notes={pinned}
 					summaryLoading={false}
@@ -177,13 +177,13 @@
 		{/if}
 
 		{#if pager.notes.length === 0 && pinned.length === 0 && todoItems.length === 0 && principleItems.length === 0}
-			<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500">
+			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-6 text-center text-sm text-stone-500 dark:text-stone-400">
 				No notes carry this tag yet.
 			</p>
 		{:else}
 			{#if pager.notes.length > 0}
 				<section class="mb-5" aria-label="Notes with this tag">
-					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400">Notes</h2>
+					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Notes</h2>
 					<Timeline
 						notes={pager.notes}
 						summaryLoading={false}
@@ -200,25 +200,25 @@
 			{/if}
 			{#if todoItems.length > 0}
 				<section aria-label="To-do items with this tag">
-					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400">To-Do</h2>
+					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">To-Do</h2>
 					<ul class="space-y-2">
 						{#each todoItems as item (item.id)}
-							<li class="flex items-start gap-2.5 rounded-2xl border border-stone-200 bg-white px-4 py-2.5">
+							<li class="flex items-start gap-2.5 rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
 								<button
 									type="button"
 									role="checkbox"
 									aria-checked={item.done}
 									aria-label={item.done ? 'Mark not done' : 'Mark done'}
-									class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 text-transparent'}"
+									class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 									onclick={() => void toggleTodo(item)}
 								><span class="text-[11px] leading-none">✓</span></button>
 								<span class="min-w-0 flex-1">
-									<button type="button" class="block w-full text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 line-through' : 'text-stone-800'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
+									<button type="button" class="block w-full text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
 									{#if item.inProgress}
-										<span class="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">In progress</span>
+										<span class="mt-1 inline-block rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 									{/if}
 									{#if (item.commentCount ?? 0) > 0}
-										<span class="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500"><MessageCircle class="h-3 w-3" /> {item.commentCount}</span>
+										<span class="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400"><MessageCircle class="h-3 w-3" /> {item.commentCount}</span>
 									{/if}
 								</span>
 							</li>
@@ -228,10 +228,10 @@
 			{/if}
 			{#if principleItems.length > 0}
 				<section class="mt-5" aria-label="Principles with this tag">
-					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400">Principles</h2>
+					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Principles</h2>
 					<ol class="space-y-2">
 						{#each principleItems as p (p.id)}
-							<li class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-[15px] text-stone-800">{p.content}</li>
+							<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 text-[15px] text-stone-800 dark:text-stone-200">{p.content}</li>
 						{/each}
 					</ol>
 				</section>

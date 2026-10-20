@@ -172,10 +172,10 @@
 <main class="min-h-dvh">
 	<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 		<header class="mb-5">
-			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800">
+			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200">
 				<ArrowLeft class="h-3.5 w-3.5" /> All notes
 			</a>
-			<p class="mt-3 text-[11px] tabular-nums text-stone-400">
+			<p class="mt-3 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
 				{new Date(note.created_at).toLocaleString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', {
 					weekday: 'long',
 					day: 'numeric',
@@ -188,15 +188,15 @@
 			</p>
 		</header>
 
-		<article class="relative rounded-2xl border bg-white/70 px-4 py-3 {note.featured ? 'border-amber-400' : 'border-stone-200/80'}">
+		<article class="relative rounded-2xl border bg-white/70 dark:bg-stone-900/70 px-4 py-3 {note.featured ? 'border-amber-400' : 'border-stone-200/80 dark:border-stone-800/80'}">
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
-					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800">{@html inlineMarkdown(note.content)}</p>
+					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(note.content)}</p>
 				</div>
 				<button
 					type="button"
-					class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600"
+					class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 dark:max-sm:bg-stone-900/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
 					aria-label="Note actions"
 					onclick={() => (menuOpen = true)}
 				>
@@ -217,31 +217,31 @@
 
 		<section class="mt-6" aria-label="Comments on this note">
 			<div class="mb-1 flex items-center justify-between gap-2">
-				<h2 class="text-xs font-medium uppercase tracking-widest text-stone-400">Comments</h2>
+				<h2 class="text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Comments</h2>
 				<button
 					type="button"
-					class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					aria-haspopup="dialog"
 					onclick={() => (addingComment = true)}
 				><MessageCircle class="h-3.5 w-3.5" /> Add comment</button>
 			</div>
 			{#if comments.length === 0}
-				<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500">
+				<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-6 text-center text-sm text-stone-500 dark:text-stone-400">
 					No comments yet — narrate how this note evolves.
 				</p>
 			{:else}
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
-						<li class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5">
-							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800">{c.content}</p>
+						<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
+							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{c.content}</p>
 							<div class="mt-1 flex items-center justify-between gap-2">
-								<span class="text-[11px] tabular-nums text-stone-400">
+								<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
 									{new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
 								</span>
 								<button
 									type="button"
 									aria-label="Delete comment"
-									class="shrink-0 text-stone-300 hover:text-rose-600"
+									class="shrink-0 text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-400"
 									onclick={() => (confirmingComment = c)}
 								>&times;</button>
 							</div>

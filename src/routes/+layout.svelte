@@ -1,8 +1,18 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import NavigationLoader from '$lib/components/NavigationLoader.svelte';
 	import Toasts from '$lib/components/Toasts.svelte';
+	import { applyStoredTheme, watchSystemTheme } from '$lib/theme';
 	let { children } = $props();
+
+	// app.html applies the theme before first paint. Re-applying on mount keeps
+	// the document in sync after hydration, and the watcher follows the OS
+	// preference while the user keeps the `system` choice.
+	onMount(() => {
+		applyStoredTheme();
+		return watchSystemTheme();
+	});
 </script>
 
 <svelte:head>

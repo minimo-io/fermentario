@@ -240,40 +240,40 @@ onMount(() => {
 <div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 	<button
 		type="button"
-		class="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500"
+		class="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500"
 		onclick={goBack}><ArrowLeft class="h-3.5 w-3.5" /> Back</button
 	>
 	<h1 class="text-2xl font-semibold">Diagnostics</h1>
-	<p class="mt-2 text-sm text-stone-600">
+	<p class="mt-2 text-sm text-stone-600 dark:text-stone-300">
 		Everything here is measured, not assumed. Copy the result when reporting a problem.
 	</p>
 
 	<div class="mt-6 flex flex-wrap gap-2">
 		<button
-			class="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-stone-50 disabled:opacity-40"
+			class="rounded-md bg-stone-900 dark:bg-stone-700 px-3 py-1.5 text-sm text-stone-50 disabled:opacity-40"
 			disabled={!run}
 			onclick={() => run?.()}>Measure inference speed</button
 		>
 		<button
-			class="rounded-md border border-stone-300 px-3 py-1.5 text-sm"
+			class="rounded-md border border-stone-300 dark:border-stone-700 px-3 py-1.5 text-sm"
 			onclick={() => navigator.clipboard?.writeText(report(rows))}>Copy report</button
 		>
 	</div>
-	<p class="mt-2 text-xs text-stone-500">
+	<p class="mt-2 text-xs text-stone-500 dark:text-stone-400">
 		The button above downloads the 0.5 B model once, about 488 MB, and keeps it in the app
 		cache. Nothing is downloaded until you press it.
 	</p>
 
-	<dl class="mt-6 divide-y divide-stone-200 border-t border-stone-200">
+	<dl class="mt-6 divide-y divide-stone-200 dark:divide-stone-800 border-t border-stone-200 dark:border-stone-800">
 		{#each rows as r (r.id)}
 			<div class="grid grid-cols-[1fr_auto] gap-4 py-2 text-sm">
-				<dt class="text-stone-700">
+				<dt class="text-stone-700 dark:text-stone-300">
 					{r.label}
-					{#if r.note}<span class="block text-xs text-stone-500">{r.note}</span>{/if}
+					{#if r.note}<span class="block text-xs text-stone-500 dark:text-stone-400">{r.note}</span>{/if}
 				</dt>
 				<dd class="text-right font-mono text-xs">
-					{#if r.ok === true}<span class="text-emerald-700">ok</span>{/if}
-					{#if r.ok === false}<span class="text-rose-700">{r.value}</span>{/if}
+					{#if r.ok === true}<span class="text-emerald-700 dark:text-emerald-300">ok</span>{/if}
+					{#if r.ok === false}<span class="text-rose-700 dark:text-rose-300">{r.value}</span>{/if}
 					{#if r.ok === null || r.ok === undefined}{r.value}{/if}
 				</dd>
 			</div>

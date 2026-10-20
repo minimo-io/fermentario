@@ -215,7 +215,7 @@
 {#snippet commentPill(p: Principle)}
 	<button
 		type="button"
-		class="shrink-0 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 hover:bg-stone-200"
+		class="shrink-0 inline-flex items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
 		aria-haspopup="dialog"
 		aria-label="Comments on this principle"
 		onclick={() => void openCommentModal(p)}
@@ -227,7 +227,7 @@
 		{#each principles as p, i (p.id)}
 			<li
 				data-principle={p.id}
-				class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 select-none {dragId === p.id ? 'opacity-40' : ''} {dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-stone-900' : ''}"
+				class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 select-none {dragId === p.id ? 'opacity-40' : ''} {dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
 				style={dragId ? 'touch-action: none' : ''}
 				onpointerdown={(e) => onDown(e, p.id)}
 				onpointermove={onMove}
@@ -240,7 +240,7 @@
 						tabindex="0"
 						aria-label="Drag to reorder"
 						title="Drag to reorder"
-						class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 hover:text-stone-600 active:cursor-grabbing"
+						class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 active:cursor-grabbing"
 						onpointerdown={(e) => onDown(e, p.id, true)}
 						onkeydown={(e) => {
 							if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -253,10 +253,10 @@
 							void persistOrder(ids);
 						}}
 					><GripVertical class="h-4 w-4" /></span>
-					<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400">{i + 1}</span>
+					<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400 dark:text-stone-500">{i + 1}</span>
 					<button
 						type="button"
-						class="min-w-0 flex-1 text-left text-[15px] text-stone-800"
+						class="min-w-0 flex-1 text-left text-[15px] text-stone-800 dark:text-stone-200"
 						onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) { editing = p.id; editText = p.content; editVideo = p.video ? youTubeWatchUrl(p.video) : ''; } }}
 					>{p.content}</button>
 					<!-- sm+: tags and the comment pill share the title line, right-aligned before the ⋮ -->
@@ -266,7 +266,7 @@
 						{/each}
 						{@render commentPill(p)}
 					</div>
-					<button type="button" aria-label="Principle actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 hover:bg-stone-100 hover:text-stone-600" onclick={() => (menuPrinciple = p)}><EllipsisVertical class="h-4 w-4" /></button>
+					<button type="button" aria-label="Principle actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuPrinciple = p)}><EllipsisVertical class="h-4 w-4" /></button>
 				</div>
 				{#if p.tags.length > 0}
 					<!-- Mobile: tags keep their right-aligned row, pill rides at its end. -->
@@ -287,23 +287,23 @@
 		{/each}
 	</ol>
 	{#if principles.length === 0}
-		<p class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-stone-500">No principles yet — add the first one below.</p>
+		<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400">No principles yet — add the first one below.</p>
 	{:else}
-		<p class="mt-2 text-[11px] leading-snug text-stone-400">Press and hold a principle to drag it into a new position.</p>
+		<p class="mt-2 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Press and hold a principle to drag it into a new position.</p>
 	{/if}
 </div>
 
 <FixedBottomBar {widthClass}>
 	<button
 		type="button"
-		class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
+		class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
 		onclick={() => { draft = ''; adding = true; }}
 	><Plus class="h-4 w-4" /> Add</button>
 </FixedBottomBar>
 
 {#if adding}
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New principle"
@@ -312,22 +312,22 @@
 		onkeydown={(e) => { if (e.key === 'Escape') adding = false; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-			<h2 class="text-sm font-semibold text-stone-900">New principle</h2>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">New principle</h2>
 			<textarea
 				bind:this={draftField}
 				rows="3"
-				class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 bg-white p-3 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+				class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 				placeholder="State the principle… (trailing #tags work too)"
 				aria-label="Principle text"
 				value={draft}
 				oninput={(e) => (draft = e.currentTarget.value)}
 				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void add(); }}
 			></textarea>
-			<label class="mt-3 block text-xs font-medium text-stone-500" for="draft-video">YouTube URL (optional)</label>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="draft-video">YouTube URL (optional)</label>
 			<input
 				id="draft-video"
-				class="mt-1 w-full rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 				value={draftVideo}
 				oninput={(e) => (draftVideo = e.currentTarget.value)}
 				placeholder="https://www.youtube.com/watch?v=…"
@@ -336,12 +336,12 @@
 			<div class="mt-4 flex justify-end gap-2">
 				<button
 					type="button"
-					class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+					class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => (adding = false)}
 				>Cancel</button>
 				<button
 					type="button"
-					class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+					class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
 					disabled={!draft.trim()}
 					onclick={() => void add()}
 				>Create</button>
@@ -353,7 +353,7 @@
 {#if menuPrinciple}
 	{@const mp = menuPrinciple}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Principle actions"
@@ -362,25 +362,25 @@
 		onkeydown={(e) => { if (e.key === 'Escape') menuPrinciple = null; }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
-		<div class="w-full max-w-sm rounded-2xl bg-white p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-2 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 			<div class="px-3.5 pb-2 pt-3">
-				<h2 class="text-sm font-semibold text-stone-900">Principle actions</h2>
-				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500">{mp.content}</p>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Principle actions</h2>
+				<p class="mt-0.5 line-clamp-2 text-xs text-stone-500 dark:text-stone-400">{mp.content}</p>
 			</div>
 			<div class="flex flex-col">
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={(e) => { const q = menuPrinciple; menuPrinciple = null; if (q) void goto(`/principles/${q.id}`); }}
 				>Open</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 					onclick={() => { const q = menuPrinciple; menuPrinciple = null; if (q) { editing = q.id; editText = q.content; editVideo = q.video ? youTubeWatchUrl(q.video) : ''; } }}
 				>Edit</button>
 				<button
 					type="button"
-					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
 					onclick={() => { const q = menuPrinciple; menuPrinciple = null; if (q) confirmingPrinciple = q; }}
 				>Delete</button>
 			</div>
@@ -392,7 +392,7 @@
 	{@const ep = principles.find((x) => x.id === editing)}
 	{#if ep}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 p-4"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Edit principle"
@@ -401,20 +401,20 @@
 			onkeydown={(e) => { if (e.key === 'Escape') editing = null; }}
 			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 		>
-			<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-				<h2 class="text-sm font-semibold text-stone-900">Edit principle</h2>
+			<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Edit principle</h2>
 				<textarea
 					rows="3"
-					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 bg-white p-3 text-[15px] leading-snug text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 					aria-label="Principle text"
 					value={editText}
 					oninput={(e) => (editText = e.currentTarget.value)}
 					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
 				></textarea>
-				<label class="mt-3 block text-xs font-medium text-stone-500" for="edit-p-video">YouTube URL (optional)</label>
+				<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-p-video">YouTube URL (optional)</label>
 				<input
 					id="edit-p-video"
-					class="mt-1 w-full rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+					class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 					value={editVideo}
 					oninput={(e) => (editVideo = e.currentTarget.value)}
 					placeholder="https://www.youtube.com/watch?v=…"
@@ -423,12 +423,12 @@
 				<div class="mt-4 flex justify-end gap-2">
 					<button
 						type="button"
-						class="rounded-full border border-stone-200 px-4 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100"
+						class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 						onclick={() => (editing = null)}
 					>Cancel</button>
 					<button
 						type="button"
-						class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 disabled:opacity-50"
+						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
 						disabled={!editText.trim()}
 						onclick={() => void saveEdit(ep)}
 					>Save</button>

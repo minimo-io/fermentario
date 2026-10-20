@@ -26,45 +26,45 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/50 p-4"
+	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/50 dark:bg-black/70 p-4"
 	role="dialog"
 	aria-modal="true"
 	aria-label="Restoring your journal"
 	tabindex="-1"
 >
-	<div class="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+	<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl">
 		{#if error}
-			<h2 class="text-sm font-semibold text-stone-900">Restore failed</h2>
-			<p class="mt-2 text-sm leading-relaxed text-rose-600">{error}</p>
-			<p class="mt-2 text-xs leading-relaxed text-stone-500">
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Restore failed</h2>
+			<p class="mt-2 text-sm leading-relaxed text-rose-600 dark:text-rose-400">{error}</p>
+			<p class="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
 				Nothing was changed. Your journal is exactly as it was.
 			</p>
 			<div class="mt-5 flex justify-end">
 				<button
 					type="button"
-					class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800"
+					class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
 					onclick={onClose}
 				>Close</button>
 			</div>
 		{:else}
 			<div class="flex items-center gap-2">
-				<h2 class="text-sm font-semibold text-stone-900">
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">
 					{phase === 'done' ? 'Journal restored' : 'Restoring your journal'}
 				</h2>
-				{#if phase !== 'done'}<LoaderCircle class="h-4 w-4 animate-spin text-stone-400" />{/if}
+				{#if phase !== 'done'}<LoaderCircle class="h-4 w-4 animate-spin text-stone-400 dark:text-stone-500" />{/if}
 			</div>
-			<p class="mt-1 break-all text-[11px] text-stone-400">{fileName}</p>
+			<p class="mt-1 break-all text-[11px] text-stone-400 dark:text-stone-500">{fileName}</p>
 
 			<ol class="mt-4 space-y-2">
 				{#each STEPS as step, i (step.id)}
 					{@const state = phase === 'done' || i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo'}
-					<li class="flex items-center gap-2 text-[13px] {state === 'todo' ? 'text-stone-300' : 'text-stone-700'}">
+					<li class="flex items-center gap-2 text-[13px] {state === 'todo' ? 'text-stone-300 dark:text-stone-600' : 'text-stone-700 dark:text-stone-300'}">
 						{#if state === 'done'}
-							<CircleCheck class="h-4 w-4 shrink-0 text-emerald-500" />
+							<CircleCheck class="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
 						{:else if state === 'current'}
-							<LoaderCircle class="h-4 w-4 shrink-0 animate-spin text-stone-500" />
+							<LoaderCircle class="h-4 w-4 shrink-0 animate-spin text-stone-500 dark:text-stone-400" />
 						{:else}
-							<Circle class="h-4 w-4 shrink-0 text-stone-300" />
+							<Circle class="h-4 w-4 shrink-0 text-stone-300 dark:text-stone-600" />
 						{/if}
 						{step.label}
 					</li>
@@ -72,14 +72,14 @@
 			</ol>
 
 			{#if phase !== 'done'}
-				<p class="mt-4 text-[11px] text-stone-400">
+				<p class="mt-4 text-[11px] text-stone-400 dark:text-stone-500">
 					{elapsed}s · keep the app open until this finishes.
 				</p>
 			{:else}
 				<div class="mt-5 flex justify-end">
 					<button
 						type="button"
-						class="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800"
+						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
 						onclick={onClose}
 					>Close</button>
 				</div>

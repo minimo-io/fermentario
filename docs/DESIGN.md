@@ -114,6 +114,15 @@ Do not introduce a new spacing value without checking this table first.
   The pill toggles the click-to-load embed below it. On a principle card the
   pill sits at the right edge from `sm` up, matching the tags and comment pill;
   on mobile it stays left.
+- **Dark mode**: Settings → General offers `light`, `dark` and `system`; `system`
+  follows the OS live. The choice persists as `theme` in `fermentario.config` and
+  becomes the `dark` class on `<html>` before first paint. Use Tailwind's native
+  `dark:` variant only. Map surfaces `white` → `stone-900`, the page `white` →
+  `stone-950`, borders `stone-200` → `stone-800`, headings `stone-900` →
+  `stone-100`, and primary fills `stone-900` → `stone-700` (hover `stone-800` →
+  `stone-600`) so controls stay visible on dark panels. Heat cells map
+  `amber-200/300/400/500` → `amber-900/800/600/500`; empty cells `stone-200` →
+  `stone-700`. Keep `text-white` on primary fills.
 
 ## Typography
 
@@ -140,23 +149,36 @@ Pick an existing size instead of inventing a new one:
 | CopyFallback | `max-w-lg` |
 | ModelsModal | `w-[min(92vw,30rem)]` |
 
+`EditNoteDialog` and `CommentModal` have a full-screen toggle in the header, left
+of Close. Expanded, the panel is `h-dvh max-w-full rounded-none`; its contents
+sit in a centered `max-w-2xl` column and the textarea takes the remaining height.
+`Escape` collapses the panel before it closes the dialog. The toggle animates
+height, max-width, corner radius and backdrop padding over 200 ms; reduced motion
+turns the animation off.
+
 ## Interaction
 
 - **Destructive actions** (delete note, remove tag, restore database) always go
   through `ConfirmDialog` in `danger` tone.
-- **Overlays** are `fixed inset-0 z-50` with a `stone-900/40` backdrop; the
-  backdrop click and `Escape` close them, except while a long operation runs.
+- **Overlays** are `fixed inset-0 z-50` with a `stone-900/40` backdrop
+  (`black/60` in dark mode); the backdrop click and `Escape` close them, except
+  while a long operation runs. Dialogs with long text (`EditNoteDialog`,
+  `CommentModal`) offer a header toggle that expands the panel to the viewport;
+  `Escape` then collapses it first, and the other fields and buttons stay
+  fixed while the textarea scrolls.
 - **Toasts** come from `$lib/toast.svelte` and render once from the root layout
   (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
   never for progress or background work. Auto-clear: 4 s error, 8 s success.
 - **Loading feedback**: a static pill in `app.html` covers hydration no Svelte
   code can see. `NavigationLoader` removes it on mount and takes over: the first
   tracked wait shows at once, later route changes and data waits keep the 120 ms
-  anti-flash delay. The pill is `pointer-events-none`, has no backdrop, and never
-  blocks input. Track loads and mutations with `loading.track()` from
-  `$lib/loading.svelte`; never track quiet work (tag colors, summary refresh,
-  polling, optimistic saves). Keep contextual busy states such as the Heatmap
-  button and `RestoreOverlay`; do not add per-route spinners.
+  anti-flash delay. Both use a glassy full-screen backdrop (`white/25`, or
+  `stone-950/25` in dark, plus `backdrop-blur-md`). The pill and backdrop are
+  `pointer-events-none` and never block input. Track loads and mutations with
+  `loading.track()` from `$lib/loading.svelte`; never track quiet work (tag
+  colors, summary refresh, polling, optimistic saves). Keep contextual busy
+  states such as the Heatmap button and `RestoreOverlay`; do not add per-route
+  spinners.
 - **Dictation**: while the microphone is active, the composer button switches
   from `Mic` to a filled `rose-600` stop button with a pulsing ring, and a
   `Listening…` pill with a pulsing dot appears above the bar. Reduced motion
