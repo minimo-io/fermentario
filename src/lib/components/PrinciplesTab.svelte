@@ -11,6 +11,8 @@
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
+	import Maximize2 from '@lucide/svelte/icons/maximize-2';
+	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { loading } from '$lib/loading.svelte';
@@ -26,6 +28,7 @@
 	let editing = $state<string | null>(null);
 	let editText = $state('');
 	let editVideo = $state('');
+	let editFull = $state(false);
 	let menuPrinciple = $state<Principle | null>(null);
 	let confirmingPrinciple = $state<Principle | null>(null);
 	// Comments live in one modal — the same standard in every list. The
@@ -66,9 +69,21 @@
 		}
 	}
 
+	function openEdit(p: Principle) {
+		editing = p.id;
+		editText = p.content;
+		editVideo = p.video ? youTubeWatchUrl(p.video) : '';
+		editFull = false;
+	}
+
+	function closeEdit() {
+		editing = null;
+		editFull = false;
+	}
+
 	async function saveEdit(p: Principle) {
 		if (!editText.trim()) {
-			editing = null;
+			closeEdit();
 			return;
 		}
 		try {
@@ -79,7 +94,7 @@
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save principle.');
-			editing = null;
+			closeEdit();
 			principles = principles.map((x) => (x.id === p.id ? d.principle : x));
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to save principle.');
@@ -257,7 +272,7 @@
 					<button
 						type="button"
 						class="min-w-0 flex-1 text-left text-[15px] text-stone-800 dark:text-stone-200"
-						onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) { editing = p.id; editText = p.content; editVideo = p.video ? youTubeWatchUrl(p.video) : ''; } }}
+						onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(p); }}
 					>{p.content}</button>
 					<!-- sm+: tags and the comment pill share the title line, right-aligned before the ⋮ -->
 					<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
@@ -376,7 +391,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const q = menuPrinciple; menuPrinciple = null; if (q) { editing = q.id; editText = q.content; editVideo = q.video ? youTubeWatchUrl(q.video) : ''; } }}
+					onclick={() => { const q = menuPrinciple; menuPrinciple = null; if (q) openEdit(q); }}
 				>Edit</button>
 				<button
 					type="button"
@@ -392,46 +407,67 @@
 	{@const ep = principles.find((x) => x.id === editing)}
 	{#if ep}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 transition-[padding] duration-200 ease-out motion-reduce:transition-none {editFull ? 'p-0' : 'p-4'}"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Edit principle"
 			tabindex="-1"
-			onclick={(e) => { if (e.target === e.currentTarget) editing = null; }}
-			onkeydown={(e) => { if (e.key === 'Escape') editing = null; }}
+			onclick={(e) => { if (e.target === e.currentTarget) closeEdit(); }}
+			onkeydown={(e) => {
+				if (e.key !== 'Escape') return;
+				if (editFull) editFull = false;
+				else closeEdit();
+			}}
 			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 		>
-			<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Edit principle</h2>
-				<textarea
-					rows="3"
-					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-					aria-label="Principle text"
-					value={editText}
-					oninput={(e) => (editText = e.currentTarget.value)}
-					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
-				></textarea>
-				<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-p-video">YouTube URL (optional)</label>
-				<input
-					id="edit-p-video"
-					class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-					value={editVideo}
-					oninput={(e) => (editVideo = e.currentTarget.value)}
-					placeholder="https://www.youtube.com/watch?v=…"
-					inputmode="url"
-				/>
-				<div class="mt-4 flex justify-end gap-2">
-					<button
-						type="button"
-						class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-						onclick={() => (editing = null)}
-					>Cancel</button>
-					<button
-						type="button"
-						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
-						disabled={!editText.trim()}
-						onclick={() => void saveEdit(ep)}
-					>Save</button>
+			<div
+				class="w-full bg-white dark:bg-stone-900 p-5 shadow-xl [interpolate-size:allow-keywords] transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none {editFull ? 'flex h-dvh max-w-full flex-col rounded-none' : 'h-auto max-w-sm rounded-2xl'}"
+				transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}
+			>
+				<div class={editFull ? 'mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col' : ''}>
+					<div class="flex items-start justify-between gap-2">
+						<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Edit principle</h2>
+						<button
+							type="button"
+							class="-mr-1 -mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
+							aria-label={editFull ? 'Exit full screen' : 'Full screen'}
+							aria-pressed={editFull}
+							title={editFull ? 'Exit full screen' : 'Full screen'}
+							onclick={() => (editFull = !editFull)}
+						>
+							{#if editFull}<Minimize2 class="h-4 w-4" />{:else}<Maximize2 class="h-4 w-4" />{/if}
+						</button>
+					</div>
+					<textarea
+						rows="3"
+						class="mt-3 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600 {editFull ? 'min-h-0 flex-1' : 'max-h-[50dvh] min-h-24'}"
+						aria-label="Principle text"
+						value={editText}
+						oninput={(e) => (editText = e.currentTarget.value)}
+						onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
+					></textarea>
+					<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-p-video">YouTube URL (optional)</label>
+					<input
+						id="edit-p-video"
+						class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+						value={editVideo}
+						oninput={(e) => (editVideo = e.currentTarget.value)}
+						placeholder="https://www.youtube.com/watch?v=…"
+						inputmode="url"
+					/>
+					<div class="mt-4 flex justify-end gap-2">
+						<button
+							type="button"
+							class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+							onclick={closeEdit}
+						>Cancel</button>
+						<button
+							type="button"
+							class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
+							disabled={!editText.trim()}
+							onclick={() => void saveEdit(ep)}
+						>Save</button>
+					</div>
 				</div>
 			</div>
 		</div>

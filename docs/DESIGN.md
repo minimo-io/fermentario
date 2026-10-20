@@ -158,12 +158,12 @@ Pick an existing size instead of inventing a new one:
 | CopyFallback | `max-w-lg` |
 | ModelsModal | `w-[min(92vw,30rem)]` |
 
-`EditNoteDialog` and `CommentModal` have a full-screen toggle in the header, left
-of Close. Expanded, the panel is `h-dvh max-w-full rounded-none`; its contents
-sit in a centered `max-w-2xl` column and the textarea takes the remaining height.
-`Escape` collapses the panel before it closes the dialog. The toggle animates
-height, max-width, corner radius and backdrop padding over 200 ms; reduced motion
-turns the animation off.
+`EditNoteDialog`, `CommentModal` and the edit-principle dialog have a full-screen
+toggle in the header (left of Close when present). Expanded, the panel is
+`h-dvh max-w-full rounded-none`; its contents sit in a centered `max-w-2xl`
+column and the textarea takes the remaining height. `Escape` collapses the panel
+before it closes the dialog. The toggle animates height, max-width, corner
+radius and backdrop padding over 200 ms; reduced motion turns the animation off.
 
 ## Interaction
 
@@ -172,9 +172,9 @@ turns the animation off.
 - **Overlays** are `fixed inset-0 z-50` with a `stone-900/40` backdrop
   (`black/60` in dark mode); the backdrop click and `Escape` close them, except
   while a long operation runs. Dialogs with long text (`EditNoteDialog`,
-  `CommentModal`) offer a header toggle that expands the panel to the viewport;
-  `Escape` then collapses it first, and the other fields and buttons stay
-  fixed while the textarea scrolls.
+  `CommentModal`, the edit-principle dialog) offer a header toggle that expands
+  the panel to the viewport; `Escape` then collapses it first, and the other
+  fields and buttons stay fixed while the textarea scrolls.
 - **Toasts** come from `$lib/toast.svelte` and render once from the root layout
   (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
   never for progress or background work. Auto-clear: 4 s error, 8 s success.
