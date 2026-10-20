@@ -38,6 +38,7 @@
 	let doneOpen = $state(false);
 	let confirmingGroup = $state<TodoGroup | null>(null);
 	let confirmingItem = $state<TodoItem | null>(null);
+	let confirmingDone = $state<TodoItem | null>(null);
 	let addingItem = $state(false);
 	let itemField = $state<HTMLTextAreaElement | null>(null);
 	const openItems = $derived(items.filter((x) => !x.done));
@@ -45,7 +46,7 @@
 	const ungrouped = $derived(openItems.filter((x) => !x.subgroup));
 	const subgroupNames = $derived([...new Set(openItems.map((x) => x.subgroup).filter(Boolean))]);
 	let collapsed = $state<Record<string, boolean>>({});
-	let progressView = $state(false);
+	let progressView = $state(true);
 	let progressItems = $state<TodoProgressItem[]>([]);
 	let menuGroup = $state<TodoGroup | null>(null);
 	let menuItem = $state<TodoItem | null>(null);
@@ -63,7 +64,7 @@
 		if (!canKeyShortcut) return;
 		if (!activeGroup || progressView) return;
 		// Never stack on an open modal of this tab.
-		if (addingItem || addingGroup || editing || renaming || menuItem || menuProgressItem || menuGroup || confirmingItem || confirmingGroup || moveConfirm || commenting) return;
+		if (addingItem || addingGroup || editing || renaming || menuItem || menuProgressItem || menuGroup || confirmingItem || confirmingGroup || confirmingDone || moveConfirm || commenting) return;
 		const t = e.target as HTMLElement | null;
 		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
 		if (e.isComposing) return;
@@ -95,7 +96,7 @@
 		}
 	}
 
-	async function toggleProgressViewItem(item: TodoProgressItem) {
+	async function toggleProgressViewItem(item: TodoItem) {
 		try {
 			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
@@ -108,6 +109,21 @@
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to update item.');
 		}
+	}
+
+	/** Completing is the only destructive transition; it asks first. */
+	function requestDone(item: TodoItem) {
+		if (item.done) {
+			void (progressView ? toggleProgressViewItem(item) : toggleItem(item));
+			return;
+		}
+		confirmingDone = item;
+	}
+
+	function confirmDone() {
+		const item = confirmingDone;
+		confirmingDone = null;
+		if (item) void (progressView ? toggleProgressViewItem(item) : toggleItem(item));
 	}
 
 	async function progressProgressViewItem(item: TodoProgressItem) {
@@ -646,7 +662,7 @@
 							aria-checked={item.done}
 							aria-label={item.done ? 'Mark not done' : 'Mark done'}
 							class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
-							onclick={() => void toggleItem(item)}
+							onclick={() => requestDone(item)}
 						><span class="text-[11px] leading-none">✓</span></button>
 						{#if editing === item.id}
 							<span class="min-w-0 flex-1 text-[15px] text-stone-400 dark:text-stone-500">Editing…</span>
@@ -750,7 +766,7 @@
 								aria-checked={item.done}
 								aria-label={item.done ? 'Mark not done' : 'Mark done'}
 								class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
-								onclick={() => void toggleProgressViewItem(item)}
+								onclick={() => requestDone(item)}
 							><span class="text-[11px] leading-none">✓</span></button>
 							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
 							<!-- sm+: group, status and tags share the title line, right-aligned before the ⋮ -->
@@ -866,7 +882,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void toggleProgressViewItem(item); }}
+					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) requestDone(item); }}
 				>{pm.done ? 'Mark not done' : 'Mark done'}</button>
 				<button
 					type="button"
@@ -909,7 +925,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const item = menuItem; menuItem = null; if (item) void toggleItem(item); }}
+					onclick={() => { const item = menuItem; menuItem = null; if (item) requestDone(item); }}
 				>{m.done ? 'Mark not done' : 'Mark done'}</button>
 				<button
 					type="button"
@@ -1118,8 +1134,21 @@
 {#if commenting}
 	{@const t = commenting}
 	<CommentModal
-		onAdd={(text) => addTaskComment(t, text)}
+		onSubmit={(text) => addTaskComment(t, text)}
 		onClose={() => (commenting = null)}
+	/>
+{/if}
+
+{#if confirmingDone}
+	{@const done = confirmingDone}
+	<ConfirmDialog
+		title="Mark task as done?"
+		message="{done.content} will move to Done. You can unmark it later."
+		confirmLabel="Mark done"
+		cancelLabel="Cancel"
+		confirmTone="default"
+		onConfirm={confirmDone}
+		onCancel={() => (confirmingDone = null)}
 	/>
 {/if}
 

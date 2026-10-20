@@ -217,6 +217,18 @@ export interface TodoProgressItem extends TodoItem {
 	groupName: string;
 }
 
+export interface TodoDoneCursor {
+	done_at: number;
+	id: string;
+}
+
+export interface TodoDonePage {
+	items: TodoProgressItem[];
+	count: number;
+	hasMore: boolean;
+	nextCursor: TodoDoneCursor | null;
+}
+
 const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0): Note => ({
 	id: r.id,
 	content: r.content,
@@ -610,6 +622,37 @@ export function createJournal(db: SqlDb) {
 		return rows.map((r) => ({ ...rowToTodoItem(r, tags.get(r.id) ?? []), groupName: r.group_name }));
 	}
 
+	/** Done items across every group, latest completion first. */
+	function listDoneItems(limit = 50, cursor: TodoDoneCursor | null = null): TodoDonePage {
+		const safeLimit = Number.isFinite(limit) ? Math.min(100, Math.max(1, Math.trunc(limit))) : 50;
+		const cursorSql = cursor ? 'AND (i.done_at < ? OR (i.done_at = ? AND i.id < ?))' : '';
+		const params: SqlValue[] = cursor ? [cursor.done_at, cursor.done_at, cursor.id] : [];
+		const rows = db
+			.prepare(
+				`SELECT i.*, g.name AS group_name,
+					(SELECT COUNT(*) FROM task_comments c WHERE c.item_id = i.id) AS comment_count
+				 FROM todo_items i JOIN todo_groups g ON g.id = i.group_id
+				 WHERE i.done = 1 ${cursorSql}
+				 ORDER BY i.done_at DESC, i.id DESC LIMIT ?`
+			)
+			.all(...params, safeLimit + 1) as unknown as (TodoItemRow & { group_name: string })[];
+		const hasMore = rows.length > safeLimit;
+		const page = hasMore ? rows.slice(0, safeLimit) : rows;
+		const tags = tagsByItem(page);
+		const items = page.map((r) => ({
+			...rowToTodoItem(r, tags.get(r.id) ?? []),
+			groupName: r.group_name
+		}));
+		const last = page[page.length - 1];
+		const count = (db.prepare('SELECT COUNT(*) AS c FROM todo_items WHERE done = 1').get() as { c: number }).c;
+		return {
+			items,
+			count,
+			hasMore,
+			nextCursor: hasMore && last ? { done_at: last.done_at, id: last.id } : null
+		};
+	}
+
 	/** Persist a full item order inside one group. Unknown ids are ignored. */
 	function setTodoItemOrder(groupId: string, ids: string[]): void {
 		const upd = db.prepare('UPDATE todo_items SET position = ? WHERE id = ? AND group_id = ?');
@@ -619,8 +662,8 @@ export function createJournal(db: SqlDb) {
 	}
 
 	// --- Task comments -----------------------------------------------------
-	// Append-only history of a task's evolution. Comments are never edited;
-	// deleting one needs a confirm on the client.
+	// History of a task's evolution. Edits keep the original timestamp, so
+	// the timeline does not reorder. Deleting needs a confirm on the client.
 
 	function listTaskComments(itemId: string): TaskComment[] {
 		return db
@@ -637,6 +680,19 @@ export function createJournal(db: SqlDb) {
 		const now = Date.now();
 		db.prepare('INSERT INTO task_comments (id, item_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, itemId, clean, now);
 		return { id, item_id: itemId, content: clean, created_at: now };
+	}
+
+	function updateTaskComment(itemId: string, id: string, content: string): TaskComment | null {
+		const clean = content.trim();
+		if (!clean) return null;
+		const current = db
+			.prepare('SELECT * FROM task_comments WHERE id = ? AND item_id = ?')
+			.get(id, itemId) as unknown as TaskComment | undefined;
+		if (!current) return null;
+		if (current.content !== clean) {
+			db.prepare('UPDATE task_comments SET content = ? WHERE id = ? AND item_id = ?').run(clean, id, itemId);
+		}
+		return { ...current, content: clean };
 	}
 
 	function deleteTaskComment(itemId: string, id: string): boolean {
@@ -660,6 +716,19 @@ export function createJournal(db: SqlDb) {
 		const now = Date.now();
 		db.prepare('INSERT INTO note_comments (id, note_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, noteId, clean, now);
 		return { id, note_id: noteId, content: clean, created_at: now };
+	}
+
+	function updateNoteComment(noteId: string, id: string, content: string): NoteComment | null {
+		const clean = content.trim();
+		if (!clean) return null;
+		const current = db
+			.prepare('SELECT * FROM note_comments WHERE id = ? AND note_id = ?')
+			.get(id, noteId) as unknown as NoteComment | undefined;
+		if (!current) return null;
+		if (current.content !== clean) {
+			db.prepare('UPDATE note_comments SET content = ? WHERE id = ? AND note_id = ?').run(clean, id, noteId);
+		}
+		return { ...current, content: clean };
 	}
 
 	function deleteNoteComment(noteId: string, id: string): boolean {
@@ -775,8 +844,8 @@ export function createJournal(db: SqlDb) {
 	}
 
 	// --- Principle comments ---------------------------------------------------
-	// Append-only history, mirroring task comments. Never edited; deleting one
-	// needs a confirm on the client.
+	// History mirroring task comments. Edits keep the original timestamp;
+	// deleting one needs a confirm on the client.
 
 	function listPrincipleComments(principleId: string): PrincipleComment[] {
 		return db
@@ -793,6 +862,19 @@ export function createJournal(db: SqlDb) {
 		const now = Date.now();
 		db.prepare('INSERT INTO principle_comments (id, principle_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, principleId, clean, now);
 		return { id, principle_id: principleId, content: clean, created_at: now };
+	}
+
+	function updatePrincipleComment(principleId: string, id: string, content: string): PrincipleComment | null {
+		const clean = content.trim();
+		if (!clean) return null;
+		const current = db
+			.prepare('SELECT * FROM principle_comments WHERE id = ? AND principle_id = ?')
+			.get(id, principleId) as unknown as PrincipleComment | undefined;
+		if (!current) return null;
+		if (current.content !== clean) {
+			db.prepare('UPDATE principle_comments SET content = ? WHERE id = ? AND principle_id = ?').run(clean, id, principleId);
+		}
+		return { ...current, content: clean };
 	}
 
 	function deletePrincipleComment(principleId: string, id: string): boolean {
@@ -976,11 +1058,14 @@ export function createJournal(db: SqlDb) {
 		listTodoItemsByTag,
 		setTodoItemOrder,
 		listInProgressItems,
+		listDoneItems,
 		listTaskComments,
 		createTaskComment,
+		updateTaskComment,
 		deleteTaskComment,
 		listNoteComments,
 		createNoteComment,
+		updateNoteComment,
 		deleteNoteComment,
 		listPrinciples,
 		createPrinciple,
@@ -992,6 +1077,7 @@ export function createJournal(db: SqlDb) {
 		setPrincipleTags,
 		listPrincipleComments,
 		createPrincipleComment,
+		updatePrincipleComment,
 		deletePrincipleComment,
 		listTagColors,
 		setTagColor

@@ -400,7 +400,7 @@
 {/if}
 {#if commenting}
 	<CommentModal
-		onAdd={addComment}
+		onSubmit={addComment}
 		onClose={() => (commenting = null)}
 	/>
 {/if}

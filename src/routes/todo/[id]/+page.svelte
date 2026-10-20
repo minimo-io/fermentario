@@ -5,7 +5,9 @@
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
+	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { loading } from '$lib/loading.svelte';
@@ -20,6 +22,8 @@
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let addingComment = $state(false);
+	let editingComment = $state<TaskComment | null>(null);
+	let confirmingDone = $state(false);
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
 
@@ -65,6 +69,11 @@
 		}
 	}
 
+	function requestDone() {
+		if (item.done) void toggle();
+		else confirmingDone = true;
+	}
+
 	async function addComment(text: string): Promise<boolean> {
 		try {
 			const res = await loading.track(fetch(`/api/todo/items/${item.id}/comments`, {
@@ -75,6 +84,22 @@
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
 			comments = [...comments, d.comment];
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async function updateComment(c: TaskComment, text: string): Promise<boolean> {
+		try {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}/comments/${c.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ content: text })
+			}));
+			const d = await res.json();
+			if (!res.ok) return false;
+			comments = comments.map((x) => (x.id === c.id ? (d.comment as TaskComment) : x));
 			return true;
 		} catch {
 			return false;
@@ -108,6 +133,7 @@
 			>
 				<ArrowLeft class="h-3.5 w-3.5" /> Back
 			</button>
+			<EntityTitle label="Task" id={item.id} />
 		</header>
 
 		<article class="rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70 px-4 py-3">
@@ -118,7 +144,7 @@
 					aria-checked={item.done}
 					aria-label={item.done ? 'Mark not done' : 'Mark done'}
 					class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
-					onclick={toggle}
+					onclick={requestDone}
 				><span class="text-[11px] leading-none">✓</span></button>
 				<div class="min-w-0 flex-1">
 					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}">{item.content}</p>
@@ -156,18 +182,12 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
-						<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
-							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{c.content}</p>
-							<div class="mt-1 flex items-center justify-between gap-2">
-								<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{fmt(c.created_at)}</span>
-								<button
-									type="button"
-									aria-label="Delete comment"
-									class="shrink-0 text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-400"
-									onclick={() => (confirmingComment = c)}
-								>&times;</button>
-							</div>
-						</li>
+						<CommentItem
+							content={c.content}
+							date={fmt(c.created_at)}
+							onEdit={() => (editingComment = c)}
+							onDelete={() => (confirmingComment = c)}
+						/>
 					{/each}
 				</ul>
 			{/if}
@@ -177,8 +197,33 @@
 
 {#if addingComment}
 	<CommentModal
-		onAdd={addComment}
+		onSubmit={addComment}
 		onClose={() => (addingComment = false)}
+	/>
+{/if}
+
+{#if editingComment}
+	{@const c = editingComment}
+	<CommentModal
+		title="Edit comment"
+		placeholder="Edit comment…"
+		submitLabel="Save"
+		successMessage="Comment updated."
+		initial={c.content}
+		onSubmit={(text) => updateComment(c, text)}
+		onClose={() => (editingComment = null)}
+	/>
+{/if}
+
+{#if confirmingDone}
+	<ConfirmDialog
+		title="Mark task as done?"
+		message="{item.content} will move to Done. You can unmark it later."
+		confirmLabel="Mark done"
+		cancelLabel="Cancel"
+		confirmTone="default"
+		onConfirm={() => { confirmingDone = false; void toggle(); }}
+		onCancel={() => (confirmingDone = false)}
 	/>
 {/if}
 

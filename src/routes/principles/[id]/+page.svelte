@@ -6,7 +6,9 @@
 	import TagChip from '$lib/components/TagChip.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
+	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
@@ -20,6 +22,7 @@
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let addingComment = $state(false);
+	let editingComment = $state<PrincipleComment | null>(null);
 	let confirmingComment = $state<PrincipleComment | null>(null);
 
 	$effect(() => {
@@ -69,6 +72,22 @@
 		}
 	}
 
+	async function updateComment(c: PrincipleComment, text: string): Promise<boolean> {
+		try {
+			const res = await loading.track(fetch(`/api/principles/${principle.id}/comments/${c.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ content: text })
+			}));
+			const d = await res.json();
+			if (!res.ok) return false;
+			comments = comments.map((x) => (x.id === c.id ? (d.comment as PrincipleComment) : x));
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	async function deleteComment(c: { id: string }) {
 		try {
 			const res = await loading.track(fetch(`/api/principles/${principle.id}/comments/${c.id}`, { method: 'DELETE' }));
@@ -94,7 +113,8 @@
 			>
 				<ArrowLeft class="h-3.5 w-3.5" /> All principles
 			</button>
-			<p class="mt-3 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+			<EntityTitle label="Principle" id={principle.id} />
+			<p class="mt-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
 				{new Date(principle.created_at).toLocaleString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', {
 					weekday: 'long',
 					day: 'numeric',
@@ -135,20 +155,12 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
-						<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
-							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{c.content}</p>
-							<div class="mt-1 flex items-center justify-between gap-2">
-								<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
-									{new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-								</span>
-								<button
-									type="button"
-									aria-label="Delete comment"
-									class="shrink-0 text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-400"
-									onclick={() => (confirmingComment = c)}
-								>&times;</button>
-							</div>
-						</li>
+						<CommentItem
+							content={c.content}
+							date={new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+							onEdit={() => (editingComment = c)}
+							onDelete={() => (confirmingComment = c)}
+						/>
 					{/each}
 				</ul>
 			{/if}
@@ -158,8 +170,21 @@
 
 {#if addingComment}
 	<CommentModal
-		onAdd={addComment}
+		onSubmit={addComment}
 		onClose={() => (addingComment = false)}
+	/>
+{/if}
+
+{#if editingComment}
+	{@const c = editingComment}
+	<CommentModal
+		title="Edit comment"
+		placeholder="Edit comment…"
+		submitLabel="Save"
+		successMessage="Comment updated."
+		initial={c.content}
+		onSubmit={(text) => updateComment(c, text)}
+		onClose={() => (editingComment = null)}
 	/>
 {/if}
 

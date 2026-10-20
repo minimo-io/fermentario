@@ -1376,8 +1376,8 @@
 - Long note and comment drafts need a full-screen option on mobile. Put the
   toggle in the dialog header, left of Close, with `Maximize2` / `Minimize2`,
   `aria-pressed`, and a label that changes to "Exit full screen".
-- Expanded, use `h-dvh` plus `max-w-none rounded-none` on the panel so it covers
-  the viewport. Keep the writing column readable on desktop with an inner
+- Expanded, use `h-dvh` plus `max-w-full rounded-none` on the panel so it
+  covers the viewport. Keep the writing column readable on desktop with an inner
   `mx-auto max-w-2xl` wrapper; do not stretch text across the whole monitor.
 - A growing textarea needs a flex column on every ancestor: panel, inner wrapper
   and form get `min-h-0`, and the textarea gets `flex-1`. Without `min-h-0` the
@@ -1396,3 +1396,33 @@
 - Give the transition 200 ms and `ease-out`. A longer expansion feels sluggish;
   a shorter one looks like a snap. Test the panel rectangle at 0, 100 and 200 ms,
   not only the end states.
+
+## Session: Editing comments
+- Comments were read-only by design. Editing needs a `PATCH` route on each
+  existing `[commentId]` endpoint, a DB update scoped by both parent id and
+  comment id, and the same edit affordance on every surface that lists
+  comments (notes, tasks, principles). Do not add editing to only one detail
+  page.
+- Reuse `CommentModal` for edit instead of a second dialog: pass `initial`,
+  `title`, `placeholder`, `submitLabel` and `successMessage`. The add call
+  sites use the same `onSubmit` prop, so there is one submit path.
+- Keep `created_at` unchanged on edit. The comment timeline sorts by that
+  field; rewriting it would move an edited comment to the bottom.
+- The three detail pages repeated the same comment-row markup. A shared
+  `CommentItem` keeps the date, pencil, delete and dark styles identical and
+  makes the edit affordance impossible to miss on a later surface.
+
+## Session: Done-task history
+- Completed tasks need a cursor on `(done_at, id)`, not `updated_at` or
+  `created_at`. Editing a done task changes `updated_at`; completing it stamps
+  `done_at`, and that is the order the history promises.
+- An IntersectionObserver sentinel fires only when the intersection changes.
+  Append a page while the sentinel is still visible and a one-shot observer
+  goes quiet. Reconnect the observer after `loadingMore` returns to false so a
+  short first page keeps filling the viewport.
+- The sentinel is invisible (`h-1`), so the observer preloads with a
+  `rootMargin` before the literal bottom of the page. Without margin the user
+  sees the list stop before the next request starts.
+- Confirmation belongs only on the open → done transition. Unmarking restores
+  an open task and does not need a dialog; confirming both directions makes
+  routine cleanup noisy.

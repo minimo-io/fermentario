@@ -2,8 +2,10 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { onMount } from 'svelte';
 	import { contentWidthClass } from '$lib/display';
+	import DoneTasks from '$lib/components/DoneTasks.svelte';
+	import type { TodoDonePage } from '$lib/types';
 
-	type Props = { data: { days: { day: string; count: number }[]; notes: number } };
+	type Props = { data: { days: { day: string; count: number }[]; notes: number; done: TodoDonePage } };
 	let { data }: Props = $props();
 
 	let lang = $state('en');
@@ -218,6 +220,8 @@
 				<span class="ml-3">Hover a square, or tap it, for that day's count.</span>
 			</div>
 		{/if}
+
+		<DoneTasks initial={data.done} lang={lang} />
 	</div>
 </main>
 

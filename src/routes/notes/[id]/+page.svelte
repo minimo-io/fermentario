@@ -10,7 +10,9 @@
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
+	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { loading } from '$lib/loading.svelte';
@@ -31,6 +33,7 @@
 	let menuOpen = $state(false);
 	let reading = $state(false);
 	let addingComment = $state(false);
+	let editingComment = $state<NoteComment | null>(null);
 	let confirmingComment = $state<NoteComment | null>(null);
 
 	$effect(() => {
@@ -70,6 +73,22 @@
 			const d = await res.json();
 			if (!res.ok) return false;
 			comments = [...comments, d.comment as NoteComment];
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async function updateComment(c: NoteComment, text: string): Promise<boolean> {
+		try {
+			const res = await loading.track(fetch(`/api/notes/${note.id}/comments/${c.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ content: text })
+			}));
+			const d = await res.json();
+			if (!res.ok) return false;
+			comments = comments.map((x) => (x.id === c.id ? (d.comment as NoteComment) : x));
 			return true;
 		} catch {
 			return false;
@@ -175,7 +194,8 @@
 			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200">
 				<ArrowLeft class="h-3.5 w-3.5" /> All notes
 			</a>
-			<p class="mt-3 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+			<EntityTitle label="Note" id={note.id} />
+			<p class="mt-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
 				{new Date(note.created_at).toLocaleString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', {
 					weekday: 'long',
 					day: 'numeric',
@@ -232,20 +252,12 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
-						<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
-							<p class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{c.content}</p>
-							<div class="mt-1 flex items-center justify-between gap-2">
-								<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
-									{new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-								</span>
-								<button
-									type="button"
-									aria-label="Delete comment"
-									class="shrink-0 text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-400"
-									onclick={() => (confirmingComment = c)}
-								>&times;</button>
-							</div>
-						</li>
+						<CommentItem
+							content={c.content}
+							date={new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+							onEdit={() => (editingComment = c)}
+							onDelete={() => (confirmingComment = c)}
+						/>
 					{/each}
 				</ul>
 			{/if}
@@ -255,8 +267,21 @@
 
 {#if addingComment}
 	<CommentModal
-		onAdd={addComment}
+		onSubmit={addComment}
 		onClose={() => (addingComment = false)}
+	/>
+{/if}
+
+{#if editingComment}
+	{@const c = editingComment}
+	<CommentModal
+		title="Edit comment"
+		placeholder="Edit comment…"
+		submitLabel="Save"
+		successMessage="Comment updated."
+		initial={c.content}
+		onSubmit={(text) => updateComment(c, text)}
+		onClose={() => (editingComment = null)}
 	/>
 {/if}
 

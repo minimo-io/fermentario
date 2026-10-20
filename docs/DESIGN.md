@@ -37,9 +37,13 @@ sizing. Consult this before changing any of them.
   Add button below the textarea right-aligned like every form dialog) and
   closes itself after the comment is stored — it never shows a thread and never deletes.
   The comment list lives ONLY on the single item page
-  (`/todo/[id]`, `/notes/[id]`, `/principles/[id]`): read-only rows with
-  date + confirmed `×` delete (danger `ConfirmDialog`, `aria-label="Delete
-  comment"`), plus an "Add comment" button that opens the same modal.
+  (`/todo/[id]`, `/notes/[id]`, `/principles/[id]`): rows with date, a pencil
+  edit button and a confirmed `×` delete (danger `ConfirmDialog`,
+  `aria-label="Delete comment"`), plus an "Add comment" button that opens the
+  same modal. Edit reuses `CommentModal` with the existing text prefilled,
+  "Edit comment" title and a Save button. `PATCH
+  /api/{notes,todo/items,principles}/[id]/comments/[commentId]` updates the
+  content; edits keep `created_at`, so the timeline order does not change.
   The count pill on list cards is the add entry point everywhere
   (`aria-haspopup="dialog"`). Comment routes and count bookkeeping stay per
   surface. Notes carry the same standard end to end since: `note_comments`
@@ -135,6 +139,11 @@ Do not introduce a new spacing value without checking this table first.
 - Single-item content (note, task, principle detail pages) is
   `text-[15px] font-semibold`. Comments stay normal weight so the item reads as
   the page subject.
+- Entity detail pages have a `text-2xl` page heading. The type label comes first,
+  followed by the short UUID as `text-sm font-normal tabular-nums text-stone-400
+  dark:text-stone-500` (for example, **Task #a1b2c3d4**). The full UUID stays in
+  the `title` tooltip.
+- Month headings in the Done tasks list use the section-header style.
 
 ## Component widths
 
@@ -198,5 +207,12 @@ turns the animation off.
   hand-written translations).
 - The heatmap packs the year backwards, seven per column from 31 December, so
   the newest days sit at the top left and any slack is at the bottom right.
+- Below the heatmap, **Done tasks** lists completed tasks across every group and
+  year, latest `done_at` first. It groups them under month headings such as
+  **October 2026**, with undated completions under **Date unavailable**. It
+  loads 50 at a time with a cursor and an `IntersectionObserver` sentinel near
+  the bottom; the list is not filtered by the selected heatmap year.
+- Ticking a task from open to done asks for confirmation; unmarking a done task
+  stays immediate.
 - Tag chips are links to `/tags/<tag>`; when a removal handler is present they
   also carry a hover `×` that asks for confirmation.

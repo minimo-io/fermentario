@@ -85,3 +85,15 @@ export interface NoteComment {
 export interface TodoProgressItem extends TodoItem {
 	groupName: string;
 }
+
+export interface TodoDoneCursor {
+	done_at: number;
+	id: string;
+}
+
+export interface TodoDonePage {
+	items: TodoProgressItem[];
+	count: number;
+	hasMore: boolean;
+	nextCursor: TodoDoneCursor | null;
+}

@@ -5,17 +5,33 @@
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { showToast } from '$lib/toast.svelte';
 
-	// The modal takes text for ONE new comment and closes on success. The
-	// comment list lives on the single item page (task, principle, note) —
-	// this modal never shows a thread and never deletes. Add sits below the
-	// textarea like every other form dialog.
+	// The modal takes text for ONE comment — new or existing. The comment
+	// list lives on the single item page (task, principle, note); this modal
+	// never shows a thread and never deletes. Submit sits below the textarea
+	// like every other form dialog.
 	type Props = {
-		onAdd: (text: string) => Promise<boolean>; // resolves true once stored
+		onSubmit: (text: string) => Promise<boolean>; // resolves true once stored
 		onClose: () => void;
+		initial?: string;
+		title?: string;
+		placeholder?: string;
+		submitLabel?: string;
+		successMessage?: string;
 	};
-	let { onAdd, onClose }: Props = $props();
+	let {
+		onSubmit,
+		onClose,
+		initial = '',
+		title = 'Add comment',
+		placeholder = 'Add a comment…',
+		submitLabel = 'Add',
+		successMessage = 'Comment added.'
+	}: Props = $props();
 
-	let draft = $state('');
+	// The dialog is mounted per comment, so capturing `initial` once is the
+	// intended behavior: later parent renders must not overwrite the draft.
+	// svelte-ignore state_referenced_locally
+	let draft = $state(initial);
 	let saving = $state(false);
 	let error = $state('');
 	let full = $state(false);
@@ -30,11 +46,11 @@
 		if (!text || saving) return;
 		saving = true;
 		error = '';
-		if (await onAdd(text)) {
-			showToast('Comment added.', 'success');
+		if (await onSubmit(text)) {
+			showToast(successMessage, 'success');
 			onClose();
 		} else {
-			error = 'Could not add the comment.';
+			error = 'Could not save the comment.';
 			saving = false;
 		}
 	}
@@ -44,7 +60,7 @@
 	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
 	role="dialog"
 	aria-modal="true"
-	aria-label="Add comment"
+	aria-label={title}
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 	onkeydown={(e) => {
@@ -60,7 +76,7 @@
 	>
 		<div class={full ? 'mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col' : ''}>
 			<div class="mb-4 flex items-start justify-between gap-2">
-				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Add comment</h2>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">{title}</h2>
 				<div class="-mr-1 -mt-1 flex shrink-0 items-center gap-0.5">
 					<button
 						type="button"
@@ -87,8 +103,8 @@
 				<textarea
 					rows="3"
 					class="w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 {full ? 'min-h-0 flex-1' : ''}"
-					placeholder="Add a comment…"
-					aria-label="Add a comment"
+					placeholder={placeholder}
+					aria-label={title}
 					value={draft}
 					oninput={(e) => { draft = e.currentTarget.value; if (error) error = ''; }}
 					bind:this={draftField}
@@ -101,7 +117,7 @@
 						type="submit"
 						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium whitespace-nowrap text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
 						disabled={!draft.trim() || saving}
-					>{saving ? 'Saving…' : 'Add'}</button>
+					>{saving ? 'Saving…' : submitLabel}</button>
 				</div>
 			</form>
 		</div>

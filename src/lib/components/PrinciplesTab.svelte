@@ -441,7 +441,7 @@
 {#if commenting}
 	{@const p = commenting}
 	<CommentModal
-		onAdd={(text) => addPrincipleComment(p, text)}
+		onSubmit={(text) => addPrincipleComment(p, text)}
 		onClose={() => (commenting = null)}
 	/>
 {/if}
