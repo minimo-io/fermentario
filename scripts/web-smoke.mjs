@@ -125,6 +125,32 @@ for (;;) {
 	}
 }
 
+// The first request above must have imported the legacy file into the journal
+// layout and removed the old path. Without this the smoke test would still
+// pass while the app quietly kept writing to data/fermentario.db.
+if (existsSync(join(dataDir, 'fermentario.db'))) {
+	console.error('Legacy data/fermentario.db still exists after first boot.');
+	stop();
+	process.exit(1);
+}
+try {
+	const registry = new Database(join(dataDir, 'registry.db'), { readonly: true });
+	const activeId = registry.prepare("SELECT value FROM app_state WHERE key = 'active_journal_id'").get()?.value;
+	const journal = activeId
+		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
+		: null;
+	registry.close();
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 1) {
+		console.error('The legacy import did not register an active v1 journal: ' + JSON.stringify(journal));
+		stop();
+		process.exit(1);
+	}
+} catch (err) {
+	console.error('Registry check failed: ' + err.message);
+	stop();
+	process.exit(1);
+}
+
 const results = [];
 async function api(name, path, init) {
 	const res = await fetch(`${base}${path}`, init);

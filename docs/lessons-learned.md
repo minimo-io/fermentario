@@ -1426,3 +1426,47 @@
 - Confirmation belongs only on the open → done transition. Unmarking restores
   an open task and does not need a dialog; confirming both directions makes
   routine cleanup noisy.
+
+## Session: Animated note folds
+- CSS `line-clamp` cannot animate between one line and full content. Keep the
+  content unclamped during the height transition and apply the clamp again only
+  after the collapse transition ends.
+- Capture the wrapper height before changing state. Set the starting
+  `max-height`, wait for `tick()`, force a layout read, then set the target
+  height so the browser starts the transition.
+- Clear the temporary `max-height` and unclamped flag on `transitionend`. With
+  reduced motion, skip the transition and clear them immediately; otherwise the
+  stale `max-height` can survive.
+
+## Session: Per-user journals and onboarding
+- A database opened at module load cannot support "no journal". Move the open
+  behind a lazy `getJournal()` and keep the old named query exports as thin
+  delegates, otherwise every API route has to be rewritten at the same time.
+- Store journal metadata in a separate `registry.db`. Do not treat the folder
+  name as state: the path is relative to `data/`, must be checked for `..`, and
+  the active id belongs in one place.
+- Copy a live SQLite database with `VACUUM INTO`, not `copyFile`. In WAL mode the
+  newest rows can still be in `-wal`; `VACUUM INTO` writes one consistent file.
+  Use the same operation for the pre-migration backup.
+- Import the old file into a new path, validate it, and only then register and
+  activate it. Delete the old file last. If any step fails, remove the new
+  directory and leave the source untouched; `/journal-error` is safer than
+  onboarding over data.
+- Do not redirect a missing or broken active journal to `/welcome`. The error
+  screen has retry and restore; the welcome screen has create, which could hide
+  the user's existing file.
+- Track migrations per journal in `schema_migrations`. Version 1 is the full
+  baseline, including the column checks and backfills from the old startup code.
+  `PRAGMA user_version` is a compatibility hint, not the history.
+- Each migration and its tracking row must commit together. A backup must be
+  written before the first pending migration, not after a failed one.
+- The migration runner is also a CLI. Node's strip-only TypeScript loader does
+  not support constructor parameter properties, so write the explicit fields.
+  Relative TypeScript imports need the `.ts` extension for Node; the Svelte
+  build still handles them.
+- `ReadableStream` SSE routes keep running after the client disconnects. Put
+  temp-file cleanup and the onboarding lock release in `finally`, and guard
+  `controller.enqueue`/`close` with try/catch.
+- Test first boot with a throwaway data directory. The web smoke fixture is
+  deliberately pre-migration; asserting that `fermentario.db` is gone after the
+  first request catches a silent fallback to the old path.

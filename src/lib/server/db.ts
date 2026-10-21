@@ -1,141 +1,94 @@
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { createJournal } from '$lib/platform/journal';
-import { createNodeDb } from '$lib/server/node-db';
+import type { Journal } from '$lib/platform/journal';
+import { getDb, getJournal, NoActiveJournalError } from './journal-store';
 
 /**
- * The journal on Node. Every query lives in `$lib/platform/journal`; this file
- * only opens the database, applies the pragmas and the schema, and re-exports
- * the same function names the 11 API routes already import.
+ * The 11 API routes still import named database functions from here. They are
+ * lazy delegates now: the journal file is opened on first use, not when this
+ * module is imported. The active journal can be missing, broken or replaced
+ * without every route discovering that at module-evaluation time.
  */
 
-const dataDir = resolve(process.env['FERMENTARIO_DATA_DIR'] ?? './data');
-mkdirSync(dataDir, { recursive: true });
-
-export const db = createNodeDb(resolve(dataDir, 'fermentario.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-const journal = createJournal(db);
-db.exec(journal.Schema);
-
-// Databases created before the featured flag need the column added. PRAGMA
-// reads the real schema, so this runs exactly once per database.
-const noteCols = db.prepare('PRAGMA table_info(notes)').all() as { name: string }[];
-if (!noteCols.some((c) => c.name === 'featured')) {
-	db.exec('ALTER TABLE notes ADD COLUMN featured INTEGER NOT NULL DEFAULT 0');
-}
-if (!noteCols.some((c) => c.name === 'video')) {
-	db.exec("ALTER TABLE notes ADD COLUMN video TEXT NOT NULL DEFAULT ''");
-}
-// The notes in-progress experiment shipped and was reverted: tasks own that
-// concept now. Drop the column where it exists; fresh tables never had it.
-if (noteCols.some((c) => c.name === 'in_progress')) {
-	db.exec('ALTER TABLE notes DROP COLUMN in_progress');
+function bind<K extends keyof Journal>(key: K): Journal[K] {
+	return ((...args: unknown[]) => {
+		const fn = getJournal()[key] as unknown as (...inner: unknown[]) => unknown;
+		return fn(...args);
+	}) as Journal[K];
 }
 
-// To-Do groups and items created before position backfill in creation
-// order, so visible lists do not reshuffle under the user.
-const groupCols = db.prepare('PRAGMA table_info(todo_groups)').all() as { name: string }[];
-if (!groupCols.some((c) => c.name === 'position')) {
-	db.exec('ALTER TABLE todo_groups ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
-	const ids = db
-		.prepare('SELECT id FROM todo_groups ORDER BY created_at ASC, id ASC')
-		.all() as { id: string }[];
-	const upd = db.prepare('UPDATE todo_groups SET position = ? WHERE id = ?');
-	db.transaction(() => {
-		ids.forEach((r, i) => upd.run(i, r.id));
-	});
-}
-const itemCols = db.prepare('PRAGMA table_info(todo_items)').all() as { name: string }[];
-if (!itemCols.some((c) => c.name === 'done_at')) {
-	db.exec('ALTER TABLE todo_items ADD COLUMN done_at INTEGER NOT NULL DEFAULT 0');
-}
-if (!itemCols.some((c) => c.name === 'position')) {
-	db.exec('ALTER TABLE todo_items ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
-	const ids = db
-		.prepare('SELECT id FROM todo_items ORDER BY created_at ASC, id ASC')
-		.all() as { id: string }[];
-	const upd = db.prepare('UPDATE todo_items SET position = ? WHERE id = ?');
-	db.transaction(() => {
-		ids.forEach((r, i) => upd.run(i, r.id));
-	});
-}
-if (!itemCols.some((c) => c.name === 'in_progress')) {
-	db.exec('ALTER TABLE todo_items ADD COLUMN in_progress INTEGER NOT NULL DEFAULT 0');
-}
-if (!itemCols.some((c) => c.name === 'subgroup')) {
-	db.exec("ALTER TABLE todo_items ADD COLUMN subgroup TEXT NOT NULL DEFAULT ''");
-}
-// Older data could mark an item done without clearing its in-progress flag.
-db.exec('UPDATE todo_items SET in_progress = 0 WHERE done = 1 AND in_progress = 1');
+export const createNote = bind('createNote');
+export const deleteNote = bind('deleteNote');
+export const updateNote = bind('updateNote');
+export const getNote = bind('getNote');
+export const listNotesPage = bind('listNotesPage');
+export const countNotesByTag = bind('countNotesByTag');
+export const notesMissingVectors = bind('notesMissingVectors');
+export const notesBetween = bind('notesBetween');
+export const setNoteTags = bind('setNoteTags');
+export const removeNoteTag = bind('removeNoteTag');
+export const setNoteFeatured = bind('setNoteFeatured');
+export const setNoteVideo = bind('setNoteVideo');
+export const notesMissingTags = bind('notesMissingTags');
+export const setVector = bind('setVector');
+export const allVectors = bind('allVectors');
+export const ftsCandidateIds = bind('ftsCandidateIds');
+export const countNotes = bind('countNotes');
+export const latestTimestamp = bind('latestTimestamp');
+export const getWeeklyRecap = bind('getWeeklyRecap');
+export const saveWeeklyRecap = bind('saveWeeklyRecap');
+export const insertAsk = bind('insertAsk');
+export const listAsks = bind('listAsks');
+export const deleteAsk = bind('deleteAsk');
+export const listTodoGroups = bind('listTodoGroups');
+export const createTodoGroup = bind('createTodoGroup');
+export const renameTodoGroup = bind('renameTodoGroup');
+export const deleteTodoGroup = bind('deleteTodoGroup');
+export const setTodoGroupOrder = bind('setTodoGroupOrder');
+export const listTodoItems = bind('listTodoItems');
+export const getTodoItem = bind('getTodoItem');
+export const createTodoItem = bind('createTodoItem');
+export const updateTodoItem = bind('updateTodoItem');
+export const deleteTodoItem = bind('deleteTodoItem');
+export const setTodoItemTags = bind('setTodoItemTags');
+export const listTodoItemsByTag = bind('listTodoItemsByTag');
+export const setTodoItemOrder = bind('setTodoItemOrder');
+export const listInProgressItems = bind('listInProgressItems');
+export const listDoneItems = bind('listDoneItems');
+export const listTaskComments = bind('listTaskComments');
+export const createTaskComment = bind('createTaskComment');
+export const updateTaskComment = bind('updateTaskComment');
+export const deleteTaskComment = bind('deleteTaskComment');
+export const listNoteComments = bind('listNoteComments');
+export const createNoteComment = bind('createNoteComment');
+export const updateNoteComment = bind('updateNoteComment');
+export const deleteNoteComment = bind('deleteNoteComment');
+export const listPrinciples = bind('listPrinciples');
+export const createPrinciple = bind('createPrinciple');
+export const updatePrinciple = bind('updatePrinciple');
+export const deletePrinciple = bind('deletePrinciple');
+export const setPrincipleOrder = bind('setPrincipleOrder');
+export const setPrincipleVideo = bind('setPrincipleVideo');
+export const listPrinciplesByTag = bind('listPrinciplesByTag');
+export const setPrincipleTags = bind('setPrincipleTags');
+export const listPrincipleComments = bind('listPrincipleComments');
+export const createPrincipleComment = bind('createPrincipleComment');
+export const updatePrincipleComment = bind('updatePrincipleComment');
+export const deletePrincipleComment = bind('deletePrincipleComment');
+export const listTagColors = bind('listTagColors');
+export const setTagColor = bind('setTagColor');
 
-const principleCols = db.prepare('PRAGMA table_info(principles)').all() as { name: string }[];
-if (!principleCols.some((c) => c.name === 'video')) {
-	db.exec("ALTER TABLE principles ADD COLUMN video TEXT NOT NULL DEFAULT ''");
-}
+export { getDb, getJournal, NoActiveJournalError };
 
-export const {
-	createNote,
-	deleteNote,
-	updateNote,
-	getNote,
-	listNotesPage,
-	countNotesByTag,
-	notesMissingVectors,
-	notesBetween,
-	setNoteTags,
-	removeNoteTag,
-	setNoteFeatured,
-	setNoteVideo,
-	notesMissingTags,
-	setVector,
-	allVectors,
-	ftsCandidateIds,
-	countNotes,
-	latestTimestamp,
-	getWeeklyRecap,
-	saveWeeklyRecap,
-	insertAsk,
-	listAsks,
-	deleteAsk,
-	listTodoGroups,
-	createTodoGroup,
-	renameTodoGroup,
-	deleteTodoGroup,
-	setTodoGroupOrder,
-	listTodoItems,
-	getTodoItem,
-	createTodoItem,
-	updateTodoItem,
-	deleteTodoItem,
-	setTodoItemTags,
-	listTodoItemsByTag,
-	setTodoItemOrder,
-	listInProgressItems,
-	listDoneItems,
-	listTaskComments,
-	createTaskComment,
-	updateTaskComment,
-	deleteTaskComment,
-	listNoteComments,
-	createNoteComment,
-	updateNoteComment,
-	deleteNoteComment,
-	listPrinciples,
-	createPrinciple,
-	updatePrinciple,
-	deletePrinciple,
-	setPrincipleOrder,
-	setPrincipleVideo,
-	listPrinciplesByTag,
-	setPrincipleTags,
-	listPrincipleComments,
-	createPrincipleComment,
-	updatePrincipleComment,
-	deletePrincipleComment,
-	listTagColors,
-	setTagColor
-} = journal;
-
-export type { Note, NoteRow, NoteCursor, NotePage, AskRow, Ask, TodoGroup, TodoItem, TodoProgressItem, TaskComment, NoteComment, Principle } from '$lib/platform/journal';
+export type {
+	Note,
+	NoteRow,
+	NoteCursor,
+	NotePage,
+	AskRow,
+	Ask,
+	TodoGroup,
+	TodoItem,
+	TodoProgressItem,
+	TaskComment,
+	NoteComment,
+	Principle
+} from '$lib/platform/journal';

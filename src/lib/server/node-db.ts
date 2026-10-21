@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import type { RunResult, SqlDb, SqlStatement, SqlValue } from '$lib/platform/sqlite';
+import type { RunResult, SqlDb, SqlStatement, SqlValue } from '../platform/sqlite.ts';
 
 /**
  * The Node side of the database: better-sqlite3, which is a native addon and

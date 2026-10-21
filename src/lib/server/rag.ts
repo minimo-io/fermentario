@@ -1,33 +1,48 @@
 import { allVectors, notesBetween, ftsCandidateIds, setVector, getNote, notesMissingVectors, countNotes } from './db';
 import { embed, cosine } from './models';
+import { onJournalChange } from './journal-events';
 import type { Note } from './db';
 
 let indexing: Promise<void> | null = null;
+let epoch = 0;
+
+onJournalChange(() => {
+	epoch++;
+	indexing = null;
+});
 
 /**
  * Compute embeddings for any notes missing one. Runs once lazily.
  */
 export function ensureIndexed(): Promise<void> {
 	if (!indexing) {
+		const startedFor = epoch;
 		indexing = (async () => {
 			// Anti-join in SQL: a batch of ids, not the whole table plus every
 			// vector blob. The cost per call stays constant as the journal grows.
 			for (const id of notesMissingVectors(25)) {
+				if (startedFor !== epoch) return;
 				const note = getNote(id);
-				if (note) setVector(id, await embed(note.content));
+				if (!note) continue;
+				const vector = await embed(note.content);
+				if (startedFor !== epoch) return;
+				setVector(id, vector);
 			}
 		})().finally(() => {
 			// Reset on success too: the pass is a cache check, not a one-time
 			// job. Caching the resolved promise left every note created while
 			// the server was running without a vector.
-			indexing = null;
+			if (startedFor === epoch) indexing = null;
 		});
 	}
 	return indexing;
 }
 
 export async function indexNote(noteId: string, content: string): Promise<void> {
-	setVector(noteId, await embed(content));
+	const startedFor = epoch;
+	const vector = await embed(content);
+	if (startedFor !== epoch) return;
+	setVector(noteId, vector);
 }
 
 export interface Retrieved {

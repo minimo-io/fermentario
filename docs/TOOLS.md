@@ -16,7 +16,7 @@ section back through the API.
 | `pnpm run fixture` | Rewrite `tests/fixtures/journal.db` only. |
 
 Rules that keep it a real gate:
-- It never opens `data/fermentario.db`. Every run copies the fixture into a temp directory.
+- It never opens `data/fermentario.db`. Every run copies the fixture into a temp directory, then the first boot imports it into `data/journals/<id>/journal.db` and removes the legacy path.
 - It downloads nothing. `scripts/offline-guard.mjs` rejects the Hugging Face hosts, so the background `ensureIndexed()` and `ensureTags()` passes fail fast instead of pulling 22 MB of weights.
 - `TZ=UTC` fixes the heatmap day keys, which are computed with `localtime`.
 - The model cache is an empty temp directory, so no 488 MB model loads.
@@ -32,10 +32,50 @@ restore before the route can run. `ORIGIN` is still deployment-specific: set it
 when the app runs over plain HTTP behind a proxy, or the import form fails the
 CSRF origin check.
 
+On first boot, if `data/registry.db` has no journal and `data/fermentario.db`
+exists, the server copies the old file into `data/journals/<id>/journal.db`,
+migrates it, activates it, and removes the old file. The copy is kept under
+`data/backups/<id>/pre-migration-v0.db`. Stop the old server before this boot;
+the import assumes one writer. If the import fails, the app shows
+`/journal-error` and leaves the old file untouched.
+
+## `pnpm run db:migrate:all` — migrate every journal
+`node --experimental-strip-types scripts/migrate-all.ts`
+
+Reads `data/registry.db` and applies pending migrations to every registered
+journal. Run it before starting a new production build after a schema change.
+Each journal gets a backup under `data/backups/<id>/`, the five newest are
+kept, and `journals.schema_version` is updated. A journal newer than the app
+fails the command instead of being opened.
+
+Development does not need this command: opening a journal runs the same
+migrations automatically.
+
+## `pnpm run test:onboarding` — welcome, create, restore gate
+`node scripts/onboarding-smoke.mjs`
+
+Starts the production build against throwaway data directories and checks:
+1. no journal redirects `/` to `/welcome`, data APIs return 409 `NO_JOURNAL`,
+   and `POST /api/journal` creates a schema-only journal;
+2. restoring the frozen fixture creates and activates a new journal with five
+   notes;
+3. a broken active journal redirects to `/journal-error` and can be replaced by
+   restoring a backup;
+4. an invalid upload reports an error and leaves no journal behind.
+
+It also asserts that the welcome page offers an empty journal, that a second
+create returns 409, and that the new database contains every table with zero
+rows. Run it after changes to `src/hooks.server.ts`, the journal registry, the
+onboarding routes or the restore core.
+
 ## `pnpm run fixture` — frozen test database
 `node scripts/make-fixture.mjs [output-path]`
 
 Writes `tests/fixtures/journal.db`: 5 notes, 5 tag rows, 1 recap, 1 ask row, 5 vectors, 77 KB. Everything is fixed — UUIDs, timestamps, and 384-dim float32 vectors from a deterministic function.
+
+The fixture deliberately uses the pre-migration schema (no To-Do, principles
+or schema tracking tables). The first-boot import and the smoke test therefore
+exercise the baseline migration instead of a database that is already current.
 
 It is synthetic on purpose. A golden built from the real journal would carry personal text into every diff, and would change whenever a new note was written, which hides real regressions.
 

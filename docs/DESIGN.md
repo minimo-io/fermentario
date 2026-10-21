@@ -60,7 +60,10 @@ sizing. Consult this before changing any of them.
   foldable too (foldability is measured from the rendered height, not
   counted from newlines). A persisted fold is trusted without re-measuring.
   Short notes stay plain, non-tappable text. Tags, video pill, featured
-  star and amber border stay visible while folded. Folds persist in
+  star and amber border stay visible while folded. The fold animates over
+  180 ms by measuring the full text height: the one-line clamp comes off before
+  expansion and returns only after contraction finishes. Reduced motion turns
+  the height animation off. Folds persist in
   `localStorage` (`ferm:collapsed-notes`, array of note ids) across reloads until
   expanded. THE FOLD MAP IS MODULE-STATE, SHARED BY EVERY MOUNTED TIMELINE:
   the home page (and tag pages) render two timelines at once (featured
@@ -164,6 +167,23 @@ toggle in the header (left of Close when present). Expanded, the panel is
 column and the textarea takes the remaining height. `Escape` collapses the panel
 before it closes the dialog. The toggle animates height, max-width, corner
 radius and backdrop padding over 200 ms; reduced motion turns the animation off.
+
+## Onboarding
+
+- `/welcome` is the first-run screen. It uses no app chrome: a centered
+  `max-w-2xl` card with `rounded-3xl`, `p-6 sm:p-8`, and the same stone palette
+  as Settings. The primary action creates an empty journal; restore is a
+  separate section below a divider so it is never the default click.
+- An empty journal contains the schema only. Do not seed notes, tasks,
+  principles, tags or a recap: the first screen after creation must be the
+  user's empty journal, not a demo.
+- `/journal-error` reuses the same card layout. It shows the failure and
+  offers retry plus restore. Never redirect a broken or missing active journal
+  to `/welcome`: showing a create button there could hide the user's data.
+- The welcome and error screens are full-page routes. They do not render the
+  composer, the section bar or the header controls.
+- The home page has no tagline. The header is only the journal controls and
+  settings; do not add a marketing line above the timeline.
 
 ## Interaction
 

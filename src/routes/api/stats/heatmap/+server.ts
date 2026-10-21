@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db';
+import { getDb } from '$lib/server/db';
 
 /** Note counts per calendar day, all time.
  *
@@ -7,6 +7,7 @@ import { db } from '$lib/server/db';
  *  the app runs the server and the browser on the same machine. A deployment
  *  with the server in another timezone would need the zone passed in. */
 export async function GET() {
+	const db = getDb();
 	const days = db
 		.prepare(
 			`SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS count

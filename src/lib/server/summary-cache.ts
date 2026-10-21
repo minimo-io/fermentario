@@ -4,9 +4,16 @@
  *  database: a recap memoized before the import would otherwise be served for
  *  the restored week. */
 
+import { onJournalChange } from './journal-events';
+
 let cache: { key: string; text: string } | null = null;
 
 export const summaryLocks: Record<string, Promise<string> | undefined> = {};
+
+onJournalChange(() => {
+	cache = null;
+	for (const key of Object.keys(summaryLocks)) delete summaryLocks[key];
+});
 
 export function getCachedSummary(key: string): string | null {
 	return cache?.key === key ? cache.text : null;

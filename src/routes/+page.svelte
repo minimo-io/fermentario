@@ -575,9 +575,9 @@ function langTag(p: Lang): string {
 </svelte:head>
 
 <main class="min-h-dvh">
-	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">		<header class="mb-5">
-			<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">your voice journal — life &amp; the bootstrapped thing.</p>
-			<div class="mt-4 flex flex-wrap items-center gap-2">
+	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">
+		<header class="mb-5">
+			<div class="flex flex-wrap items-center gap-2">
 				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
 				<span class="ml-auto inline-flex items-center gap-2">
 					<button

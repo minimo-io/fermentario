@@ -1,5 +1,6 @@
 import { getChatModelReady, chat } from '$lib/server/models';
 import { getNote, notesMissingTags, setNoteTags } from '$lib/server/db';
+import { onJournalChange } from './journal-events';
 
 const TAG_SYSTEM = 'You assign short tags to private journal notes.';
 
@@ -52,14 +53,8 @@ export async function generateTagsForNote(content: string): Promise<string[]> {
 	}
 }
 
-/** Tag one note and store the result (no-op when nothing usable). */
-export async function tagNote(noteId: string, content: string): Promise<string[]> {
-	const tags = await generateTagsForNote(content);
-	if (tags.length > 0) setNoteTags(noteId, tags);
-	return tags;
-}
-
 let tagging: Promise<void> | null = null;
+let epoch = 0;
 
 /** Notes already tried in this process. Without this the pass loops forever:
  *  a model that cannot produce parseable tags leaves the note untagged, so the
@@ -67,15 +62,32 @@ let tagging: Promise<void> | null = null;
  *  single Node thread and delaying every other request. */
 const attempted = new Set<string>();
 
+onJournalChange(() => {
+	epoch++;
+	tagging = null;
+	attempted.clear();
+});
+
+/** Tag one note and store the result (no-op when nothing usable). */
+export async function tagNote(noteId: string, content: string): Promise<string[]> {
+	const startedFor = epoch;
+	const tags = await generateTagsForNote(content);
+	if (startedFor !== epoch) return [];
+	if (tags.length > 0) setNoteTags(noteId, tags);
+	return tags;
+}
+
 /** Pass over notes missing tags, mirroring ensureIndexed(). Only runs when
  *  the chat model is already loaded — never forces a model load. Safe to call
  *  concurrently; idempotent. */
 export function ensureTags(): Promise<void> {
 	if (tagging) return tagging;
+	const startedFor = epoch;
 	tagging = (async () => {
 		if (!getChatModelReady()) return;
 		const ids = notesMissingTags();
 		for (const id of ids) {
+			if (startedFor !== epoch) return;
 			if (attempted.has(id)) continue;
 			attempted.add(id);
 			const note = getNote(id);
@@ -85,7 +97,7 @@ export function ensureTags(): Promise<void> {
 	})()
 		.catch(() => {})
 		.finally(() => {
-			tagging = null;
+			if (startedFor === epoch) tagging = null;
 		});
 	return tagging;
 }

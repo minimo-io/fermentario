@@ -32,3 +32,11 @@
 - Read the installed source before asserting how a dependency behaves. `node_modules/@sveltejs/kit/src/core/config/options.js` settled a question that three wrong assumptions could not.
 - If you have trouble solving a problem, check `docs/lessons-learned.md`.
 - Never run any destructive action (`git reset --hard`, `git clean`, force-push, deleting files or branches, dropping changes) without asking the user first.
+
+## Database schema changes
+- Add a new numbered migration to `src/lib/platform/migrations.ts`. Never edit a migration that has already run on a journal.
+- The active journal migrates automatically when the app opens it after restart. New journals run every migration when created.
+- This is not a hot migration. Before you deploy a schema change, stop the old server, run `pnpm run db:migrate:all`, and then start the new build. The command applies pending migrations to every journal in `data/registry.db`.
+- `db:migrate:all` writes a backup under `data/backups/<journal-id>/` before changing each journal and updates `journals.schema_version` in the registry. It keeps the five newest backups.
+- If a journal is newer than the app, the command fails. Stop and update the app; do not force the migration.
+- Restore and onboarding also run migrations. A failed restore must not activate a new journal.

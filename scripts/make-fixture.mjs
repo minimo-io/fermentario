@@ -51,8 +51,10 @@ const db = new Database(out);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// Copied from src/lib/server/db.ts. If that schema changes, change it here:
-// a missing table is a test failure, not something to paper over.
+// An old, deliberately minimal schema. The first-boot import and migration
+// baseline add the current columns and the missing tables. A missing table is a
+// test failure, not something to paper over: this fixture must keep exercising
+// the migration path.
 db.exec(`
 	CREATE TABLE notes (
 		id         TEXT PRIMARY KEY,

@@ -35,12 +35,6 @@
 			// Storage full/blocked: the fold still works for the session.
 		}
 	}
-
-	function toggleFolded(id: string) {
-		if (id in collapsed) delete collapsed[id];
-		else collapsed[id] = true;
-		persistFolded();
-	}
 </script>
 
 <script lang="ts">
@@ -49,8 +43,10 @@
 	import Star from '@lucide/svelte/icons/star';
 	import type { Note } from '$lib/types';
 	import { goto } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { dayLocale } from '$lib/dates';
 	import { inlineMarkdown } from '$lib/markdown-inline';
+	import { motionMs } from '$lib/motion';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
@@ -99,9 +95,13 @@
 	// map above) until the user expands them again — page reloads keep the
 	// fold. Default is expanded; only notes longer than one rendered line
 	// are foldable, so short notes stay plain text. Opening a note lives in
-	// the ⋮ menu.
+	// the ⋮ menu. The fold animates by measuring the full text height: the
+	// clamp comes off before expansion and returns only after contraction.
 	let textEls: Record<string, HTMLElement | null> = {};
+	let foldEls: Record<string, HTMLElement | null> = {};
 	let foldable = $state<Record<string, boolean>>({});
+	let maxHeights = $state<Record<string, string>>({});
+	let unclamped = $state<Record<string, boolean>>({});
 
 	$effect(() => {
 		loadFoldedOnce();
@@ -122,11 +122,59 @@
 		// gets re-measured the moment it is expanded.
 		for (const n of notes) {
 			if (n.id in collapsed) continue;
+			if (maxHeights[n.id] !== undefined) continue;
 			const el = textEls[n.id];
 			if (!el) continue;
 			// Unfolded: content height over one and a half line = foldable.
 			const lh = parseFloat(getComputedStyle(el).lineHeight) || 20.6;
 			foldable[n.id] = el.getBoundingClientRect().height > lh * 1.5;
+		}
+	}
+
+	function finishFold(id: string, e: TransitionEvent) {
+		if (e.target !== e.currentTarget || e.propertyName !== 'max-height') return;
+		delete maxHeights[id];
+		delete unclamped[id];
+		measureFoldable();
+	}
+
+	async function toggleFolded(id: string) {
+		const wrapper = foldEls[id];
+		const duration = motionMs(180);
+
+		if (!wrapper || !duration) {
+			if (id in collapsed) {
+				foldable[id] = true;
+				delete collapsed[id];
+			} else {
+				collapsed[id] = true;
+			}
+			persistFolded();
+			delete maxHeights[id];
+			delete unclamped[id];
+			return;
+		}
+
+		const start = wrapper.getBoundingClientRect().height;
+
+		if (id in collapsed) {
+			foldable[id] = true;
+			delete collapsed[id];
+			persistFolded();
+			maxHeights[id] = `${start}px`;
+			await tick();
+			void wrapper.getBoundingClientRect();
+			const full = Math.max(wrapper.scrollHeight, textEls[id]?.getBoundingClientRect().height ?? 0);
+			maxHeights[id] = `${full}px`;
+		} else {
+			collapsed[id] = true;
+			persistFolded();
+			unclamped[id] = true;
+			maxHeights[id] = `${start}px`;
+			await tick();
+			void wrapper.getBoundingClientRect();
+			const line = parseFloat(getComputedStyle(textEls[id] ?? wrapper).lineHeight) || 20.6;
+			maxHeights[id] = `${Math.ceil(line)}px`;
 		}
 	}
 
@@ -269,26 +317,23 @@
 						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
 						<div class="flex min-w-0 flex-1 items-start gap-3 max-sm:w-full">
 						<div class="min-w-0 flex-1">
-							{#if n.id in collapsed}
-								<button
-									type="button"
-									bind:this={textEls[n.id]}
-									class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 line-clamp-1"
-									aria-expanded="false"
-									onclick={() => toggleFolded(n.id)}
+							{#if n.id in collapsed || foldable[n.id]}
+								<div
+									bind:this={foldEls[n.id]}
+									class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeights[n.id] !== undefined ? 'overflow-hidden' : ''}"
+									style:max-height={maxHeights[n.id]}
+									ontransitionend={(e) => finishFold(n.id, e)}
 								>
-									{@html inlineMarkdown(n.content)}
-								</button>
-							{:else if foldable[n.id]}
-								<button
-									type="button"
-									bind:this={textEls[n.id]}
-									class="block w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200"
-									aria-expanded="true"
-									onclick={() => toggleFolded(n.id)}
-								>
-									{@html inlineMarkdown(n.content)}
-								</button>
+									<button
+										type="button"
+										bind:this={textEls[n.id]}
+										class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : 'block'}"
+										aria-expanded={n.id in collapsed ? 'false' : 'true'}
+										onclick={() => void toggleFolded(n.id)}
+									>
+										{@html inlineMarkdown(n.content)}
+									</button>
+								</div>
 							{:else}
 								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(n.content)}</p>
 							{/if}

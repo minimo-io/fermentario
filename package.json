@@ -1,7 +1,7 @@
 {
 	"name": "fermentario",
 	"private": true,
-	"version": "0.13.0",
+	"version": "0.14.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
@@ -13,6 +13,8 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "pnpm run test:web",
 		"test:web": "node scripts/web-smoke.mjs",
+		"test:onboarding": "node scripts/onboarding-smoke.mjs",
+		"db:migrate:all": "node --experimental-strip-types scripts/migrate-all.ts",
 		"test:web:update": "pnpm run build && node scripts/make-fixture.mjs && node scripts/web-smoke.mjs --update",
 		"fixture": "node scripts/make-fixture.mjs"
 	},

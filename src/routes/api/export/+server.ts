@@ -1,10 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
-import { resolve } from 'node:path';
-import { db } from '$lib/server/db';
-
-const dataDir = resolve(process.env['FERMENTARIO_DATA_DIR'] ?? './data');
-const DB_FILE = resolve(dataDir, 'fermentario.db');
+import { getDb } from '$lib/server/db';
 
 /** Streams the journal database as a file download.
  *
@@ -15,6 +11,7 @@ const DB_FILE = resolve(dataDir, 'fermentario.db');
  *  not an error here, the file is still consistent, and the download is
  *  read-only from that point on. */
 export async function GET() {
+	const db = getDb();
 	try {
 		db.pragma('wal_checkpoint(TRUNCATE)');
 	} catch {
@@ -22,7 +19,7 @@ export async function GET() {
 	}
 
 	const stamp = new Date().toISOString().slice(0, 10);
-	return new Response(Readable.toWeb(createReadStream(DB_FILE)) as ReadableStream, {
+	return new Response(Readable.toWeb(createReadStream(db.filename)) as ReadableStream, {
 		headers: {
 			'content-type': 'application/vnd.sqlite3',
 			'content-disposition': `attachment; filename="fermentario-${stamp}.db"`,
