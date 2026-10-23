@@ -2,9 +2,8 @@
  * Test-only network guard. Loaded into the smoke-test server with
  * `--import`; active only when FERMENTARIO_TEST_OFFLINE=1.
  *
- * The background indexing and tagging passes in GET /api/notes call
- * transformers.js, which downloads model weights from the Hugging Face CDN
- * when the cache is empty. In a test that means a 22 MB download on every run.
+ * The background indexing pass in GET /api/notes calls transformers.js, which
+ * downloads model weights from the Hugging Face CDN when the cache is empty. In a test that means a 22 MB download on every run.
  * Blocking only the Hub hosts makes those passes fail fast, and their failures
  * are already swallowed by the routes.
  *

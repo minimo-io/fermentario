@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { deleteNote, getNote, setNoteTags, setNoteFeatured, setNoteVideo, updateNote } from '$lib/server/db';
 import { indexNote } from '$lib/server/rag';
-import { tagNote } from '$lib/server/tags';
 import { splitTrailingHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -62,21 +61,15 @@ export async function PATCH({ params, request }) {
 		}
 	}
 
-	// The old vector and tags describe the previous text. Refresh both in the
-	// background; clearing first means a later GET /api/notes retries tagging.
-	// Neither step can fail the save.
+	// The old vector and tags describe the previous text. Refresh both; after
+	// the clear, the tags are exactly the hashtags in the new text. Neither
+	// step can fail the save.
 	setNoteTags(note.id, []);
 	note.tags = [];
 	void indexNote(note.id, content).catch(() => {});
 	if (tags.length > 0) {
 		setNoteTags(note.id, tags);
 		note.tags = tags;
-	} else {
-		void tagNote(note.id, content)
-			.then((generated) => {
-				if (generated.length > 0) note.tags = generated;
-			})
-			.catch(() => {});
 	}
 
 	return json({ note });

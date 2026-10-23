@@ -10,8 +10,8 @@
  *  - The real `data/fermentario.db` is never touched. Every run copies the
  *    fixture into a temp directory and points the server at that.
  *  - Nothing is downloaded. `scripts/offline-guard.mjs` rejects requests to the
- *    Hugging Face hosts, so the background indexing and tagging passes fail
- *    fast instead of pulling 22 MB of weights.
+ *    Hugging Face hosts, so the background indexing pass fails fast instead of
+ *    pulling 22 MB of weights.
  *  - `TZ=UTC` fixes the heatmap day keys, which are computed with
  *    `localtime` and would otherwise differ per machine.
  *  - The model cache points at an empty temp directory, so nothing loads a

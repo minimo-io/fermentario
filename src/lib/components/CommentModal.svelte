@@ -57,7 +57,7 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
+	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
 	role="dialog"
 	aria-modal="true"
 	aria-label={title}

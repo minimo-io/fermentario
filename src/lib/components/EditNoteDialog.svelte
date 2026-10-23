@@ -2,6 +2,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
+	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import type { Note } from '$lib/types';
@@ -21,8 +22,8 @@
 	let err = $state('');
 	let full = $state(false);
 
-	const unchanged = $derived(content.trim() === note.content.trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : ''));
-	const empty = $derived(content.trim().length === 0);
+	const unchanged = $derived(content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : ''));
+	const empty = $derived(splitTrailingHashtags(content).content.trim().length === 0);
 
 	async function save() {
 		if (saving || empty || unchanged) return;
@@ -39,7 +40,7 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
+	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="edit-title"

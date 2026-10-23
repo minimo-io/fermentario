@@ -221,7 +221,7 @@
 		message="{item.content} will move to Done. You can unmark it later."
 		confirmLabel="Mark done"
 		cancelLabel="Cancel"
-		confirmTone="default"
+		confirmTone="success"
 		onConfirm={() => { confirmingDone = false; void toggle(); }}
 		onCancel={() => (confirmingDone = false)}
 	/>

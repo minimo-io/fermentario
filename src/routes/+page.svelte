@@ -25,6 +25,10 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import Grid3x3 from '@lucide/svelte/icons/grid-3x3';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
+	import Search from '@lucide/svelte/icons/search';
+	import Tags from '@lucide/svelte/icons/tags';
+	import Kbd from '$lib/components/Kbd.svelte';
+	import { search } from '$lib/search.svelte';
 	import { navigating } from '$app/state';
 	import SectionBar from '$lib/components/SectionBar.svelte';
 	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
@@ -34,6 +38,7 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
 
 	let heatmapLoading = $derived(navigating.to?.url.pathname === '/heatmap');
+	let tagsLoading = $derived(navigating.to?.url.pathname === '/tags');
 
 	let summaryLoading = $state(false);
 	let week = $state<string | null>(null);
@@ -56,6 +61,7 @@ function langTag(p: Lang): string {
 	let reading = $state(false);
 	let utterance: SpeechSynthesisUtterance | null = null;
 	let summaryTimer: ReturnType<typeof setTimeout>;
+	let summaryEpoch = 0;
 
 	const NO_STATE = new Set(['', 'dismissed']);
 	let weekLoading = $state(false);
@@ -106,6 +112,7 @@ function langTag(p: Lang): string {
 	let pendingSectionKey = $state(false);
 	let pendingSectionTimer: ReturnType<typeof setTimeout> | undefined;
 	function handleViewShortcut(e: KeyboardEvent) {
+		if (search.open) return;
 		const t = e.target as HTMLElement | null;
 		if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
 		if (e.isComposing) return;
@@ -184,6 +191,13 @@ function langTag(p: Lang): string {
 		restoreName = file.name;
 		restoreError = '';
 		restorePhase = 'uploading';
+		// The recap belongs to the journal that is being replaced. Drop it and
+		// ignore any summary response that started before the import.
+		summaryEpoch += 1;
+		clearTimeout(summaryTimer);
+		summaryLoading = false;
+		week = null;
+		dismissed = true;
 		const started = Date.now();
 		restoreElapsed = 0;
 		restoreTimer = setInterval(() => (restoreElapsed = Math.floor((Date.now() - started) / 1000)), 1000);
@@ -223,7 +237,10 @@ function langTag(p: Lang): string {
 			await pager.open();
 			await loadAsks();
 			await tagColors.reload();
-			refreshSummaryAnswer(true, null, true);
+			// The import already copied weekly_recaps and cleared the server
+			// memo. Refresh silently: forcing here regenerated the recap and
+			// re-opened the hidden weekly card.
+			refreshSummaryAnswer(false, null, false);
 			showToast(
 				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
 				'success'
@@ -340,21 +357,26 @@ function langTag(p: Lang): string {
 	}
 
 	function refreshSummaryAnswer(force: boolean, keepAnswer: string | null, withLoading: boolean) {clearTimeout(summaryTimer);
+		const epoch = summaryEpoch;
 		if (withLoading) summaryLoading = true;
 		summaryTimer = setTimeout(async () => {
 			const started = performance.now();
 			const custom = config.summaryPrompt.trim();
 			try {
 				const d = await (await fetch('/api/summary?' + (force ? 'rf=1&' : '') + 'lang=' + config.modelLang + '&model=' + config.chatModel + (custom ? '&prompt=' + encodeURIComponent(custom) : ''), { headers: {} })).json();
+				if (epoch !== summaryEpoch) return;
 				const rest = withLoading ? Math.max(0, 900 - (performance.now() - started)) : 0;
 				if (rest > 0) await new Promise((r) => setTimeout(r, rest));
+				if (epoch !== summaryEpoch) return;
 				week = d.exists ? d.week : null;
 				if (withLoading && d.exists) dismissed = false;
 			} catch {
 				// fall through to finally
 			} finally {
-				summaryLoading = false;
-				weekLoading = false;
+				if (epoch === summaryEpoch) {
+					summaryLoading = false;
+					weekLoading = false;
+				}
 			}
 		}, force ? 0 : 500);
 	}
@@ -579,6 +601,19 @@ function langTag(p: Lang): string {
 		<header class="mb-5">
 			<div class="flex flex-wrap items-center gap-2">
 				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
+				<a href="/tags" aria-disabled={tagsLoading} aria-busy={tagsLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {tagsLoading ? 'pointer-events-none opacity-40' : ''}">{#if tagsLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Tags class="h-3.5 w-3.5" />{/if} Tags</a>
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+					aria-label="Search"
+					aria-haspopup="dialog"
+					aria-keyshortcuts="Meta+K Control+K"
+					onclick={() => search.openSearch()}
+				>
+					<Search class="h-3.5 w-3.5" />
+					<span class="hidden sm:inline">Search</span>
+					<Kbd keys={apple ? ['⌘', 'K'] : ['Ctrl', 'K']} />
+				</button>
 				<span class="ml-auto inline-flex items-center gap-2">
 					<button
 						type="button"
@@ -665,7 +700,7 @@ function langTag(p: Lang): string {
 		{:else if view === 'todo'}
 			<TodoTab onError={(m) => showToast(m)} lang={config.entriesLang} widthClass={contentClass} />
 		{:else if view === 'principles'}
-			<PrinciplesTab onError={(m) => showToast(m)} widthClass={contentClass} />
+			<PrinciplesTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
 		{:else}
 			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
 		{/if}

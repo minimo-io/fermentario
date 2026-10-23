@@ -36,7 +36,7 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
+	class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4 sm:place-items-center"
 	role="dialog"
 	aria-modal="true"
 	aria-label="Note actions"

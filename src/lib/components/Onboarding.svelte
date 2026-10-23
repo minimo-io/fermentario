@@ -26,9 +26,11 @@
 	let restoreName = $state('');
 	let restorePhase = $state<RestorePhase | null>(null);
 	let restoreError = $state('');
+	let restorePickError = $state('');
 	let restoreElapsed = $state(0);
 	let restoreTimer: ReturnType<typeof setInterval> | undefined;
-	let fileInput = $state<HTMLInputElement | null>(null);
+	let selectedFile = $state<File | null>(null);
+	const DB_EXTENSIONS = ['.db', '.sqlite', '.sqlite3'];
 
 	onMount(() => {
 		if (mode === 'error') createError = error;
@@ -86,13 +88,36 @@
 		restoreName = '';
 	}
 
-	async function startRestore() {
-		const file = fileInput?.files?.[0];
+	function pickFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0] ?? null;
+		restorePickError = '';
 		if (!file) {
-			createError = 'Choose a database file first.';
+			selectedFile = null;
 			return;
 		}
-		createError = '';
+		if (!DB_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+			selectedFile = null;
+			input.value = '';
+			restorePickError = 'Choose a .db, .sqlite or .sqlite3 file.';
+			return;
+		}
+		if (file.size === 0) {
+			selectedFile = null;
+			input.value = '';
+			restorePickError = 'That file is empty. Choose a database file.';
+			return;
+		}
+		selectedFile = file;
+	}
+
+	async function startRestore() {
+		const file = selectedFile;
+		if (!file) {
+			restorePickError = 'Choose a database file first.';
+			return;
+		}
+		restorePickError = '';
 		restoreName = file.name;
 		restoreError = '';
 		restorePhase = 'uploading';
@@ -208,19 +233,22 @@
 			</p>
 			<div class="mt-3 flex flex-wrap items-center gap-2">
 				<input
-					bind:this={fileInput}
 					type="file"
 					accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3"
+					onchange={pickFile}
 					class="max-w-full text-[11px] text-stone-500 file:mr-2 file:rounded-full file:border file:border-stone-300 file:bg-white file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-stone-600 hover:file:bg-stone-100 dark:text-stone-400 dark:file:border-stone-700 dark:file:bg-stone-900 dark:file:text-stone-300 dark:hover:file:bg-stone-800"
 				/>
 				<button
 					type="button"
-					class="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800"
+					class="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800 dark:disabled:hover:bg-stone-900"
 					onclick={startRestore}
-					disabled={restorePhase !== null}
+					disabled={!selectedFile || restorePhase !== null}
 					>Restore…</button
 				>
 			</div>
+			{#if restorePickError}
+				<p class="mt-1.5 text-[11px] leading-snug text-rose-600 dark:text-rose-400">{restorePickError}</p>
+			{/if}
 		</div>
 	</div>
 	<p class="mt-4 text-center text-[11px] text-stone-400 dark:text-stone-500">

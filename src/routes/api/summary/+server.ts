@@ -3,7 +3,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { countNotes, latestTimestamp, notesBetween, getWeeklyRecap, saveWeeklyRecap } from '$lib/server/db';
 import { ensureIndexed } from '$lib/server/rag';
 import { chat, setActiveChatModel } from '$lib/server/models';
-import { getCachedSummary, setCachedSummary, summaryLocks } from '$lib/server/summary-cache';
+import { getCachedSummary, getSummaryEpoch, setCachedSummary, summaryLocks } from '$lib/server/summary-cache';
 import { DEFAULT_CHAT_MODEL_ID } from '$lib/chat-models';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -60,6 +60,7 @@ function promptHash(prompt: string): string {
 }
 
 export async function GET({ url }: RequestEvent) {
+	const startedFor = getSummaryEpoch();
 	const force = url.searchParams.get('rf') === '1';
 	const lang = url.searchParams.get('lang') ?? 'en';
 	const model = url.searchParams.get('model') ?? DEFAULT_CHAT_MODEL_ID;
@@ -96,8 +97,10 @@ export async function GET({ url }: RequestEvent) {
 	if (wordCount < SPARSE_WORD_LIMIT) {
 		const quotes = recent.map((n) => `"${n.content.trim()}"`).join(', ');
 		const text = `${SPARSE_HEAD[lang] ?? SPARSE_HEAD.en} ${quotes}. ${SPARSE_TAIL[lang] ?? SPARSE_TAIL.en}`;
-		setCachedSummary(key, text);
-		saveWeeklyRecap(weekKey, text);
+		if (startedFor === getSummaryEpoch()) {
+			setCachedSummary(key, text);
+			saveWeeklyRecap(weekKey, text);
+		}
 		return json({ exists: true, week: text, cached: false });
 	}
 
@@ -130,10 +133,14 @@ export async function GET({ url }: RequestEvent) {
 	summaryLocks[key] = task;
 	try {
 		const text = await task;
-		setCachedSummary(key, text);
-		saveWeeklyRecap(weekKey, text);
+		// A restore can happen while the model runs. Never write the old
+		// journal's recap into the restored rows or the reset memo.
+		if (startedFor === getSummaryEpoch()) {
+			setCachedSummary(key, text);
+			saveWeeklyRecap(weekKey, text);
+		}
 		return json({ exists: true, week: text, cached: false });
 	} finally {
-		delete summaryLocks[key];
+		if (summaryLocks[key] === task) delete summaryLocks[key];
 	}
 }

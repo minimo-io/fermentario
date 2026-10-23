@@ -8,13 +8,14 @@
 	import TagChip from '$lib/components/TagChip.svelte';
 	import { inlineMarkdown } from '$lib/markdown-inline';
 	import VideoPill from '$lib/components/VideoPill.svelte';
-	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
+	import { youTubeWatchUrl } from '$lib/youtube';
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
+	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
 	import type { Note, NoteComment } from '$lib/types';
@@ -29,6 +30,14 @@
 	let editing = $state(false);
 	let editContent = $state('');
 	let editVideo = $state('');
+	let editSaving = $state(false);
+	let editError = $state('');
+	let editField = $state<HTMLTextAreaElement | null>(null);
+	const editUnchanged = $derived(
+		editContent.trim() === withTrailingHashtags(note.content, note.tags).trim() &&
+			editVideo.trim() === (note.video ? youTubeWatchUrl(note.video) : '')
+	);
+	const editEmpty = $derived(splitTrailingHashtags(editContent).content.trim().length === 0);
 	let confirming = $state(false);
 	let menuOpen = $state(false);
 	let reading = $state(false);
@@ -105,16 +114,44 @@
 		await refresh();
 	}
 
-	async function saveEdit(content: string, video: string) {
-		const res = await loading.track(fetch(`/api/notes/${note.id}`, {
-			method: 'PATCH',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ content, video })
-		}));
-		const d = await res.json();
-		if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
+	function focusEditor(node: HTMLTextAreaElement) {
+		node.focus();
+		node.setSelectionRange(node.value.length, node.value.length);
+		node.style.height = 'auto';
+		node.style.height = `${node.scrollHeight}px`;
+	}
+
+	function autosizeEditor() {
+		if (!editField) return;
+		editField.style.height = 'auto';
+		editField.style.height = `${editField.scrollHeight}px`;
+	}
+
+	async function saveEdit() {
+		if (editSaving || editEmpty || editUnchanged) return;
+		editSaving = true;
+		editError = '';
+		try {
+			const res = await loading.track(fetch(`/api/notes/${note.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ content: editContent.trim(), video: editVideo.trim() })
+			}));
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
+			editing = false;
+			await refresh();
+		} catch (e) {
+			editError = (e as Error)?.message ?? 'Could not save the note.';
+		} finally {
+			editSaving = false;
+		}
+	}
+
+	function cancelEdit() {
+		if (editSaving) return;
 		editing = false;
-		await refresh();
+		editError = '';
 	}
 
 	async function remove() {
@@ -178,8 +215,11 @@
 
 	function openEdit() {
 		menuOpen = false;
-		editContent = note.content;
-		editVideo = note.video ?? '';
+		editContent = withTrailingHashtags(note.content, note.tags);
+		// Prefill the URL, not the stored id: the id would fail the API's URL
+		// check on a text-only edit.
+		editVideo = note.video ? youTubeWatchUrl(note.video) : '';
+		editError = '';
 		editing = true;
 	}
 </script>
@@ -212,25 +252,74 @@
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
-					<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(note.content)}</p>
+					{#if editing}
+						<textarea
+							bind:this={editField}
+							use:focusEditor
+							class="max-h-[50dvh] w-full resize-none overflow-y-auto rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+							aria-label="Note text"
+							placeholder="Note text"
+							value={editContent}
+							oninput={(e) => { editContent = e.currentTarget.value; autosizeEditor(); }}
+							onkeydown={(e) => {
+								if (e.key === 'Escape') {
+									e.preventDefault();
+									cancelEdit();
+								} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+									e.preventDefault();
+									void saveEdit();
+								}
+							}}
+						></textarea>
+						<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-video">YouTube URL (optional)</label>
+						<input
+							id="edit-note-video"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+							value={editVideo}
+							oninput={(e) => (editVideo = e.currentTarget.value)}
+							placeholder="https://www.youtube.com/watch?v=…"
+							inputmode="url"
+						/>
+						{#if editError}
+							<p class="mt-2 text-xs text-rose-500 dark:text-rose-400">{editError}</p>
+						{/if}
+						<div class="mt-4 flex justify-end gap-2">
+							<button
+								type="button"
+								class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
+								disabled={editSaving}
+								onclick={cancelEdit}
+							>{editSaving ? 'Saving…' : 'Cancel'}</button>
+							<button
+								type="button"
+								class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
+								disabled={editSaving || editEmpty || editUnchanged}
+								onclick={() => void saveEdit()}
+							>{editSaving ? 'Saving…' : 'Save'}</button>
+						</div>
+					{:else}
+						<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(note.content)}</p>
+					{/if}
 				</div>
-				<button
-					type="button"
-					class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 dark:max-sm:bg-stone-900/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
-					aria-label="Note actions"
-					onclick={() => (menuOpen = true)}
-				>
-					<EllipsisVertical class="h-5 w-5" />
-				</button>
+				{#if !editing}
+					<button
+						type="button"
+						class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 dark:max-sm:bg-stone-900/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
+						aria-label="Note actions"
+						onclick={() => (menuOpen = true)}
+					>
+						<EllipsisVertical class="h-5 w-5" />
+					</button>
+				{/if}
 			</div>
-			{#if (note.tags ?? []).length > 0}
+			{#if !editing && (note.tags ?? []).length > 0}
 				<div class="mt-2 flex flex-wrap gap-1">
 					{#each note.tags ?? [] as tag (tag)}
 						<TagChip {tag} onRemove={removeTag} />
 					{/each}
 				</div>
 			{/if}
-			{#if note.video}
+			{#if !editing && note.video}
 				<div class="mt-2"><VideoPill id={note.video} /></div>
 			{/if}
 		</article>
@@ -305,18 +394,6 @@
 		onDelete={() => { menuOpen = false; confirming = true; }}
 		onFeature={toggleFeature}
 		onClose={() => (menuOpen = false)}
-	/>
-{/if}
-
-{#if editing}
-	<EditNoteDialog
-		{note}
-		content={editContent}
-		video={editVideo}
-		onContent={(v) => (editContent = v)}
-		onVideo={(v) => (editVideo = v)}
-		onSave={saveEdit}
-		onCancel={() => (editing = false)}
 	/>
 {/if}
 

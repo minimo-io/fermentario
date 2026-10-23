@@ -139,9 +139,13 @@
 <main class="min-h-dvh">
 	<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 		<header class="mb-5">
-			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200">
-				<ArrowLeft class="h-3.5 w-3.5" /> All notes
-			</a>
+			<button
+				type="button"
+				class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200"
+				onclick={() => { if (window.history.length > 1) window.history.back(); else void goto('/tags'); }}
+			>
+				<ArrowLeft class="h-3.5 w-3.5" /> Back
+			</button>
 			<h1 class="mt-3 flex items-center gap-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
 				<button
 					type="button"
@@ -218,7 +222,7 @@
 										<span class="mt-1 inline-block rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">In progress</span>
 									{/if}
 									{#if (item.commentCount ?? 0) > 0}
-										<span class="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400"><MessageCircle class="h-3 w-3" /> {item.commentCount}</span>
+										<span class="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-200 dark:bg-stone-700 px-2 py-0.5 text-[11px] tabular-nums text-stone-600 dark:text-stone-300"><MessageCircle class="h-3 w-3" /> {item.commentCount}</span>
 									{/if}
 								</span>
 							</li>

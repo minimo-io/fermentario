@@ -7,6 +7,7 @@ const MAX_TAGS = 8;
 const MAX_TAG_LENGTH = 30;
 
 const TRAILING_TAG = /(?:\s|^)(#[\p{L}\p{N}][\p{L}\p{N}_-]{0,29})$/u;
+const TAG_TOKEN = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,29}$/u;
 
 /** Split a note into its text and the hashtags typed at the end of it.
  *
@@ -33,4 +34,18 @@ export function splitTrailingHashtags(input: string): HashtagSplit {
 
 	if (tags.length === 0) return { content: input.trim(), tags: [] };
 	return { content: rest.trim(), tags };
+}
+
+/** Rebuild the editable text for an item whose tags live outside its body.
+ *
+ *  Tags go back as a trailing `#tag` run, the same syntax that created them.
+ *  If any tag cannot be one hashtag token, return the body unchanged: writing
+ *  a multi-word tag from an older note as `#short phrase` would store `phrase`
+ *  and leave `short` in the text. */
+export function withTrailingHashtags(content: string, tags: string[] | undefined): string {
+	const list = (tags ?? []).filter(Boolean);
+	if (list.length === 0 || !list.every((tag) => TAG_TOKEN.test(tag))) return content;
+	const body = content.trimEnd();
+	const suffix = list.map((tag) => `#${tag}`).join(' ');
+	return body ? `${body} ${suffix}` : suffix;
 }

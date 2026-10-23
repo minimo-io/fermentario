@@ -26,7 +26,7 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/50 dark:bg-black/70 p-4"
+	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/50 dark:bg-black/70 backdrop-blur-md p-4"
 	role="dialog"
 	aria-modal="true"
 	aria-label="Restoring your journal"

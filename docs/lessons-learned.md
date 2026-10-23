@@ -1293,8 +1293,9 @@
   `goto()` from a card has no callback shared with the other links. One
   `NavigationLoader` in the root layout covers notes, tasks, principles and all
   other client-side routes.
-- Delay the pill by ~120 ms and make it `pointer-events-none`: instant
-  navigations must not flash, and the indicator must not block the page below.
+- Delay the pill by ~120 ms so instant navigations do not flash. Keep the
+  full-screen backdrop interactive: `pointer-events-none` lets clicks reach
+  the composer and other controls below the blurred loading state.
 - Changing `node_modules` while the dev server runs can leave SvelteKit's
   module-level `app` undefined; every `goto()` then throws on `app.hash`.
   Restart the server instead of patching the call sites.
@@ -1364,8 +1365,9 @@
 - Use `bg-stone-700` for primary buttons in dark mode, not `stone-800`. On
   `stone-900` modal panels a `stone-800` button looks disabled; `stone-700`
   keeps the action visible while `text-white` stays legible.
-- The loading backdrop is glassy but still `pointer-events-none`: blur and tint
-  show that work is in progress without taking clicks away from the page.
+- The loading backdrop is glassy and blocks pointer input while visible. The
+  blur and tint show that work is in progress; they must not become a
+  click-through layer over the page.
 - Verify dark mode with a real browser screenshot, not only by checking that
   `dark:` classes exist in the built CSS. The missed composer class built fine.
 - A full-screen note editor, modals and the fixed bottom bar are separate
@@ -1438,6 +1440,21 @@
   reduced motion, skip the transition and clear them immediately; otherwise the
   stale `max-height` can survive.
 
+## Session: mobile note fold — WebKit does not clamp a button
+- The note text is a `<button>` with `line-clamp-1`. WebKit 26 applies the
+  clamp classes but keeps the button's full layout height (220 px at 390×844);
+  Blink clamps the same button to 21 px. The animated fold's cleanup removed
+  the temporary `max-height` and relied on the clamp, so the note contracted
+  and then jumped back to full height. One tap produced one click; the state
+  and localStorage were correct. The layout was wrong.
+- Put the clamp on an inner `<span>` inside the button. The span clamps to
+  20 px in WebKit and 21 px in Chromium. Keep the button for click/keyboard
+  semantics and `aria-expanded`.
+- Do not put `line-clamp-1` and `block` on the same element: Tailwind's `.block`
+  can override `display: -webkit-box` and the clamp silently stops working.
+- Chrome mobile emulation passed and hid this bug. Reproduce WebKit/CSS
+  failures in Playwright WebKit; the engine, not the viewport, was the variable.
+
 ## Session: Per-user journals and onboarding
 - A database opened at module load cannot support "no journal". Move the open
   behind a lazy `getJournal()` and keep the old named query exports as thin
@@ -1470,3 +1487,122 @@
 - Test first boot with a throwaway data directory. The web smoke fixture is
   deliberately pre-migration; asserting that `fermentario.db` is gone after the
   first request catches a silent fallback to the old path.
+
+## Session: Restore validation + hidden weekly recap
+- An always-enabled "Restore…" button plus a post-click inline error reads as
+  "restore runs with no file". Track the chosen `File` in `$state` from the
+  input's `onchange`, validate the extension and an empty file there, and
+  `disabled={!selected}` the button. `accept=` is a picker hint, not validation.
+- `runRestore()` called `refreshSummaryAnswer(true, null, true)`. The first
+  `true` forced `rf=1` (a full recap regeneration even though the import already
+  copied `weekly_recaps`); the last `true` set `summaryLoading`, which shows
+  "Building your weekly recap…" in the timeline and re-opens the hidden weekly
+  card via `dismissed = false`. Refresh silently with `(false, null, false)` and
+  clear `week`/`dismissed` before the import.
+- A summary request can outlive the journal it started on. `resetSummaryCache()`
+  alone is not enough: the in-flight task still reaches `saveWeeklyRecap()` and
+  writes the old recap into the restored rows. Guard the write with the
+  `getSummaryEpoch()` captured at request start, the same pattern as `rag.ts`
+  and `tags.ts`.
+- Guard the client too: bump a summary epoch and drop responses from before the
+  restore, or an old recap lands in `week` after the new data is loaded.
+
+## Session: Inline edit on the single note page
+- Task 032 asked for "inline edit" but the page reused `EditNoteDialog`, so the
+  note text stayed bold behind a backdrop. Edit now swaps the `<p>` for a
+  textarea in the same card; Save/Cancel sit below it. Keep `EditNoteDialog` for
+  the timeline.
+- Prefill the video field with `youTubeWatchUrl(note.video)`, not the stored id.
+  The dialog's `unchanged` check already compared the URL form, so the id made a
+  no-op save look dirty.
+- An inline editor needs a controlled textarea plus a mount action: focus, put
+  the caret at the end, and set `height = scrollHeight`. Autosize again on every
+  input; `max-h-[50dvh]` turns a long note into an inner scroll instead of a
+  page jump.
+- Hide the ⋮ button, tags and the video pill while editing. They act on the
+  stored note and would compete with the fields.
+
+## Session: Global search palette
+- `Cmd/Ctrl+K` is free: the home page's `handleViewShortcut` returns for any
+  Cmd/Ctrl chord without Shift, so the global handler can claim it. Keep the
+  `isComposing` guard; the composer and the palette input both accept IME text.
+- Mount the palette in the root layout, not the home page. The shortcut must
+  work on note, task and principle detail pages, while the pill stays in the
+  home header. One `<svelte:window>` handler in the layout owns the shortcut.
+- A `placeholder` attribute cannot render the `Kbd` component. Put the shortcut
+  chip at the right edge of the field and keep `aria-keyshortcuts` on the pill.
+  `Kbd` is `hidden sm:inline-flex`, so hide the pill label on phones too or the
+  header wraps.
+- Search notes, tasks and principles with one `LIKE ... ESCAPE '!'` model
+  instead of `notes_fts`. The other two tables have no FTS, and FTS ignores
+  tokens shorter than three characters, so a mixed model would change behaviour
+  per kind. Escape `!`, `%` and `_` in the user text; otherwise they act as
+  wildcards. The FTS index stays for RAG.
+- The palette's open/close effect resets the query, moves focus to the input and
+  restores the previous focus on close. An effect that fetches must abort its
+  `AbortController` in the cleanup, or a slow response from the previous query
+  can land after the user changed the text.
+
+## Session: Tag cloud index
+- Count tags from the three membership tables, never from `tag_colors`. A color
+  outlives its items, so using the registry as a source would show orphan tags.
+- `/tags` and `/tags/[tag]` coexist: SvelteKit picks the exact static page for
+  `/tags` and the dynamic page for a tag. No route conflict.
+- Do not add `/api/tags/cloud`: a real tag named `cloud` would collide with the
+  color `PUT /api/tags/[tag]` route. Use `/api/tag-cloud`.
+- Do not scale tag-cloud pills by use count. The user wants frequency to change
+  order only: sort `count DESC, tag ASC`, keep one pill size, and let the count
+  badge carry the exact number. `$lib/tag-cloud.ts` now holds only the
+  `TagCount` type.
+- Do not hardcode the tag-detail back link to `/`. A tag detail opens both from
+  `/tags` and from tag chips on notes, to-dos and principles. Use
+  `history.back()`, with `/tags` as the no-history fallback. The fixed link sent
+  the tag-cloud path back to notes.
+- `ConfirmDialog` has three tones: danger, success, and neutral. Completion uses
+  success green because it is a positive state change; moves stay neutral, and
+  deletion stays danger.
+
+## Session: Note edit keeps tags
+- A note's trailing hashtags live in `note_tags`, not `note.content`. `PATCH
+  /api/notes/[id]` clears and re-parses those tags from the submitted text, so
+  any note editor that sends the bare body back drops them. The single note
+  editor and the timeline dialog now prefill
+  `withTrailingHashtags(note.content, note.tags)`, the same pattern
+  `TodoTab.openEdit()` uses. Compare the "unchanged" state against that
+  reconstructed text, not against `note.content`, or Save stays enabled.
+- Do not append a multi-word tag as `#short phrase`: the parser stores
+  `phrase` and leaves `short` in the body. `withTrailingHashtags()` appends
+  nothing when any tag fails the one-token grammar.
+- The inline editor's empty check must use
+  `splitTrailingHashtags(text).content`, otherwise a textarea holding only
+  `#tags` passes the check and the API rejects it as an empty note.
+
+## Session: Principles date + add shortcut
+- Principles already carried `created_at`; the list simply never rendered it.
+  Show it under the text with a `<time>` element (`dayLocale(lang)`), and keep
+  the full timestamp in `title`. The detail page already showed the full date.
+- Reuse the To-Do Add shortcut (`⌘⇧A` / `Ctrl+Shift+A`) on the Principles Add
+  button. Keep the same guards: fine pointer, no editable target, no open
+  modal, no composing. Add the `Kbd` to the button and `aria-keyshortcuts`;
+  the hint is `hidden sm:inline-flex`.
+- Reset the video draft when opening the add modal, not only the text.
+
+## Session: Modal backdrop blur
+- Every modal overlay copies the loading state's `backdrop-blur-md`; keep the
+  existing overlay colors and padding. The opaque fullscreen `Composer` has no
+  visible backdrop, so it is not part of this rule.
+- Apply the blur to the overlay element, not the panel. A `backdrop-filter`
+  creates a containing block for fixed descendants, so keep the panel inside the
+  overlay's grid/flex layout instead of adding fixed positioning to it.
+
+## Session: AI tagging removed
+- AI tagging had three entry points, and removing only the POST fallback is not
+  enough: `GET /api/notes` ran `ensureTags()` over notes missing tags, and
+  `PATCH /api/notes/[id]` ran `tagNote()` after every edit without a hashtag.
+  The PATCH path is the one that re-created a tag right after the user deleted
+  one.
+- Tags now come only from trailing hashtags typed by the user. Published notes
+  without hashtags stay untagged; editing a note without hashtags clears its
+  tags. `src/lib/server/tags.ts`, `notesMissingTags` and the tagger prompts are
+  gone. Keep `chat()`: Ask and the weekly summary still need it.
+- Keep `ensureIndexed()`: RAG embeddings are separate from tags.

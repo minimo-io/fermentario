@@ -7,13 +7,23 @@
 import { onJournalChange } from './journal-events';
 
 let cache: { key: string; text: string } | null = null;
+let epoch = 0;
 
 export const summaryLocks: Record<string, Promise<string> | undefined> = {};
 
 onJournalChange(() => {
 	cache = null;
+	epoch++;
 	for (const key of Object.keys(summaryLocks)) delete summaryLocks[key];
 });
+
+/**
+ * Changes whenever the active journal is replaced or restored. A generation
+ * that started before the change must not write its recap into the new rows.
+ */
+export function getSummaryEpoch(): number {
+	return epoch;
+}
 
 export function getCachedSummary(key: string): string | null {
 	return cache?.key === key ? cache.text : null;

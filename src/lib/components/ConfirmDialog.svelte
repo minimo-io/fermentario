@@ -6,7 +6,7 @@
 		message: string;
 		confirmLabel?: string;
 		cancelLabel?: string;
-		confirmTone?: 'danger' | 'default';
+		confirmTone?: 'danger' | 'success' | 'default';
 		onConfirm: () => void;
 		onCancel: () => void;
 	};
@@ -19,10 +19,18 @@
 		onConfirm,
 		onCancel
 	}: Props = $props();
+
+	const confirmClass = $derived(
+		confirmTone === 'danger'
+			? 'bg-rose-600 hover:bg-rose-700'
+			: confirmTone === 'success'
+				? 'bg-emerald-600 hover:bg-emerald-700'
+				: 'bg-stone-900 dark:bg-stone-700 hover:bg-stone-800 dark:hover:bg-stone-600'
+	);
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="confirm-title"
@@ -42,7 +50,7 @@
 			>{cancelLabel}</button>
 			<button
 				type="button"
-				class="rounded-full px-4 py-1.5 text-xs font-medium text-white {confirmTone === 'danger' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-stone-900 dark:bg-stone-700 hover:bg-stone-800 dark:hover:bg-stone-600'}"
+				class="rounded-full px-4 py-1.5 text-xs font-medium text-white {confirmClass}"
 				onclick={onConfirm}
 			>{confirmLabel}</button>
 		</div>

@@ -32,7 +32,7 @@
 
 {#if visible}
 	<div
-		class="pointer-events-none fixed inset-0 z-[60] grid place-items-center bg-white/25 p-6 backdrop-blur-md dark:bg-stone-950/25"
+		class="fixed inset-0 z-[60] grid cursor-wait place-items-center bg-white/25 p-6 backdrop-blur-md dark:bg-stone-950/25"
 		role="status"
 		aria-live="polite"
 	>

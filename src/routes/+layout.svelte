@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import NavigationLoader from '$lib/components/NavigationLoader.svelte';
 	import Toasts from '$lib/components/Toasts.svelte';
+	import GlobalSearch from '$lib/components/GlobalSearch.svelte';
 	import { applyStoredTheme, watchSystemTheme } from '$lib/theme';
 	let { children } = $props();
 
@@ -27,5 +28,6 @@
 </svelte:head>
 
 {@render children()}
+<GlobalSearch />
 <NavigationLoader />
 <Toasts />

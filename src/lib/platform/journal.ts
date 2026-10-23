@@ -1,3 +1,5 @@
+import type { SearchHit } from '../search.ts';
+import type { TagCount } from '../tag-cloud.ts';
 import type { SqlDb, SqlValue } from './sqlite';
 
 /**
@@ -247,6 +249,16 @@ const rowToAsk = (r: AskRow) => ({
 	sources: JSON.parse(r.sources || '[]'),
 	created_at: r.created_at
 });
+
+/** One-line preview around the first match. The palette highlights `query`. */
+function clipSearchText(text: string, query: string, max = 200): string {
+	const flat = text.replace(/\s+/g, ' ').trim();
+	if (flat.length <= max) return flat;
+	const at = flat.toLowerCase().indexOf(query.toLowerCase());
+	const start = Math.max(0, at < 0 ? 0 : at - 60);
+	const end = Math.min(flat.length, start + max);
+	return `${start > 0 ? '…' : ''}${flat.slice(start, end).trim()}${end < flat.length ? '…' : ''}`;
+}
 
 /** better-sqlite3 hands back `Buffer`, sqlite-wasm hands back `Uint8Array`.
  *  This is the one place that difference is allowed to exist. */
@@ -890,6 +902,32 @@ export function createJournal(db: SqlDb) {
 		});
 	}
 
+	// --- Tag counts -------------------------------------------------------
+
+	/** Every tag in use, with counts per section. `tag_colors` is not a source:
+	 *  a stored color can outlive its items, and an orphan must not appear in
+	 *  the cloud. */
+	function listTagCounts(): TagCount[] {
+		return db
+			.prepare(
+				`SELECT tag,
+				        SUM(notes) AS notes,
+				        SUM(todos) AS todos,
+				        SUM(principles) AS principles,
+				        SUM(notes + todos + principles) AS count
+				 FROM (
+				   SELECT tag, COUNT(*) AS notes, 0 AS todos, 0 AS principles FROM note_tags GROUP BY tag
+				   UNION ALL
+				   SELECT tag, 0 AS notes, COUNT(*) AS todos, 0 AS principles FROM todo_item_tags GROUP BY tag
+				   UNION ALL
+				   SELECT tag, 0 AS notes, 0 AS todos, COUNT(*) AS principles FROM principle_tags GROUP BY tag
+				 )
+				 GROUP BY tag
+				 ORDER BY count DESC, tag ASC`
+			)
+			.all() as unknown as TagCount[];
+	}
+
 	// --- Tag colors -------------------------------------------------------
 	// One row per normalized tag. The registry outlives any single note or
 	// item, so a color choice survives deletes. Colors are palette keys, not
@@ -912,18 +950,6 @@ export function createJournal(db: SqlDb) {
 			'INSERT INTO tag_colors (tag, color) VALUES (?, ?) ON CONFLICT(tag) DO UPDATE SET color = excluded.color'
 		).run(clean, color);
 		return true;
-	}
-
-	function notesMissingTags(limit = 50): string[] {
-		const rows = db
-			.prepare(
-				`SELECT n.id FROM notes n
-				 LEFT JOIN note_tags nt ON nt.note_id = n.id
-				 WHERE nt.note_id IS NULL
-				 ORDER BY n.created_at DESC LIMIT ?`
-			)
-			.all(limit) as unknown as { id: string }[];
-		return rows.map((r) => r.id);
 	}
 
 	function setVector(noteId: string, vector: Float32Array): void {
@@ -971,6 +997,80 @@ export function createJournal(db: SqlDb) {
 			.all(match, limit) as unknown as { note_id: string; score: number }[];
 		const min = rows.length ? Math.min(...rows.map((r) => r.score)) : 0;
 		return rows.map((r) => ({ noteId: r.note_id, bm25: min - r.score }));
+	}
+
+	/** Case-insensitive substring search for the global palette.
+	 *
+	 *  Notes have FTS, but tasks and principles do not. One `LIKE` model for
+	 *  all three keeps short queries predictable: `notes_fts` ignores tokens
+	 *  shorter than three characters and never matches a substring. */
+	function searchJournal(query: string, limit = 10): SearchHit[] {
+		const q = query.trim();
+		if (q.length < 2) return [];
+		const cap = Math.max(1, Math.min(50, Math.trunc(limit)));
+		const escaped = q.replace(/[!%_]/g, (ch) => `!${ch}`);
+		const like = `%${escaped}%`;
+
+		const notes = db
+			.prepare(
+				`SELECT id, content, updated_at AS at
+				 FROM notes
+				 WHERE content LIKE ? ESCAPE '!'
+				 ORDER BY updated_at DESC, id DESC
+				 LIMIT ?`
+			)
+			.all(like, cap) as unknown as { id: string; content: string; at: number }[];
+
+		const todos = db
+			.prepare(
+				`SELECT i.id, i.content, i.updated_at AS at, i.done, i.in_progress, g.name AS group_name
+				 FROM todo_items i JOIN todo_groups g ON g.id = i.group_id
+				 WHERE i.content LIKE ? ESCAPE '!'
+				 ORDER BY i.updated_at DESC, i.id DESC
+				 LIMIT ?`
+			)
+			.all(like, cap) as unknown as {
+				id: string;
+				content: string;
+				at: number;
+				done: number;
+				in_progress: number;
+				group_name: string;
+			}[];
+
+		const principles = db
+			.prepare(
+				`SELECT id, content, created_at AS at
+				 FROM principles
+				 WHERE content LIKE ? ESCAPE '!'
+				 ORDER BY position ASC, created_at ASC, id ASC
+				 LIMIT ?`
+			)
+			.all(like, cap) as unknown as { id: string; content: string; at: number }[];
+
+		return [
+			...notes.map((r) => ({
+				kind: 'note' as const,
+				id: r.id,
+				text: clipSearchText(r.content, q),
+				context: '',
+				at: r.at
+			})),
+			...todos.map((r) => ({
+				kind: 'todo' as const,
+				id: r.id,
+				text: clipSearchText(r.content, q),
+				context: `${r.group_name} · ${r.done ? 'Done' : r.in_progress ? 'In progress' : 'Open'}`,
+				at: r.at
+			})),
+			...principles.map((r) => ({
+				kind: 'principle' as const,
+				id: r.id,
+				text: clipSearchText(r.content, q),
+				context: '',
+				at: r.at
+			}))
+		];
 	}
 
 	function countNotes(): number {
@@ -1033,10 +1133,10 @@ export function createJournal(db: SqlDb) {
 		removeNoteTag,
 		setNoteFeatured,
 		setNoteVideo,
-		notesMissingTags,
 		setVector,
 		allVectors,
 		ftsCandidateIds,
+		searchJournal,
 		countNotes,
 		latestTimestamp,
 		getWeeklyRecap,
@@ -1080,6 +1180,7 @@ export function createJournal(db: SqlDb) {
 		updatePrincipleComment,
 		deletePrincipleComment,
 		listTagColors,
+		listTagCounts,
 		setTagColor
 	};
 }

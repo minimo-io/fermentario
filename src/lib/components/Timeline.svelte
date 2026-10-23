@@ -45,6 +45,7 @@
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
 	import { dayLocale } from '$lib/dates';
+	import { withTrailingHashtags } from '$lib/hashtags';
 	import { inlineMarkdown } from '$lib/markdown-inline';
 	import { motionMs } from '$lib/motion';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -209,7 +210,7 @@
 	function openEdit(n: Note) {
 		menuNote = null;
 		editNote = n;
-		editContent = n.content;
+		editContent = withTrailingHashtags(n.content, n.tags);
 		// Prefill the URL, not the stored id: the id would fail the API's URL
 		// check on a text-only edit.
 		editVideo = n.video ? youTubeWatchUrl(n.video) : '';
@@ -294,7 +295,7 @@
 {#snippet commentPill(n: Note)}
 	<button
 		type="button"
-		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+		class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] tabular-nums {commentCount(n) > 0 ? 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600' : 'bg-stone-100 text-stone-500 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700'}"
 		aria-haspopup="dialog"
 		aria-label="Comments on this note"
 		onclick={() => (commenting = n)}
@@ -327,11 +328,13 @@
 									<button
 										type="button"
 										bind:this={textEls[n.id]}
-										class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : 'block'}"
+										class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 block"
 										aria-expanded={n.id in collapsed ? 'false' : 'true'}
 										onclick={() => void toggleFolded(n.id)}
 									>
-										{@html inlineMarkdown(n.content)}
+										<span class="w-full {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : 'block'}">
+											{@html inlineMarkdown(n.content)}
+										</span>
 									</button>
 								</div>
 							{:else}

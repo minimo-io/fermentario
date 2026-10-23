@@ -4,8 +4,11 @@
 	type Props = { onRestoreStart: (file: File) => void };
 	let { onRestoreStart }: Props = $props();
 
+	const DB_EXTENSIONS = ['.db', '.sqlite', '.sqlite3'];
+
 	let confirming = $state(false);
-	let chosen = $state<File | null>(null);
+	let selected = $state<File | null>(null);
+	let fileInput = $state<HTMLInputElement | null>(null);
 	let restoreErr = $state('');
 	let exporting = $state(false);
 	let exportErr = $state('');
@@ -42,25 +45,41 @@
 		}
 	}
 
-	function askRestore() {
-		const input = document.getElementById('restore-file') as HTMLInputElement | null;
-		const file = input?.files?.[0];
+	function pickFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0] ?? null;
+		restoreErr = '';
 		if (!file) {
-			restoreErr = 'Choose a database file first.';
+			selected = null;
 			return;
 		}
+		if (!DB_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+			selected = null;
+			input.value = '';
+			restoreErr = 'Choose a .db, .sqlite or .sqlite3 file.';
+			return;
+		}
+		if (file.size === 0) {
+			selected = null;
+			input.value = '';
+			restoreErr = 'That file is empty. Choose a database file.';
+			return;
+		}
+		selected = file;
+	}
+
+	function askRestore() {
+		if (!selected) return;
 		restoreErr = '';
-		chosen = file;
 		confirming = true;
 	}
 
 	function startRestore() {
-		if (!chosen) return;
-		const file = chosen;
-		chosen = null;
+		if (!selected) return;
+		const file = selected;
+		selected = null;
 		confirming = false;
-		const input = document.getElementById('restore-file') as HTMLInputElement | null;
-		if (input) input.value = '';
+		if (fileInput) fileInput.value = '';
 		onRestoreStart(file);
 	}
 </script>
@@ -86,15 +105,17 @@
 	<p class="text-xs font-medium text-stone-500 dark:text-stone-400">Restore from database</p>
 	<div class="mt-2 flex flex-wrap items-center gap-2">
 		<input
-			id="restore-file"
+			bind:this={fileInput}
 			type="file"
 			accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3"
+			onchange={pickFile}
 			class="max-w-full text-[11px] text-stone-500 dark:text-stone-400 file:mr-2 file:rounded-full file:border file:border-stone-300 dark:file:border-stone-700 file:bg-white dark:file:bg-stone-900 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-stone-600 dark:file:text-stone-300 hover:file:bg-stone-100 dark:hover:file:bg-stone-800"
 		/>
 		<button
 			type="button"
-			class="rounded-full border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50"
+			class="rounded-full border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-rose-50 dark:disabled:hover:bg-rose-950/40"
 			onclick={askRestore}
+			disabled={!selected}
 		>Restore…</button>
 	</div>
 	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
@@ -118,14 +139,14 @@
 	</p>
 </div>
 
-{#if confirming && chosen}
+{#if confirming && selected}
 	<ConfirmDialog
 		title="Replace your journal?"
-		message="{chosen.name} will replace everything stored right now: every note, tag, weekly recap and saved question with its answer. This cannot be undone. Download a backup first if you want to keep what is here."
+		message="{selected.name} will replace everything stored right now: every note, tag, weekly recap and saved question with its answer. This cannot be undone. Download a backup first if you want to keep what is here."
 		confirmLabel="Replace everything"
 		cancelLabel="Cancel"
 		confirmTone="danger"
 		onConfirm={startRestore}
-		onCancel={() => { confirming = false; chosen = null; }}
+		onCancel={() => { confirming = false; }}
 	/>
 {/if}

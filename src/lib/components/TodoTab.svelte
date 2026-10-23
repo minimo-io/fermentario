@@ -620,7 +620,7 @@
 {#snippet commentPill(item: TodoItem | TodoProgressItem)}
 	<button
 		type="button"
-		class="inline-flex shrink-0 items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+		class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] tabular-nums {(item.commentCount ?? 0) > 0 ? 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600' : 'bg-stone-100 text-stone-500 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700'}"
 		aria-haspopup="dialog"
 		aria-label="Comments on this task"
 		onclick={() => void openCommentModal(item)}
@@ -859,7 +859,7 @@
 {#if menuProgressItem}
 	{@const pm = menuProgressItem}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Item actions"
@@ -902,7 +902,7 @@
 {#if menuItem}
 	{@const m = menuItem}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Item actions"
@@ -950,7 +950,7 @@
 {#if menuGroup}
 	{@const g = menuGroup}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Group actions"
@@ -982,7 +982,7 @@
 
 {#if addingGroup}
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New group"
@@ -1022,7 +1022,7 @@
 	{@const ep = items.find((x) => x.id === editing) ?? progressItems.find((x) => x.id === editing)}
 	{#if ep}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Edit task"
@@ -1081,7 +1081,7 @@
 	{@const rg = groups.find((x) => x.id === renaming)}
 	{#if rg}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Rename group"
@@ -1146,7 +1146,7 @@
 		message="{done.content} will move to Done. You can unmark it later."
 		confirmLabel="Mark done"
 		cancelLabel="Cancel"
-		confirmTone="default"
+		confirmTone="success"
 		onConfirm={confirmDone}
 		onCancel={() => (confirmingDone = null)}
 	/>
@@ -1189,7 +1189,7 @@
 
 {#if addingItem}
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New task"

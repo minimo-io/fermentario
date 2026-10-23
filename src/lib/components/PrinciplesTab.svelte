@@ -2,7 +2,9 @@
 	import { goto } from '$app/navigation';
 	import type { Principle } from '$lib/types';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
+	import Kbd from '$lib/components/Kbd.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
+	import { dayLocale } from '$lib/dates';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
@@ -17,8 +19,29 @@
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { loading } from '$lib/loading.svelte';
 
-	type Props = { onError: (msg: string) => void; widthClass?: string };
-	let { onError, widthClass = 'max-w-2xl' }: Props = $props();
+	type Props = { onError: (msg: string) => void; widthClass?: string; lang?: string };
+	let { onError, widthClass = 'max-w-2xl', lang = 'en' }: Props = $props();
+
+	// Add-principle shortcut: desktop pointers only. ⌘⇧A on Mac, Ctrl+Shift+A
+	// elsewhere — none of these is reserved by browsers or the OS shell.
+	const isMac = navigator.userAgent.includes('Mac');
+	const canKeyShortcut = matchMedia('(hover: hover) and (pointer: fine)').matches;
+	const addShortcutKeys = isMac ? ['⌘', '⇧', 'A'] : ['Ctrl', 'Shift', 'A'];
+
+	function handleAddShortcut(e: KeyboardEvent) {
+		if (!canKeyShortcut) return;
+		// Never stack on an open modal of this tab.
+		if (adding || editing || menuPrinciple || confirmingPrinciple || commenting) return;
+		const t = e.target as HTMLElement | null;
+		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+		if (e.isComposing) return;
+		if (e.key.toLowerCase() !== 'a' || !e.shiftKey) return;
+		if (isMac ? !e.metaKey || e.altKey : !e.ctrlKey || e.altKey) return;
+		e.preventDefault();
+		draft = '';
+		draftVideo = '';
+		adding = true;
+	}
 
 	let principles = $state<Principle[]>([]);
 	let draft = $state('');
@@ -227,10 +250,12 @@
 	});
 </script>
 
+<svelte:window onkeydown={handleAddShortcut} />
+
 {#snippet commentPill(p: Principle)}
 	<button
 		type="button"
-		class="shrink-0 inline-flex items-center gap-1 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+		class="shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] tabular-nums {(p.commentCount ?? 0) > 0 ? 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-200 dark:hover:bg-stone-600' : 'bg-stone-100 text-stone-500 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:hover:bg-stone-700'}"
 		aria-haspopup="dialog"
 		aria-label="Comments on this principle"
 		onclick={() => void openCommentModal(p)}
@@ -269,11 +294,28 @@
 						}}
 					><GripVertical class="h-4 w-4" /></span>
 					<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400 dark:text-stone-500">{i + 1}</span>
-					<button
-						type="button"
-						class="min-w-0 flex-1 text-left text-[15px] text-stone-800 dark:text-stone-200"
-						onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(p); }}
-					>{p.content}</button>
+					<div class="min-w-0 flex-1">
+						<button
+							type="button"
+							class="block w-full text-left text-[15px] text-stone-800 dark:text-stone-200"
+							onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(p); }}
+						>{p.content}</button>
+						<time
+							class="mt-0.5 block text-[11px] tabular-nums text-stone-400 dark:text-stone-500"
+							datetime={new Date(p.created_at).toISOString()}
+							title={new Date(p.created_at).toLocaleString(dayLocale(lang), {
+								day: 'numeric',
+								month: 'short',
+								year: 'numeric',
+								hour: '2-digit',
+								minute: '2-digit'
+							})}
+						>{new Date(p.created_at).toLocaleDateString(dayLocale(lang), {
+							day: 'numeric',
+							month: 'short',
+							year: 'numeric'
+						})}</time>
+					</div>
 					<!-- sm+: tags and the comment pill share the title line, right-aligned before the ⋮ -->
 					<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 						{#each p.tags as t (t)}
@@ -312,13 +354,14 @@
 	<button
 		type="button"
 		class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
-		onclick={() => { draft = ''; adding = true; }}
-	><Plus class="h-4 w-4" /> Add</button>
+		onclick={() => { draft = ''; draftVideo = ''; adding = true; }}
+		aria-keyshortcuts={isMac ? 'Meta+Shift+A' : 'Control+Shift+A'}
+	><Plus class="h-4 w-4" /> Add<Kbd keys={addShortcutKeys} tone="dark" /></button>
 </FixedBottomBar>
 
 {#if adding}
 	<div
-		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 p-4"
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New principle"
@@ -368,7 +411,7 @@
 {#if menuPrinciple}
 	{@const mp = menuPrinciple}
 	<div
-		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 p-4 sm:place-items-center"
+		class="fixed inset-0 z-50 grid place-items-end bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4 sm:place-items-center"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Principle actions"
@@ -407,7 +450,7 @@
 	{@const ep = principles.find((x) => x.id === editing)}
 	{#if ep}
 		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 transition-[padding] duration-200 ease-out motion-reduce:transition-none {editFull ? 'p-0' : 'p-4'}"
+			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md transition-[padding] duration-200 ease-out motion-reduce:transition-none {editFull ? 'p-0' : 'p-4'}"
 			role="dialog"
 			aria-modal="true"
 			aria-label="Edit principle"

@@ -31,6 +31,10 @@ sizing. Consult this before changing any of them.
   first-line alignment, on desktop every element shares the ⋮ button's vertical
   centre. Right-align by flex (`ml-auto`), never `position: absolute` — an
   absolute pill overlays the open thread's Add form.
+- **Comment count pills**: zero comments uses `bg-stone-100 dark:bg-stone-800`
+  with muted text. A count above zero uses one darker step,
+  `bg-stone-200 dark:bg-stone-700`, with darker text. The difference is subtle
+  but visible at a glance, and the count remains the primary signal.
 - **Comments standard (all surfaces)**: there is no comment input outside a
   modal and no comment list in any list row. The modal only takes text for
   ONE new comment (`CommentModal`: plain "Add comment" title, textarea,
@@ -62,7 +66,9 @@ sizing. Consult this before changing any of them.
   Short notes stay plain, non-tappable text. Tags, video pill, featured
   star and amber border stay visible while folded. The fold animates over
   180 ms by measuring the full text height: the one-line clamp comes off before
-  expansion and returns only after contraction finishes. Reduced motion turns
+  expansion and returns only after contraction finishes. The clamp lives on an
+  inner span inside the text button, not on the button itself: WebKit does not
+  reduce a button's layout height for `-webkit-line-clamp`. Reduced motion turns
   the height animation off. Folds persist in
   `localStorage` (`ferm:collapsed-notes`, array of note ids) across reloads until
   expanded. THE FOLD MAP IS MODULE-STATE, SHARED BY EVERY MOUNTED TIMELINE:
@@ -160,6 +166,7 @@ Pick an existing size instead of inventing a new one:
 | EditNoteDialog | `max-w-md` |
 | CopyFallback | `max-w-lg` |
 | ModelsModal | `w-[min(92vw,30rem)]` |
+| GlobalSearch | `max-w-xl` |
 
 `EditNoteDialog`, `CommentModal` and the edit-principle dialog have a full-screen
 toggle in the header (left of Close when present). Expanded, the panel is
@@ -183,18 +190,41 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
 - The welcome and error screens are full-page routes. They do not render the
   composer, the section bar or the header controls.
 - The home page has no tagline. The header is only the journal controls and
-  settings; do not add a marketing line above the timeline.
+  settings; do not add a marketing line above the timeline. The view pills run
+  **Heatmap**, **Tags**, **Search**; the first two are links, so the notes
+  timeline stays on the home page.
 
 ## Interaction
 
 - **Destructive actions** (delete note, remove tag, restore database) always go
   through `ConfirmDialog` in `danger` tone.
 - **Overlays** are `fixed inset-0 z-50` with a `stone-900/40` backdrop
-  (`black/60` in dark mode); the backdrop click and `Escape` close them, except
-  while a long operation runs. Dialogs with long text (`EditNoteDialog`,
+  (`black/60` in dark mode; the restore overlay is darker) and
+  `backdrop-blur-md`, the same blur as the loading state; the backdrop click and
+  `Escape` close them, except while a long operation runs. Dialogs with long text (`EditNoteDialog`,
   `CommentModal`, the edit-principle dialog) offer a header toggle that expands
   the panel to the viewport; `Escape` then collapses it first, and the other
   fields and buttons stay fixed while the textarea scrolls.
+- **Single note edit** (`/notes/[id]`): Edit replaces the bold note text in the
+  same card with a textarea and the optional YouTube URL, plus Cancel/Save
+  below. No backdrop and no full-screen toggle. `Escape` cancels,
+  `Cmd/Ctrl+Enter` saves. The textarea prefills stored tags as a trailing
+  hashtag run, so a text edit does not drop them; deleting a hashtag removes
+  that tag. A tag that cannot be written as one hashtag token (a multi-word
+  tag from an older note) stays out of the text. The timeline
+  `EditNoteDialog` follows the same rule.
+- **Principles** (`PrinciplesTab`): cards show the creation date under the
+  text. The Add button carries the same desktop shortcut as the To-Do Add
+  button: `⌘⇧A` on Mac, `Ctrl+Shift+A` elsewhere. The hint is hidden on touch,
+  and the handler ignores editable targets and open dialogs.
+- **Global search** (`GlobalSearch.svelte`) mounts once in the root layout, so
+  `Cmd/Ctrl+K` works on every journal route. The home header Search pill (after
+  Tags) is the discoverable trigger; it is icon-only on phones. The palette is
+  top-anchored (`pt-[max(4rem,12vh)]`, `max-w-xl`), not centered. Results group
+  as Notes, To-Do and Principles, up to ten per kind; `library` and `influences`
+  are reserved until those sections have data. `↑/↓` select, `Enter` opens,
+  `Escape` and the backdrop close. The input placeholder is plain text; the
+  `Kbd` chip sits at the right edge of the field.
 - **Toasts** come from `$lib/toast.svelte` and render once from the root layout
   (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
   never for progress or background work. Auto-clear: 4 s error, 8 s success.
@@ -202,8 +232,9 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   code can see. `NavigationLoader` removes it on mount and takes over: the first
   tracked wait shows at once, later route changes and data waits keep the 120 ms
   anti-flash delay. Both use a glassy full-screen backdrop (`white/25`, or
-  `stone-950/25` in dark, plus `backdrop-blur-md`). The pill and backdrop are
-  `pointer-events-none` and never block input. Track loads and mutations with
+  `stone-950/25` in dark, plus `backdrop-blur-md`). The backdrop blocks pointer
+  input while visible and shows `cursor-wait`; do not let clicks reach the page
+  below. Track loads and mutations with
   `loading.track()` from `$lib/loading.svelte`; never track quiet work (tag
   colors, summary refresh, polling, optimistic saves). Keep contextual busy
   states such as the Heatmap button and `RestoreOverlay`; do not add per-route
@@ -233,6 +264,20 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   loads 50 at a time with a cursor and an `IntersectionObserver` sentinel near
   the bottom; the list is not filtered by the selected heatmap year.
 - Ticking a task from open to done asks for confirmation; unmarking a done task
-  stays immediate.
+  stays immediate. The confirm button is green: completion is a positive
+  change, not a destructive one.
 - Tag chips are links to `/tags/<tag>`; when a removal handler is present they
   also carry a hover `×` that asks for confirmation.
+- Notes get tags only from hashtags the user types at the end of the note.
+  No AI or background pass creates tags.
+- `/tags` is the tag cloud index. It counts every tag in `note_tags`,
+  `todo_item_tags` and `principle_tags`, never `tag_colors` alone. The most-used
+  tags come first; ties are alphabetical. Every pill uses the same size and
+  padding, so frequency changes order, not visual weight. Each pill links to
+  `/tags/<tag>`, reuses the shared tag palette, and carries an exact count. The
+  title gives the per-section breakdown. The cloud has no color picker; open a
+  tag to change its color. The home header **Tags** pill opens this page, so the
+  timeline keeps its infinite loading. A tag detail's **Back** control uses
+  browser history, so it returns to `/tags` when opened there and to the
+  previous note when opened from a tag chip. With no history, it falls back to
+  `/tags`.

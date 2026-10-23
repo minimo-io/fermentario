@@ -8,7 +8,6 @@ import {
 	setNoteVideo
 } from '$lib/server/db';
 import { ensureIndexed, indexNote } from '$lib/server/rag';
-import { ensureTags, tagNote } from '$lib/server/tags';
 import { splitTrailingHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -29,17 +28,16 @@ export async function GET({ url }) {
 	const featured = rawFeatured === 'only' || rawFeatured === 'exclude' ? rawFeatured : undefined;
 
 	if (rawTag) {
-		// A tag page is already filtered: the background passes would only burn
-		// CPU, and every page of the cursor is filtered on the server.
+		// A tag page is already filtered: the background embedding pass would
+		// only burn CPU, and every page of the cursor is filtered on the server.
 		const tag = rawTag.slice(0, MAX_TAG_FILTER);
 		const page = listNotesPage({ limit, before, beforeId, tag, featured });
 		return json({ ...page, count: countNotesByTag(tag), tag });
 	}
 
-	// Neither pass may delay the list: embedding and model tagging run in the
-	// background and land in the next response.
+	// Indexing must not delay the list: it runs in the background and lands in
+	// the next response.
 	void ensureIndexed().catch(() => {});
-	void ensureTags();
 	const page = listNotesPage({ limit, before, beforeId, featured });
 	return json({ ...page, count: countNotes(), tag: null });
 }
@@ -64,16 +62,9 @@ export async function POST({ request }) {
 	}
 	void indexNote(note.id, content).catch(() => {});
 	if (tags.length > 0) {
-		// The user typed the tags. They are the tags; the model is not asked.
+		// Tags come only from hashtags the user typed at the end of the note.
 		setNoteTags(note.id, tags);
 		note.tags = tags;
-	} else {
-		// best-effort tags — never fails the note creation
-		void tagNote(note.id, content)
-			.then((generated) => {
-				if (generated.length > 0) note.tags = generated;
-			})
-			.catch(() => {});
 	}
 	return json({ note }, { status: 201 });
 }

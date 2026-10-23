@@ -17,7 +17,7 @@ section back through the API.
 
 Rules that keep it a real gate:
 - It never opens `data/fermentario.db`. Every run copies the fixture into a temp directory, then the first boot imports it into `data/journals/<id>/journal.db` and removes the legacy path.
-- It downloads nothing. `scripts/offline-guard.mjs` rejects the Hugging Face hosts, so the background `ensureIndexed()` and `ensureTags()` passes fail fast instead of pulling 22 MB of weights.
+- It downloads nothing. `scripts/offline-guard.mjs` rejects the Hugging Face hosts, so the background `ensureIndexed()` pass fails fast instead of pulling 22 MB of weights.
 - `TZ=UTC` fixes the heatmap day keys, which are computed with `localtime`.
 - The model cache is an empty temp directory, so no 488 MB model loads.
 - Runtime values — fresh UUIDs, fresh timestamps, the temp path — are masked once at serialization time.
@@ -90,7 +90,7 @@ Loaded into the smoke-test server with `--import`. Active only when
 Rejects requests to the Hugging Face hosts and passes everything else to the
 real `fetch`, so SvelteKit's own server-side fetch is unaffected. Without it,
 every test run downloads model weights, because `GET /api/notes` starts the
-background indexing and tagging passes.
+background indexing pass.
 
 ## Future: engine parity tests
 Task 020. Will run the real DDL and every query against both better-sqlite3 and
