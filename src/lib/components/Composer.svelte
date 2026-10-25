@@ -4,12 +4,14 @@
 	import { createSpeech, browserSupportsSpeech } from '$lib/speech';
 	import { showToast } from '$lib/toast.svelte';
 	import { splitTrailingHashtags } from '$lib/hashtags';
+	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import Mic from '@lucide/svelte/icons/mic';
 	import Square from '@lucide/svelte/icons/square';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
+	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 
 	type Props = {
-		onNote: (c: string) => void;
+		onNote: (c: string, createdAt?: number) => void;
 		onAsk: (q: string) => void;
 		onStop: () => void;
 		view: 'notes' | 'ask';
@@ -66,6 +68,20 @@
 	let bar = $state<HTMLDivElement | null>(null);
 	let expanded = $state(false);
 	let wideField = $state<HTMLTextAreaElement | null>(null);
+	let noteDate = $state('');
+	let maxNoteDate = $state('');
+
+	function noteTimestamp(): number | undefined {
+		const at = datetimeLocalTimestamp(noteDate);
+		return at === undefined ? undefined : Math.min(at, Date.now());
+	}
+
+	$effect(() => {
+		if (expanded) {
+			maxNoteDate = datetimeLocalValue(Date.now());
+			noteDate = '';
+		}
+	});
 
 	// The overlay is the same controlled input, not a second source of truth:
 	// it renders `text`/`question` and reports every keystroke through the
@@ -77,6 +93,7 @@
 	}
 	function closeWide() {
 		expanded = false;
+		noteDate = '';
 		field?.focus();
 	}
 
@@ -137,12 +154,13 @@
 		interim = '';
 		onListen(false);
 	}
-	function saveNote() {
+	function saveNote(createdAt?: number) {
 		const c = text.trim();
 		if (!c) return;
-		onNote(c);
+		onNote(c, createdAt);
 		onText('');
 		interim = '';
+		noteDate = '';
 	}
 	function submitAsk() {
 		const q = question.trim();
@@ -202,7 +220,7 @@
 				<div class="flex shrink-0 items-center gap-2">
 					<button class="rounded-full p-2.5 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
 					{@render micButton()}
-					<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium text-white" onclick={saveNote} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
+					<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium text-white" onclick={() => saveNote()} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
 				</div>
 			{:else}
 				<textarea
@@ -249,7 +267,7 @@
 				onclick={closeWide}
 			>Close</button>
 			{#if view === 'notes'}
-				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { saveNote(); closeWide(); }} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
+				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { saveNote(noteTimestamp()); closeWide(); }} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
 			{:else if answering}
 				<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800" onclick={onStop}>
 					<Square class="h-3 w-3 fill-current" /> Stop
@@ -258,6 +276,23 @@
 				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { submitAsk(); closeWide(); }} disabled={!question.trim()}>Ask</button>
 			{/if}
 		</div>
+		{#if view === 'notes'}
+			<div class="mx-auto mt-3 flex w-full {widthClass} flex-wrap items-center gap-2 px-6">
+				<label class="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/50 px-2.5 py-1 text-[11px] text-stone-500 dark:text-stone-400">
+					<CalendarClock class="h-3.5 w-3.5 shrink-0" />
+					<span class="shrink-0">Date</span>
+					<input
+						type="datetime-local"
+						bind:value={noteDate}
+						max={maxNoteDate}
+						aria-label="Note date and time"
+						title="Leave empty to use the current time"
+						class="min-w-0 max-w-[11rem] bg-transparent text-[11px] text-stone-600 outline-none dark:text-stone-300"
+					/>
+				</label>
+				<span class="text-[11px] text-stone-400 dark:text-stone-500">Empty uses now.</span>
+			</div>
+		{/if}
 		{#if pendingTags.length > 0}
 			<div class="mx-auto mt-3 flex w-full {widthClass} flex-wrap items-center gap-1 px-6">
 				{#each pendingTags as tag (tag)}
@@ -273,7 +308,7 @@
 				value={wideValue}
 				oninput={(e) => onWideInput(e.currentTarget.value)}
 				placeholder={view === 'notes' ? 'Write…' : 'Ask about your notes…'}
-				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (view === 'notes') { saveNote(); closeWide(); } else if (!answering) { submitAsk(); closeWide(); } } }}
+				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (view === 'notes') { saveNote(noteTimestamp()); closeWide(); } else if (!answering) { submitAsk(); closeWide(); } } }}
 			></textarea>
 		</div>
 	</div>

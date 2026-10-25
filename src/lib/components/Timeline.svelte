@@ -62,7 +62,7 @@
 		notes: Note[];
 		summaryLoading: boolean;
 		onDelete: (id: string) => void;
-		onEdit: (id: string, content: string, video?: string) => Promise<void>;
+		onEdit: (id: string, content: string, video?: string, createdAt?: number) => Promise<void>;
 		onFeature: (note: Note) => void;
 		onLoadMore?: () => void;
 		hasMore?: boolean;
@@ -431,8 +431,8 @@
 		video={editVideo}
 		onContent={(v) => (editContent = v)}
 		onVideo={(v) => (editVideo = v)}
-		onSave={async (content, video) => {
-			await onEdit(editing.id, content, video);
+		onSave={async (content, video, createdAt) => {
+			await onEdit(editing.id, content, video, createdAt);
 			editNote = null;
 		}}
 		onCancel={() => (editNote = null)}

@@ -396,7 +396,7 @@ function langTag(p: Lang): string {
 		window.speechSynthesis.cancel();
 	}
 
-	function handleNote(cd: string) {
+	function handleNote(cd: string, createdAt?: number) {
 		if (!cd.trim() || NO_STATE.has(cd)) return;
 		view = 'notes';
 		lastSection = 'notes';
@@ -408,12 +408,19 @@ function langTag(p: Lang): string {
 			return;
 		}
 		const now = Date.now();
+		const stamp = createdAt && Number.isFinite(createdAt) ? Math.min(createdAt, now) : now;
+		const last = pager.notes[pager.notes.length - 1];
+		// A backdated note outside the loaded cursor range is stored, but it
+		// must not jump into a gap the pager has not fetched yet.
+		const fitsLoadedPage = !last || !pager.hasMore || stamp >= last.created_at;
 		const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		pager.prepend({ id: tempId, content, created_at: now, updated_at: now, tags, pending: true });
+		if (fitsLoadedPage) {
+			pager.insertSorted({ id: tempId, content, created_at: stamp, updated_at: stamp, tags, pending: true });
+		}
 		fetch('/api/notes', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ content: cd })
+			body: JSON.stringify({ content: cd, created_at: stamp })
 		})
 			.then(async (r) => {
 				const d = await r.json();
@@ -422,6 +429,7 @@ function langTag(p: Lang): string {
 				// The card is still listed under the temp id, so it must be
 				// swapped, not patched by the server id.
 				pager.replace(tempId, saved);
+				if (!fitsLoadedPage) showToast('Note saved. Scroll down to find it.');
 				clearDraft();
 				refreshSummaryAnswer(false, null, false);
 				setTimeout(() => {
@@ -468,9 +476,10 @@ function langTag(p: Lang): string {
 		}
 	}
 
-	async function handleEdit(id: string, content: string, video?: string) {
-		const body: { content: string; video?: string } = { content };
+	async function handleEdit(id: string, content: string, video?: string, createdAt?: number) {
+		const body: { content: string; video?: string; created_at?: number } = { content };
 		if (video !== undefined) body.video = video;
+		if (createdAt !== undefined) body.created_at = createdAt;
 		const res = await loading.track(fetch(`/api/notes/${id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
@@ -478,8 +487,14 @@ function langTag(p: Lang): string {
 		}));
 		const d = await res.json();
 		if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
-		pager.patch(d.note as Note);
-		featured = featured.map((f) => (f.id === (d.note as Note).id ? (d.note as Note) : f));
+		const note = d.note as Note;
+		const wasLoaded = pager.notes.some((n) => n.id === note.id);
+		if (wasLoaded && !pager.replaceSorted(note)) {
+			showToast('Note saved. Scroll down to find it.');
+		}
+		featured = featured
+			.map((f) => (f.id === note.id ? note : f))
+			.sort((a, b) => b.created_at - a.created_at);
 		refreshSummaryAnswer(false, null, false);
 	}
 

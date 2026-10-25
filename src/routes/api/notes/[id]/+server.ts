@@ -11,11 +11,17 @@ export async function GET({ params }) {
 }
 
 export async function PATCH({ params, request }) {
-	let body: { content?: unknown; featured?: unknown; video?: unknown };
+	let body: { content?: unknown; featured?: unknown; video?: unknown; created_at?: unknown };
 	try {
 		body = await request.json();
 	} catch {
 		return json({ error: 'invalid body' }, { status: 400 });
+	}
+	let createdAt: number | undefined;
+	if (body?.created_at !== undefined) {
+		const n = Number(body.created_at);
+		if (!Number.isFinite(n) || n <= 0) return json({ error: 'invalid date' }, { status: 400 });
+		createdAt = Math.min(n, Date.now());
 	}
 	// Flags and video touch only their own columns: no text, FTS, vector,
 	// or tag work.
@@ -45,7 +51,7 @@ export async function PATCH({ params, request }) {
 	const { content, tags } = splitTrailingHashtags(raw);
 	if (!content) return json({ error: 'empty note' }, { status: 400 });
 
-	const note = updateNote(params.id, content);
+	const note = updateNote(params.id, content, createdAt);
 	if (!note) return json({ error: 'not found' }, { status: 404 });
 
 	if (typeof body?.video === 'string') {

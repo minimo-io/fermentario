@@ -86,6 +86,19 @@ export class NotePager {
 		this.count += 1;
 	}
 
+	/** Insert by the list order the server uses: `created_at DESC, id DESC`.
+	 *  Backdated notes must not jump to the top while they are pending. */
+	insertSorted(note: Note): void {
+		const at = this.notes.findIndex(
+			(n) => n.created_at < note.created_at || (n.created_at === note.created_at && n.id < note.id)
+		);
+		this.notes =
+			at === -1
+				? [...this.notes, note]
+				: [...this.notes.slice(0, at), note, ...this.notes.slice(at)];
+		this.count += 1;
+	}
+
 	remove(id: string): void {
 		if (!this.notes.some((n) => n.id === id)) return;
 		this.notes = this.notes.filter((n) => n.id !== id);
@@ -94,6 +107,32 @@ export class NotePager {
 
 	patch(note: Note): void {
 		this.notes = this.notes.map((n) => (n.id === note.id ? note : n));
+	}
+
+	/** Replace a loaded note and restore `created_at DESC, id DESC` order.
+	 *  When the new time is older than the loaded page and more pages exist,
+	 *  remove the row instead: inserting it would leave a gap and a duplicate
+	 *  on the next load. Returns whether the note stayed on screen. */
+	replaceSorted(note: Note): boolean {
+		if (!this.notes.some((n) => n.id === note.id)) return false;
+		const rest = this.notes.filter((n) => n.id !== note.id);
+		const last = rest[rest.length - 1];
+		const afterLast =
+			!!last &&
+			(note.created_at < last.created_at ||
+				(note.created_at === last.created_at && note.id < last.id));
+		if (this.hasMore && afterLast) {
+			this.notes = rest;
+			return false;
+		}
+		const at = rest.findIndex(
+			(n) => n.created_at < note.created_at || (n.created_at === note.created_at && n.id < note.id)
+		);
+		this.notes =
+			at === -1
+				? [...rest, note]
+				: [...rest.slice(0, at), note, ...rest.slice(at)];
+		return true;
 	}
 
 	/** Swap an entry that is still listed under a temporary id for the stored

@@ -326,16 +326,25 @@ export function createJournal(db: SqlDb) {
 		return done;
 	}
 
-	/** Replace a note's content. `created_at` is immutable; `updated_at` always
-	 *  moves past it so the "edited" marker can rely on a strict comparison.
-	 *  Returns null when the note does not exist. */
-	function updateNote(id: string, content: string): Note | null {
+	/** Replace a note's content and optionally its date. `updated_at` always
+	 *  moves past `created_at` so the "edited" marker can rely on a strict
+	 *  comparison. Returns null when the note does not exist. */
+	function updateNote(id: string, content: string, createdAt?: number): Note | null {
 		const existing = db.prepare('SELECT created_at FROM notes WHERE id = ?').get(id) as
 			| { created_at: number }
 			| undefined;
 		if (!existing) return null;
-		const now = Math.max(Date.now(), existing.created_at + 1);
-		db.prepare('UPDATE notes SET content = ?, updated_at = ? WHERE id = ?').run(content, now, id);
+		const created =
+			typeof createdAt === 'number' && Number.isFinite(createdAt) && createdAt > 0
+				? createdAt
+				: existing.created_at;
+		const now = Math.max(Date.now(), created + 1);
+		db.prepare('UPDATE notes SET content = ?, created_at = ?, updated_at = ? WHERE id = ?').run(
+			content,
+			created,
+			now,
+			id
+		);
 		db.prepare('DELETE FROM notes_fts WHERE note_id = ?').run(id);
 		db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
 		return getNote(id);

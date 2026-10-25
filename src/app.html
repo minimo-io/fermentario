@@ -80,6 +80,16 @@
 				border-color: #292524;
 				border-top-color: #fbbf24;
 			}
+			@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+				#boot-loader {
+					-webkit-backdrop-filter: none;
+					backdrop-filter: none;
+					background: rgba(255, 255, 255, 0.85);
+				}
+				html.dark #boot-loader {
+					background: rgba(12, 10, 9, 0.9);
+				}
+			}
 			@keyframes boot-spin {
 				to { transform: rotate(360deg); }
 			}

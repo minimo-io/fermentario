@@ -1595,6 +1595,38 @@
   creates a containing block for fixed descendants, so keep the panel inside the
   overlay's grid/flex layout instead of adding fixed positioning to it.
 
+## Session: Backdated notes
+- A note's date is `created_at`; `POST /api/notes` already accepted that field.
+  The composer was simply not sending it. `PATCH /api/notes/[id]` and
+  `updateNote()` must accept it too, or the edit fields silently do nothing.
+  No migration is needed.
+- Use a `datetime-local` value and parse it with `new Date(value)`. It is local
+  time, not UTC. Clamp a future value to `Date.now()` and set `max` on the
+  input; the browser picker must not create future notes. The shared helpers
+  live in `src/lib/datetime.ts`.
+- Do not prepend a backdated note. Insert by the server order
+  (`created_at DESC, id DESC`) with `NotePager.insertSorted`.
+- If the chosen date is older than the last loaded note while `hasMore` is
+  true, keep it out of the list. Inserting it would leave a gap and create a
+  duplicate on the next page. Save it and tell the user to scroll down.
+- An edit can move a note too. `NotePager.replaceSorted` removes it from the
+  loaded page when it crosses the same boundary, instead of patching in place.
+- A `datetime-local` field only carries minutes. When the field is unchanged,
+  pass the stored `created_at` through exactly; do not parse the formatted
+  value, or an old note loses its seconds on every text-only edit.
+
+## Session: Backdrop blur fallback
+- `backdrop-filter` is a progressive enhancement. Detect it with
+  `@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))`;
+  the prefixed form matters for older Safari. Without it, set the filter to
+  `none` and raise the scrim opacity so text keeps contrast.
+- Tailwind v4 already emits an alpha-hex value before `color-mix()`; do not
+  duplicate that fallback. The blur is the effect that needs a CSS-only
+  detection block in `app.css` and in the inline boot-loader style in
+  `app.html`.
+- Target modal scrims with `[role='dialog']`; the loading overlay uses
+  `[role='status']` and needs a light fallback, not the dark modal scrim.
+
 ## Session: AI tagging removed
 - AI tagging had three entry points, and removing only the POST fallback is not
   enough: `GET /api/notes` ran `ensureTags()` over notes missing tags, and

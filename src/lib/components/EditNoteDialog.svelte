@@ -3,6 +3,7 @@
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
+	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import type { Note } from '$lib/types';
@@ -13,7 +14,7 @@
 		video: string;
 		onContent: (value: string) => void;
 		onVideo: (value: string) => void;
-		onSave: (content: string, video: string) => Promise<void>;
+		onSave: (content: string, video: string, createdAt: number) => Promise<void>;
 		onCancel: () => void;
 	};
 	let { note, content, video, onContent, onVideo, onSave, onCancel }: Props = $props();
@@ -21,8 +22,12 @@
 	let saving = $state(false);
 	let err = $state('');
 	let full = $state(false);
+	// svelte-ignore state_referenced_locally
+	let noteDate = $state(datetimeLocalValue(note.created_at));
+	const maxNoteDate = datetimeLocalValue(Date.now());
 
-	const unchanged = $derived(content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : ''));
+	const originalDate = $derived(datetimeLocalValue(note.created_at));
+	const unchanged = $derived(content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : '') && noteDate === originalDate);
 	const empty = $derived(splitTrailingHashtags(content).content.trim().length === 0);
 
 	async function save() {
@@ -30,7 +35,10 @@
 		saving = true;
 		err = '';
 		try {
-			await onSave(content.trim(), video.trim());
+			const at = noteDate === originalDate
+				? note.created_at
+				: Math.min(datetimeLocalTimestamp(noteDate) ?? Date.now(), Date.now());
+			await onSave(content.trim(), video.trim(), at);
 		} catch (e) {
 			err = (e as Error)?.message ?? 'Could not save the note.';
 		} finally {
@@ -54,7 +62,7 @@
 	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
 	<div
-		class="w-full bg-white dark:bg-stone-900 p-5 shadow-xl [interpolate-size:allow-keywords] transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none {full ? 'flex h-dvh max-w-full flex-col rounded-none' : 'h-auto max-w-md rounded-2xl'}"
+		class="w-full bg-white dark:bg-stone-900 p-5 shadow-xl [interpolate-size:allow-keywords] transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none {full ? 'flex h-dvh max-w-full flex-col rounded-none' : 'h-auto max-h-[calc(100dvh-2rem)] max-w-md overflow-y-auto rounded-2xl'}"
 		transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}
 	>
 		<div class={full ? 'mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col' : ''}>
@@ -85,6 +93,15 @@
 				oninput={(e) => onContent(e.currentTarget.value)}
 				placeholder="Note text"
 			></textarea>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-date">Date and time</label>
+			<input
+				id="edit-note-date"
+				type="datetime-local"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+				bind:value={noteDate}
+				max={maxNoteDate}
+			/>
+			<p class="mt-1 text-[11px] text-stone-400 dark:text-stone-500">Empty uses the current time.</p>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-video">YouTube URL (optional)</label>
 			<input
 				id="edit-video"

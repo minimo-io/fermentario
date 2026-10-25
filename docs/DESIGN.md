@@ -12,7 +12,13 @@ sizing. Consult this before changing any of them.
   672px for its 53-column grid, so its grid scrolls horizontally inside the
   container rather than widening the page.
 - **Composer** (fixed bottom bar): `mx-auto max-w-2xl px-6 pb-8`. Same width as
-  the page, so the bar and the content align with no gap.
+  the page, so the bar and the content align with no gap. The full-screen note
+  editor carries an optional date/time pill; an empty value uses the current
+  time. The chosen time becomes the note's `created_at` and the card enters the
+  timeline in date order, not always at the top. The edit forms (timeline
+  dialog and single-note page) expose the same date/time field; a changed date
+  reorders the card, and a date below the loaded page removes it from view with
+  a scroll-down toast.
 - **Bottom clearance**: the page reserves `pb-[calc(var(--composer-h,4.5rem)+2.5rem)]`
   so the last note is never hidden behind the bar. The bar publishes its height
   as `--composer-h` via a `ResizeObserver`.
@@ -206,13 +212,13 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   the panel to the viewport; `Escape` then collapses it first, and the other
   fields and buttons stay fixed while the textarea scrolls.
 - **Single note edit** (`/notes/[id]`): Edit replaces the bold note text in the
-  same card with a textarea and the optional YouTube URL, plus Cancel/Save
-  below. No backdrop and no full-screen toggle. `Escape` cancels,
-  `Cmd/Ctrl+Enter` saves. The textarea prefills stored tags as a trailing
-  hashtag run, so a text edit does not drop them; deleting a hashtag removes
-  that tag. A tag that cannot be written as one hashtag token (a multi-word
-  tag from an older note) stays out of the text. The timeline
-  `EditNoteDialog` follows the same rule.
+  same card with a textarea, the optional YouTube URL and a date/time field,
+  plus Cancel/Save below. No backdrop and no full-screen toggle. `Escape`
+  cancels, `Cmd/Ctrl+Enter` saves. The textarea prefills stored tags as a
+  trailing hashtag run, so a text edit does not drop them; deleting a hashtag
+  removes that tag. A tag that cannot be written as one hashtag token (a
+  multi-word tag from an older note) stays out of the text. The timeline
+  `EditNoteDialog` follows the same rule and carries the same date field.
 - **Principles** (`PrinciplesTab`): cards show the creation date under the
   text. The Add button carries the same desktop shortcut as the To-Do Add
   button: `⌘⇧A` on Mac, `Ctrl+Shift+A` elsewhere. The hint is hidden on touch,
@@ -239,6 +245,12 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   colors, summary refresh, polling, optimistic saves). Keep contextual busy
   states such as the Heatmap button and `RestoreOverlay`; do not add per-route
   spinners.
+- **Older engines**: `backdrop-filter` is detected with `@supports` in
+  `app.css` (and in the boot-loader block in `app.html`), including the
+  `-webkit-` form. Without it, remove the blur and use a more opaque scrim so
+  dialog text keeps its contrast. Tailwind already emits an alpha-hex fallback
+  before each `color-mix()` background; keep that pattern instead of writing a
+  `color-mix()`-only surface.
 - **Dictation**: while the microphone is active, the composer button switches
   from `Mic` to a filled `rose-600` stop button with a pulsing ring, and a
   `Listening…` pill with a pulsing dot appears above the bar. Reduced motion

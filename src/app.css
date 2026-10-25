@@ -40,3 +40,26 @@ body {
 		display: none;
 	}
 }
+
+/* Pure-CSS feature detection: engines without backdrop blur get no blur and
+   a more opaque scrim, so dialog text keeps its contrast. Tailwind already
+   emits alpha-color fallbacks for `color-mix()`; this covers the one visual
+   effect that has no usable fallback. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	.backdrop-blur-md {
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+	.backdrop-blur-md[role='dialog'] {
+		background-color: rgb(28 25 23 / 0.78);
+	}
+	.dark .backdrop-blur-md[role='dialog'] {
+		background-color: rgb(0 0 0 / 0.88);
+	}
+	.backdrop-blur-md[role='status'] {
+		background-color: rgb(255 255 255 / 0.78);
+	}
+	.dark .backdrop-blur-md[role='status'] {
+		background-color: rgb(12 10 9 / 0.82);
+	}
+}

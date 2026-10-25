@@ -109,10 +109,11 @@
 		}
 	}
 
-	async function edit(id: string, content: string, video?: string) {
+	async function edit(id: string, content: string, video?: string, createdAt?: number) {
 		try {
-			const body: { content: string; video?: string } = { content };
+			const body: { content: string; video?: string; created_at?: number } = { content };
 			if (video !== undefined) body.video = video;
+			if (createdAt !== undefined) body.created_at = createdAt;
 			const res = await loading.track(fetch(`/api/notes/${id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
@@ -122,9 +123,18 @@
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
 			const note = d.note as Note;
 			// An edit that drops the tag removes the note from this page.
-			if (pager.hasTag(note)) pager.patch(note);
-			else pager.remove(id);
-			pinned = pinned.map((x) => (x.id === note.id ? note : x));
+			if (pager.hasTag(note)) {
+				const wasLoaded = pager.notes.some((n) => n.id === note.id);
+				if (wasLoaded && !pager.replaceSorted(note)) {
+					showToast('Note saved. Scroll down to find it.');
+				}
+				pinned = pinned
+					.map((x) => (x.id === note.id ? note : x))
+					.sort((a, b) => b.created_at - a.created_at);
+			} else {
+				pager.remove(id);
+				pinned = pinned.filter((x) => x.id !== id);
+			}
 		} catch (e) {
 			showToast((e as Error)?.message ?? 'Failed to save note.');
 			throw e;

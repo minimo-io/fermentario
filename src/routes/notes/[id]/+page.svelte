@@ -16,6 +16,7 @@
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
+	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
 	import type { Note, NoteComment } from '$lib/types';
@@ -30,12 +31,16 @@
 	let editing = $state(false);
 	let editContent = $state('');
 	let editVideo = $state('');
+	let editDate = $state('');
+	let editDateInitial = $state('');
+	let editMaxDate = $state('');
 	let editSaving = $state(false);
 	let editError = $state('');
 	let editField = $state<HTMLTextAreaElement | null>(null);
 	const editUnchanged = $derived(
 		editContent.trim() === withTrailingHashtags(note.content, note.tags).trim() &&
-			editVideo.trim() === (note.video ? youTubeWatchUrl(note.video) : '')
+			editVideo.trim() === (note.video ? youTubeWatchUrl(note.video) : '') &&
+			editDate === editDateInitial
 	);
 	const editEmpty = $derived(splitTrailingHashtags(editContent).content.trim().length === 0);
 	let confirming = $state(false);
@@ -132,10 +137,13 @@
 		editSaving = true;
 		editError = '';
 		try {
+			const createdAt = editDate === editDateInitial
+				? note.created_at
+				: Math.min(datetimeLocalTimestamp(editDate) ?? Date.now(), Date.now());
 			const res = await loading.track(fetch(`/api/notes/${note.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: editContent.trim(), video: editVideo.trim() })
+				body: JSON.stringify({ content: editContent.trim(), video: editVideo.trim(), created_at: createdAt })
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
@@ -219,6 +227,9 @@
 		// Prefill the URL, not the stored id: the id would fail the API's URL
 		// check on a text-only edit.
 		editVideo = note.video ? youTubeWatchUrl(note.video) : '';
+		editDate = datetimeLocalValue(note.created_at);
+		editDateInitial = editDate;
+		editMaxDate = datetimeLocalValue(Date.now());
 		editError = '';
 		editing = true;
 	}
@@ -271,6 +282,15 @@
 								}
 							}}
 						></textarea>
+						<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-date">Date and time</label>
+						<input
+							id="edit-note-date"
+							type="datetime-local"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+							bind:value={editDate}
+							max={editMaxDate}
+						/>
+						<p class="mt-1 text-[11px] text-stone-400 dark:text-stone-500">Empty uses the current time.</p>
 						<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-video">YouTube URL (optional)</label>
 						<input
 							id="edit-note-video"
