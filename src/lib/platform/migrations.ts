@@ -136,7 +136,18 @@ const baseline: Migration = {
 	}
 };
 
-export const MIGRATIONS: Migration[] = [baseline];
+/** Comments can be pinned to the top of their list. */
+const commentPins: Migration = {
+	version: 2,
+	name: 'comment-pins',
+	up(db) {
+		addColumn(db, 'task_comments', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
+		addColumn(db, 'note_comments', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
+		addColumn(db, 'principle_comments', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
+	}
+};
+
+export const MIGRATIONS: Migration[] = [baseline, commentPins];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 
 /** Read the recorded version. A database without the tracking table is 0. */

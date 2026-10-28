@@ -187,8 +187,9 @@ export function copyUploadIntoTarget(
 		}
 		if (has('note_comments')) {
 			statements.push(
-				`INSERT INTO note_comments (id, note_id, content, created_at)
-					SELECT id, note_id, content, created_at FROM backup.note_comments`
+				`INSERT INTO note_comments (id, note_id, content, created_at, pinned)
+					SELECT id, note_id, content, created_at, ${column('note_comments', 'pinned', '0')}
+					FROM backup.note_comments`
 			);
 		}
 		if (hasTodo) {
@@ -213,8 +214,9 @@ export function copyUploadIntoTarget(
 			}
 			if (has('task_comments')) {
 				statements.push(
-					`INSERT INTO task_comments (id, item_id, content, created_at)
-						SELECT id, item_id, content, created_at FROM backup.task_comments`
+					`INSERT INTO task_comments (id, item_id, content, created_at, pinned)
+						SELECT id, item_id, content, created_at, ${column('task_comments', 'pinned', '0')}
+						FROM backup.task_comments`
 				);
 			}
 		}
@@ -233,8 +235,9 @@ export function copyUploadIntoTarget(
 			}
 			if (has('principle_comments')) {
 				statements.push(
-					`INSERT INTO principle_comments (id, principle_id, content, created_at)
-						SELECT id, principle_id, content, created_at FROM backup.principle_comments`
+					`INSERT INTO principle_comments (id, principle_id, content, created_at, pinned)
+						SELECT id, principle_id, content, created_at, ${column('principle_comments', 'pinned', '0')}
+						FROM backup.principle_comments`
 				);
 			}
 		}

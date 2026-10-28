@@ -410,7 +410,20 @@
 				"id": "<runtime>",
 				"note_id": "11111111-1111-4111-8111-111111111102",
 				"content": "Note comment that must survive a restore",
-				"created_at": "<runtime>"
+				"created_at": "<runtime>",
+				"pinned": false
+			}
+		}
+	},
+	"PATCH /api/notes/[id]/comments/[commentId] pinned": {
+		"status": 200,
+		"body": {
+			"comment": {
+				"id": "<runtime>",
+				"note_id": "11111111-1111-4111-8111-111111111102",
+				"content": "Note comment that must survive a restore",
+				"created_at": "<runtime>",
+				"pinned": true
 			}
 		}
 	},
@@ -453,7 +466,8 @@
 				"id": "<runtime>",
 				"item_id": "<runtime>",
 				"content": "Task comment that must survive a restore",
-				"created_at": "<runtime>"
+				"created_at": "<runtime>",
+				"pinned": false
 			}
 		}
 	},
@@ -480,7 +494,8 @@
 				"id": "<runtime>",
 				"principle_id": "<runtime>",
 				"content": "Principle comment that must survive a restore",
-				"created_at": "<runtime>"
+				"created_at": "<runtime>",
+				"pinned": false
 			}
 		}
 	},
@@ -503,6 +518,7 @@
 			"featured": 1,
 			"videos": 1,
 			"noteComments": 1,
+			"pinnedNoteComments": 1,
 			"todoGroups": 1,
 			"todoItems": 1,
 			"taskComments": 1,
@@ -555,7 +571,8 @@
 					"id": "<runtime>",
 					"note_id": "11111111-1111-4111-8111-111111111102",
 					"content": "Note comment that must survive a restore",
-					"created_at": "<runtime>"
+					"created_at": "<runtime>",
+					"pinned": true
 				}
 			]
 		}
@@ -604,7 +621,8 @@
 					"id": "<runtime>",
 					"item_id": "<runtime>",
 					"content": "Task comment that must survive a restore",
-					"created_at": "<runtime>"
+					"created_at": "<runtime>",
+					"pinned": false
 				}
 			]
 		}
@@ -636,7 +654,8 @@
 					"id": "<runtime>",
 					"principle_id": "<runtime>",
 					"content": "Principle comment that must survive a restore",
-					"created_at": "<runtime>"
+					"created_at": "<runtime>",
+					"pinned": false
 				}
 			]
 		}

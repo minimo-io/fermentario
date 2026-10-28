@@ -199,6 +199,7 @@ export interface PrincipleComment {
 	principle_id: string;
 	content: string;
 	created_at: number;
+	pinned: boolean;
 }
 
 export interface TaskComment {
@@ -206,6 +207,7 @@ export interface TaskComment {
 	item_id: string;
 	content: string;
 	created_at: number;
+	pinned: boolean;
 }
 
 export interface NoteComment {
@@ -213,7 +215,17 @@ export interface NoteComment {
 	note_id: string;
 	content: string;
 	created_at: number;
+	pinned: boolean;
 }
+
+/** Comments read `pinned` from SQLite as 0/1; the public type is boolean. */
+type CommentRow<T> = Omit<T, 'pinned'> & { pinned: number };
+
+function rowToComment<T extends { pinned: boolean }>(row: CommentRow<T>): T {
+	return { ...row, pinned: row.pinned === 1 } as T;
+}
+
+export type CommentPatch = { content?: string; pinned?: boolean };
 
 export interface TodoProgressItem extends TodoItem {
 	groupName: string;
@@ -687,9 +699,10 @@ export function createJournal(db: SqlDb) {
 	// the timeline does not reorder. Deleting needs a confirm on the client.
 
 	function listTaskComments(itemId: string): TaskComment[] {
-		return db
-			.prepare('SELECT * FROM task_comments WHERE item_id = ? ORDER BY created_at ASC, id ASC')
-			.all(itemId) as unknown as TaskComment[];
+		const rows = db
+			.prepare('SELECT * FROM task_comments WHERE item_id = ? ORDER BY pinned DESC, created_at DESC, id DESC')
+			.all(itemId) as unknown as CommentRow<TaskComment>[];
+		return rows.map(rowToComment);
 	}
 
 	function createTaskComment(itemId: string, content: string): TaskComment | null {
@@ -700,20 +713,26 @@ export function createJournal(db: SqlDb) {
 		const id = crypto.randomUUID();
 		const now = Date.now();
 		db.prepare('INSERT INTO task_comments (id, item_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, itemId, clean, now);
-		return { id, item_id: itemId, content: clean, created_at: now };
+		return { id, item_id: itemId, content: clean, created_at: now, pinned: false };
 	}
 
-	function updateTaskComment(itemId: string, id: string, content: string): TaskComment | null {
-		const clean = content.trim();
-		if (!clean) return null;
+	function updateTaskComment(itemId: string, id: string, patch: CommentPatch): TaskComment | null {
 		const current = db
 			.prepare('SELECT * FROM task_comments WHERE id = ? AND item_id = ?')
-			.get(id, itemId) as unknown as TaskComment | undefined;
+			.get(id, itemId) as unknown as CommentRow<TaskComment> | undefined;
 		if (!current) return null;
-		if (current.content !== clean) {
-			db.prepare('UPDATE task_comments SET content = ? WHERE id = ? AND item_id = ?').run(clean, id, itemId);
+		const clean = patch.content === undefined ? current.content : patch.content.trim();
+		if (!clean) return null;
+		const pinned = patch.pinned === undefined ? current.pinned === 1 : patch.pinned;
+		if (current.content !== clean || (current.pinned === 1) !== pinned) {
+			db.prepare('UPDATE task_comments SET content = ?, pinned = ? WHERE id = ? AND item_id = ?').run(
+				clean,
+				pinned ? 1 : 0,
+				id,
+				itemId
+			);
 		}
-		return { ...current, content: clean };
+		return { ...current, content: clean, pinned };
 	}
 
 	function deleteTaskComment(itemId: string, id: string): boolean {
@@ -721,9 +740,10 @@ export function createJournal(db: SqlDb) {
 	}
 
 	function listNoteComments(noteId: string): NoteComment[] {
-		return db
-			.prepare('SELECT * FROM note_comments WHERE note_id = ? ORDER BY created_at ASC, id ASC')
-			.all(noteId) as unknown as NoteComment[];
+		const rows = db
+			.prepare('SELECT * FROM note_comments WHERE note_id = ? ORDER BY pinned DESC, created_at DESC, id DESC')
+			.all(noteId) as unknown as CommentRow<NoteComment>[];
+		return rows.map(rowToComment);
 	}
 
 	function createNoteComment(noteId: string, content: string): NoteComment | null {
@@ -736,20 +756,26 @@ export function createJournal(db: SqlDb) {
 		const id = crypto.randomUUID();
 		const now = Date.now();
 		db.prepare('INSERT INTO note_comments (id, note_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, noteId, clean, now);
-		return { id, note_id: noteId, content: clean, created_at: now };
+		return { id, note_id: noteId, content: clean, created_at: now, pinned: false };
 	}
 
-	function updateNoteComment(noteId: string, id: string, content: string): NoteComment | null {
-		const clean = content.trim();
-		if (!clean) return null;
+	function updateNoteComment(noteId: string, id: string, patch: CommentPatch): NoteComment | null {
 		const current = db
 			.prepare('SELECT * FROM note_comments WHERE id = ? AND note_id = ?')
-			.get(id, noteId) as unknown as NoteComment | undefined;
+			.get(id, noteId) as unknown as CommentRow<NoteComment> | undefined;
 		if (!current) return null;
-		if (current.content !== clean) {
-			db.prepare('UPDATE note_comments SET content = ? WHERE id = ? AND note_id = ?').run(clean, id, noteId);
+		const clean = patch.content === undefined ? current.content : patch.content.trim();
+		if (!clean) return null;
+		const pinned = patch.pinned === undefined ? current.pinned === 1 : patch.pinned;
+		if (current.content !== clean || (current.pinned === 1) !== pinned) {
+			db.prepare('UPDATE note_comments SET content = ?, pinned = ? WHERE id = ? AND note_id = ?').run(
+				clean,
+				pinned ? 1 : 0,
+				id,
+				noteId
+			);
 		}
-		return { ...current, content: clean };
+		return { ...current, content: clean, pinned };
 	}
 
 	function deleteNoteComment(noteId: string, id: string): boolean {
@@ -869,9 +895,12 @@ export function createJournal(db: SqlDb) {
 	// deleting one needs a confirm on the client.
 
 	function listPrincipleComments(principleId: string): PrincipleComment[] {
-		return db
-			.prepare('SELECT * FROM principle_comments WHERE principle_id = ? ORDER BY created_at ASC, id ASC')
-			.all(principleId) as unknown as PrincipleComment[];
+		const rows = db
+			.prepare(
+				'SELECT * FROM principle_comments WHERE principle_id = ? ORDER BY pinned DESC, created_at DESC, id DESC'
+			)
+			.all(principleId) as unknown as CommentRow<PrincipleComment>[];
+		return rows.map(rowToComment);
 	}
 
 	function createPrincipleComment(principleId: string, content: string): PrincipleComment | null {
@@ -882,20 +911,30 @@ export function createJournal(db: SqlDb) {
 		const id = crypto.randomUUID();
 		const now = Date.now();
 		db.prepare('INSERT INTO principle_comments (id, principle_id, content, created_at) VALUES (?, ?, ?, ?)').run(id, principleId, clean, now);
-		return { id, principle_id: principleId, content: clean, created_at: now };
+		return { id, principle_id: principleId, content: clean, created_at: now, pinned: false };
 	}
 
-	function updatePrincipleComment(principleId: string, id: string, content: string): PrincipleComment | null {
-		const clean = content.trim();
-		if (!clean) return null;
+	function updatePrincipleComment(
+		principleId: string,
+		id: string,
+		patch: CommentPatch
+	): PrincipleComment | null {
 		const current = db
 			.prepare('SELECT * FROM principle_comments WHERE id = ? AND principle_id = ?')
-			.get(id, principleId) as unknown as PrincipleComment | undefined;
+			.get(id, principleId) as unknown as CommentRow<PrincipleComment> | undefined;
 		if (!current) return null;
-		if (current.content !== clean) {
-			db.prepare('UPDATE principle_comments SET content = ? WHERE id = ? AND principle_id = ?').run(clean, id, principleId);
+		const clean = patch.content === undefined ? current.content : patch.content.trim();
+		if (!clean) return null;
+		const pinned = patch.pinned === undefined ? current.pinned === 1 : patch.pinned;
+		if (current.content !== clean || (current.pinned === 1) !== pinned) {
+			db.prepare('UPDATE principle_comments SET content = ?, pinned = ? WHERE id = ? AND principle_id = ?').run(
+				clean,
+				pinned ? 1 : 0,
+				id,
+				principleId
+			);
 		}
-		return { ...current, content: clean };
+		return { ...current, content: clean, pinned };
 	}
 
 	function deletePrincipleComment(principleId: string, id: string): boolean {

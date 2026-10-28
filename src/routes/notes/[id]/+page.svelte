@@ -15,6 +15,7 @@
 	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
+	import { sortComments } from '$lib/comments';
 	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { loading } from '$lib/loading.svelte';
@@ -86,7 +87,7 @@
 			}));
 			const d = await res.json();
 			if (!res.ok) return false;
-			comments = [...comments, d.comment as NoteComment];
+			comments = sortComments([d.comment as NoteComment, ...comments]);
 			return true;
 		} catch {
 			return false;
@@ -102,10 +103,25 @@
 			}));
 			const d = await res.json();
 			if (!res.ok) return false;
-			comments = comments.map((x) => (x.id === c.id ? (d.comment as NoteComment) : x));
+			comments = sortComments(comments.map((x) => (x.id === c.id ? (d.comment as NoteComment) : x)));
 			return true;
 		} catch {
 			return false;
+		}
+	}
+
+	async function togglePin(c: NoteComment) {
+		try {
+			const res = await loading.track(fetch(`/api/notes/${note.id}/comments/${c.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ pinned: !c.pinned })
+			}));
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to update comment.');
+			comments = sortComments(comments.map((x) => (x.id === c.id ? (d.comment as NoteComment) : x)));
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to update comment.');
 		}
 	}
 
@@ -362,8 +378,11 @@
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
 						<CommentItem
+							id={c.id}
 							content={c.content}
 							date={new Date(c.created_at).toLocaleDateString(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+							pinned={c.pinned}
+							onPin={() => void togglePin(c)}
 							onEdit={() => (editingComment = c)}
 							onDelete={() => (confirmingComment = c)}
 						/>

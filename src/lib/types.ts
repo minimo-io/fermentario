@@ -66,6 +66,7 @@ export interface PrincipleComment {
 	principle_id: string;
 	content: string;
 	created_at: number;
+	pinned: boolean;
 }
 
 export interface TaskComment {
@@ -73,6 +74,7 @@ export interface TaskComment {
 	item_id: string;
 	content: string;
 	created_at: number;
+	pinned: boolean;
 }
 
 export interface NoteComment {
@@ -80,6 +82,7 @@ export interface NoteComment {
 	note_id: string;
 	content: string;
 	created_at: number;
+	pinned: boolean;
 }
 
 export interface TodoProgressItem extends TodoItem {

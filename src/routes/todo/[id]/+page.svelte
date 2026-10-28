@@ -10,6 +10,7 @@
 	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
+	import { sortComments } from '$lib/comments';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
 	import type { TodoItem, TaskComment } from '$lib/types';
@@ -83,7 +84,7 @@
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add comment.');
-			comments = [...comments, d.comment];
+			comments = sortComments([d.comment as TaskComment, ...comments]);
 			return true;
 		} catch {
 			return false;
@@ -99,10 +100,25 @@
 			}));
 			const d = await res.json();
 			if (!res.ok) return false;
-			comments = comments.map((x) => (x.id === c.id ? (d.comment as TaskComment) : x));
+			comments = sortComments(comments.map((x) => (x.id === c.id ? (d.comment as TaskComment) : x)));
 			return true;
 		} catch {
 			return false;
+		}
+	}
+
+	async function togglePin(c: TaskComment) {
+		try {
+			const res = await loading.track(fetch(`/api/todo/items/${item.id}/comments/${c.id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ pinned: !c.pinned })
+			}));
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to update comment.');
+			comments = sortComments(comments.map((x) => (x.id === c.id ? (d.comment as TaskComment) : x)));
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to update comment.');
 		}
 	}
 
@@ -183,8 +199,11 @@
 				<ul class="space-y-2">
 					{#each comments as c (c.id)}
 						<CommentItem
+							id={c.id}
 							content={c.content}
 							date={fmt(c.created_at)}
+							pinned={c.pinned}
+							onPin={() => void togglePin(c)}
 							onEdit={() => (editingComment = c)}
 							onDelete={() => (confirmingComment = c)}
 						/>

@@ -140,8 +140,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 1) {
-		console.error('The legacy import did not register an active v1 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 2) {
+		console.error('The legacy import did not register an active v2 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -312,6 +312,21 @@ must('POST /api/notes/[id]/comments', noteComment, (r) => r.status === 201, '201
 volatile.add(noteComment.body.comment.id);
 volatile.add(noteComment.body.comment.created_at);
 
+const pinnedNoteComment = await api(
+	'PATCH /api/notes/[id]/comments/[commentId] pinned',
+	`/api/notes/${noteIdForComment}/comments/${noteComment.body.comment.id}`,
+	json({ pinned: true }, 'PATCH')
+);
+must(
+	'PATCH /api/notes/[id]/comments/[commentId] pinned',
+	pinnedNoteComment,
+	(r) =>
+		r.status === 200 &&
+		r.body.comment?.pinned === true &&
+		r.body.comment?.content === 'Note comment that must survive a restore',
+	'200 with the comment pinned'
+);
+
 const group = await api('POST /api/todo/groups', '/api/todo/groups', json({ name: 'Restore group' }));
 must('POST /api/todo/groups', group, (r) => r.status === 201 && !!r.body.group, '201 with a group');
 const groupId = group.body.group.id;
@@ -380,6 +395,7 @@ try {
 		featured: d.prepare('SELECT COUNT(*) AS c FROM notes WHERE featured = 1').get().c,
 		videos: d.prepare("SELECT COUNT(*) AS c FROM notes WHERE video != ''").get().c,
 		noteComments: count('note_comments'),
+		pinnedNoteComments: d.prepare('SELECT COUNT(*) AS c FROM note_comments WHERE pinned = 1').get().c,
 		todoGroups: count('todo_groups'),
 		todoItems: count('todo_items'),
 		taskComments: count('task_comments'),
@@ -473,6 +489,12 @@ must(
 	restoredNoteComments,
 	(r) => r.body.comments?.some((c) => c.content === 'Note comment that must survive a restore'),
 	'the note comment'
+);
+must(
+	'GET /api/notes/[id]/comments after restore',
+	restoredNoteComments,
+	(r) => r.body.comments?.[0]?.pinned === true && r.body.comments?.[0]?.content === 'Note comment that must survive a restore',
+	'the pinned note comment first'
 );
 
 const restoredGroups = await api('GET /api/todo/groups after restore', '/api/todo/groups');

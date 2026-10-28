@@ -1638,3 +1638,50 @@
   tags. `src/lib/server/tags.ts`, `notesMissingTags` and the tagger prompts are
   gone. Keep `chat()`: Ask and the weekly summary still need it.
 - Keep `ensureIndexed()`: RAG embeddings are separate from tags.
+
+## Session: Comments newest first + foldable like notes
+- Comment order is server-side and shared by the task, note and principle
+  detail pages. The three `list*Comments` queries in
+  `src/lib/platform/journal.ts` used `ORDER BY created_at ASC`; changing
+  them to `created_at DESC, id DESC` fixes every surface at once. No
+  migration is needed.
+- The detail pages keep their own comment array for optimistic updates. If
+  the API returns newest first, a new comment must be prepended
+  (`[d.comment, ...comments]`), not appended, or it appears at the bottom
+  until the next reload.
+- Comments reuse the note fold rules in the shared `CommentItem`: only text
+  taller than 1.5 line heights gets a toggle, `scrollHeight` still reports
+  the full height while `line-clamp-1` hides it, and the collapse animation
+  must keep the text unclamped until the max-height transition ends.
+- Long comments start collapsed, unlike notes. Persist the ids that are
+  expanded (`ferm:expanded-comments`), not the collapsed ones: the default
+  would otherwise rewrite storage for every long comment on every visit.
+- Do not invent a Show more/Show less control when the app already has a
+  tap-to-fold standard. The first attempt did that and the user rejected it:
+  the comment text itself is the click target, like notes, with no visible
+  control or button chrome. The button element is only the accessible hit
+  area; it must look exactly like plain text. Comment text is `text-xs`
+  (12px).
+
+## Session: Pinned comments
+- Pinning needs a real column, not client state: migration 2 adds
+  `pinned INTEGER NOT NULL DEFAULT 0` to `task_comments`, `note_comments`
+  and `principle_comments`. The baseline schema stays frozen, as the
+  migration rules require.
+- The same comment types exist twice (`src/lib/types.ts` and
+  `src/lib/platform/journal.ts`). Add `pinned` to both or the API and the
+  pages disagree about the shape.
+- SQLite returns `pinned` as 0/1. Casting rows straight to a type with
+  `pinned: boolean` type-checks and lies at runtime; map the row with
+  `rowToComment` instead.
+- Order is `pinned DESC, created_at DESC, id DESC`. The client has the same
+  rule in `sortComments` (`src/lib/comments.ts`), because adding a comment to
+  a list that already has pinned ones cannot use a blind prepend.
+- The comment PATCH is partial: `{ content? }`, `{ pinned? }` or both. When
+  the request carries only `pinned`, keep the stored content; when it carries
+  only `content`, keep the stored pin. Reject an empty patch.
+- Restore must copy `pinned` too, with `column(..., 'pinned', '0')`, or every
+  restored comment silently unpins.
+- `scripts/web-smoke.mjs` asserts the active journal's `schema_version`.
+  Bump that literal with every new migration, or the smoke test fails before
+  it exercises anything.

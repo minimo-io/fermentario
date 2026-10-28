@@ -51,9 +51,22 @@ sizing. Consult this before changing any of them.
   edit button and a confirmed `×` delete (danger `ConfirmDialog`,
   `aria-label="Delete comment"`), plus an "Add comment" button that opens the
   same modal. Edit reuses `CommentModal` with the existing text prefilled,
-  "Edit comment" title and a Save button. `PATCH
-  /api/{notes,todo/items,principles}/[id]/comments/[commentId]` updates the
-  content; edits keep `created_at`, so the timeline order does not change.
+  "Edit comment" title and a Save button. The list shows pinned comments
+  first, then newest first (`pinned DESC, created_at DESC, id DESC`); a new
+  comment is added to the local list and re-sorted without a reload. A pin
+  button sits before edit (`Pin` icon, amber and filled when pinned,
+  `aria-pressed`, `Pin comment` / `Unpin comment`); several pinned comments
+  keep the newest-created first. `PATCH
+  /api/{notes,todo/items,principles}/[id]/comments/[commentId]` accepts
+  `{ content? }`, `{ pinned? }` or both; edits keep `created_at`, so the
+  newest-first order and the comment's position do not change. Comment text
+  is `text-xs` (12px), one
+  step below the single-item content. A comment longer than one rendered
+  line is clamped to one line with an ellipsis; click the comment text to
+  expand, click again to contract, exactly like notes. Short comments stay
+  plain and non-clickable. The fold uses the note standard's 180 ms
+  max-height animation, honors reduced motion, and persists expanded ids in
+  `localStorage` (`ferm:expanded-comments`); long comments start collapsed.
   The count pill on list cards is the add entry point everywhere
   (`aria-haspopup="dialog"`). Comment routes and count bookkeeping stay per
   surface. Notes carry the same standard end to end since: `note_comments`
@@ -153,7 +166,7 @@ Do not introduce a new spacing value without checking this table first.
   as words ("Today", "Yesterday").
 - Single-item content (note, task, principle detail pages) is
   `text-[15px] font-semibold`. Comments stay normal weight so the item reads as
-  the page subject.
+  the page subject, and use `text-xs` (12px) so they sit one step below it.
 - Entity detail pages have a `text-2xl` page heading. The type label comes first,
   followed by the short UUID as `text-sm font-normal tabular-nums text-stone-400
   dark:text-stone-500` (for example, **Task #a1b2c3d4**). The full UUID stays in
