@@ -47,16 +47,20 @@ sizing. Consult this before changing any of them.
   Add button below the textarea right-aligned like every form dialog) and
   closes itself after the comment is stored — it never shows a thread and never deletes.
   The comment list lives ONLY on the single item page
-  (`/todo/[id]`, `/notes/[id]`, `/principles/[id]`): rows with date, a pencil
-  edit button and a confirmed `×` delete (danger `ConfirmDialog`,
-  `aria-label="Delete comment"`), plus an "Add comment" button that opens the
-  same modal. Edit reuses `CommentModal` with the existing text prefilled,
+  (`/todo/[id]`, `/notes/[id]`, `/principles/[id]`): rows with date and four
+  actions — copy, pin, edit and a confirmed `×` delete (danger
+  `ConfirmDialog`, `aria-label="Delete comment"`) — plus an "Add comment"
+  button that opens the same modal. Edit reuses `CommentModal` with the
+  existing text prefilled,
   "Edit comment" title and a Save button. The list shows pinned comments
   first, then newest first (`pinned DESC, created_at DESC, id DESC`); a new
   comment is added to the local list and re-sorted without a reload. A pin
   button sits before edit (`Pin` icon, amber and filled when pinned,
   `aria-pressed`, `Pin comment` / `Unpin comment`); several pinned comments
-  keep the newest-created first. `PATCH
+  keep the newest-created first. Copy uses the `Copy` icon and writes the raw
+  comment text; on success it swaps to a green `Check` and `Comment copied`
+  for 1.5 s, the icon equivalent of the note menu's `Copied`. A missing
+  clipboard API shows the standard toast. `PATCH
   /api/{notes,todo/items,principles}/[id]/comments/[commentId]` accepts
   `{ content? }`, `{ pinned? }` or both; edits keep `created_at`, so the
   newest-first order and the comment's position do not change. Comment text

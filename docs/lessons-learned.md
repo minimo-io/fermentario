@@ -1685,3 +1685,14 @@
 - `scripts/web-smoke.mjs` asserts the active journal's `schema_version`.
   Bump that literal with every new migration, or the smoke test fails before
   it exercises anything.
+
+## Session: Comment copy
+- Clipboard copy belongs in the shared `CommentItem`, not in the three detail
+  pages. One button then serves task, note and principle comments.
+- Match the existing note action feedback: success swaps the icon to a green
+  check with a `Comment copied` label for 1.5 s. Do not add a success toast;
+  a toast on every copy is noise. A missing clipboard API, common on plain
+  HTTP origins, still gets the note-detail toast
+  (`Could not copy — clipboard unavailable.`).
+- Copy the raw `content`, not the rendered markup or the date, so pasted text
+  is identical to the stored comment.

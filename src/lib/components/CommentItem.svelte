@@ -33,10 +33,13 @@
 </script>
 
 <script lang="ts">
+	import Check from '@lucide/svelte/icons/check';
+	import Copy from '@lucide/svelte/icons/copy';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Pin from '@lucide/svelte/icons/pin';
 	import { tick } from 'svelte';
 	import { motionMs } from '$lib/motion';
+	import { showToast } from '$lib/toast.svelte';
 
 	type Props = {
 		id: string;
@@ -48,6 +51,21 @@
 		onDelete: () => void;
 	};
 	let { id, content, date, pinned, onPin, onEdit, onDelete }: Props = $props();
+
+	let copied = $state(false);
+	let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function copyComment() {
+		try {
+			if (!navigator.clipboard) throw new Error('clipboard unavailable');
+			await navigator.clipboard.writeText(content);
+			copied = true;
+			clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => (copied = false), 1500);
+		} catch {
+			showToast('Could not copy — clipboard unavailable.');
+		}
+	}
 
 	// Long comments fold to one line, the same way notes do. New comments
 	// stay collapsed; the expanded ids persist in localStorage so a reload
@@ -154,6 +172,15 @@
 	<div class="mt-1 flex items-center justify-between gap-2">
 		<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{date}</span>
 		<div class="-mr-1 flex shrink-0 items-center gap-0.5">
+			<button
+				type="button"
+				class="grid h-7 w-7 place-items-center rounded-full {copied ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300'}"
+				aria-label={copied ? 'Comment copied' : 'Copy comment'}
+				title={copied ? 'Comment copied' : 'Copy comment'}
+				onclick={() => void copyComment()}
+			>
+				{#if copied}<Check class="h-3.5 w-3.5" />{:else}<Copy class="h-3.5 w-3.5" />{/if}
+			</button>
 			<button
 				type="button"
 				class="grid h-7 w-7 place-items-center rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 {pinned ? 'text-amber-500 dark:text-amber-400' : 'text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300'}"
