@@ -143,7 +143,7 @@
 				<label class="text-stone-600 dark:text-stone-300" for="chat-model">Summary &amp; Ask model</label>
 				<select
 					id="chat-model"
-					class="rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-900/60"
+					class="rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-base font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-900/60"
 					value={model}
 					onchange={(e) => { onModelChange((e.currentTarget as HTMLSelectElement).value); }}
 				>
@@ -181,7 +181,7 @@
 		<textarea
 			id="summary-prompt"
 			rows="3"
-			class="mt-2 max-h-40 w-full resize-y rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 p-2.5 text-[13px] leading-snug text-stone-700 dark:text-stone-300 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+			class="mt-2 max-h-40 w-full resize-y rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 p-2.5 text-base leading-snug text-stone-700 dark:text-stone-300 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 			value={prompt}
 			oninput={(e) => onPromptChange(e.currentTarget.value)}
 			placeholder="Write one paragraph summarizing the following notes. Do not make things up, just a short summary of what's in the notes:"

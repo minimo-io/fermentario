@@ -102,7 +102,7 @@
 			>
 				<textarea
 					rows="3"
-					class="w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 {full ? 'min-h-0 flex-1' : ''}"
+					class="w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 {full ? 'min-h-0 flex-1' : ''}"
 					placeholder={placeholder}
 					aria-label={title}
 					value={draft}

@@ -65,7 +65,7 @@
 		<textarea
 			bind:this={field}
 			readonly
-			class="mt-3 max-h-[45dvh] min-h-32 w-full resize-y rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/60 p-3 font-mono text-[12px] leading-relaxed text-stone-700 dark:text-stone-300 outline-none"
+			class="mt-3 max-h-[45dvh] min-h-32 w-full resize-y rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/60 p-3 font-mono text-base leading-relaxed text-stone-700 dark:text-stone-300 outline-none"
 		>{text}</textarea>
 		{#if note}
 			<p class="mt-2 text-[11px] text-emerald-600 dark:text-emerald-400">

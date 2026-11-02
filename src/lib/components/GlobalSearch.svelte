@@ -227,7 +227,7 @@
 					aria-keyshortcuts="Meta+K Control+K"
 					autocomplete="off"
 					spellcheck="false"
-					class="min-w-0 flex-1 bg-transparent py-3.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 dark:text-stone-100 dark:placeholder:text-stone-500"
+					class="min-w-0 flex-1 bg-transparent py-3.5 text-base text-stone-900 outline-none placeholder:text-stone-400 dark:text-stone-100 dark:placeholder:text-stone-500"
 				/>
 				{#if loading}
 					<LoaderCircle class="h-4 w-4 shrink-0 animate-spin text-stone-400 dark:text-stone-500" />

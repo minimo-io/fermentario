@@ -88,7 +88,7 @@
 				</div>
 			</div>
 			<textarea
-				class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-[15px] leading-snug text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600 {full ? 'min-h-0 flex-1 resize-none' : 'max-h-[50dvh] min-h-32 resize-y'}"
+				class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600 {full ? 'min-h-0 flex-1 resize-none' : 'max-h-[50dvh] min-h-32 resize-y'}"
 				value={content}
 				oninput={(e) => onContent(e.currentTarget.value)}
 				placeholder="Note text"
@@ -97,7 +97,7 @@
 			<input
 				id="edit-note-date"
 				type="datetime-local"
-				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
 				bind:value={noteDate}
 				max={maxNoteDate}
 			/>
@@ -105,7 +105,7 @@
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-video">YouTube URL (optional)</label>
 			<input
 				id="edit-video"
-				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-sm text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 				value={video}
 				oninput={(e) => onVideo(e.currentTarget.value)}
 				placeholder="https://www.youtube.com/watch?v=…"

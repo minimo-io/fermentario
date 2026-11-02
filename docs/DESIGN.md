@@ -12,7 +12,12 @@ sizing. Consult this before changing any of them.
   672px for its 53-column grid, so its grid scrolls horizontally inside the
   container rather than widening the page.
 - **Composer** (fixed bottom bar): `mx-auto max-w-2xl px-6 pb-8`. Same width as
-  the page, so the bar and the content align with no gap. The full-screen note
+  the page, so the bar and the content align with no gap. Focusing the bar
+  shows a visual-only scrim behind it (`fixed inset-0 z-10`, same glass as
+  the loading state: `white/25` plus `backdrop-blur-md`, `stone-950/25` in
+  dark). It fades with the shared backdrop timing, stays while any bar
+  control has focus, hides in fullscreen editor mode, and never blocks taps.
+  The full-screen note
   editor carries an optional date/time pill; an empty value uses the current
   time. The chosen time becomes the note's `created_at` and the card enters the
   timeline in date order, not always at the top. The edit forms (timeline
@@ -165,6 +170,10 @@ Do not introduce a new spacing value without checking this table first.
 - Scale: `text-[10px]` (metadata, heatmap labels), `text-[11px]` (chips, hints),
   `text-xs` (12px, buttons), `text-sm` (14px, body secondary), `text-[15px]`
   (note content), `text-2xl` (page headings).
+- Inputs never go below `16px` (`text-base`): iOS Safari auto-zooms on focus
+  when a field is smaller, and it ignores `maximum-scale`/`user-scalable=no`,
+  so the viewport stays zoomable and every `input`, `textarea` and `select`
+  that takes text uses `text-base`. Display text keeps the scale above.
 - Section headers: `text-xs font-medium uppercase tracking-widest text-stone-400`.
 - Day headers in the timeline are the exception: normal case, because they read
   as words ("Today", "Yesterday").

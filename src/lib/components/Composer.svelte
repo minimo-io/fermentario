@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { BACKDROP_MS, motionMs } from '$lib/motion';
 	import { createSpeech, browserSupportsSpeech } from '$lib/speech';
 	import { showToast } from '$lib/toast.svelte';
 	import { splitTrailingHashtags } from '$lib/hashtags';
@@ -67,6 +68,10 @@
 	let field = $state<HTMLTextAreaElement | null>(null);
 	let bar = $state<HTMLDivElement | null>(null);
 	let expanded = $state(false);
+	// Focus scrim: blur the rest while the bar has focus, same glass as the
+	// loader. `focusin`/`focusout` (not textarea blur) so tapping Save, mic
+	// or fullscreen keeps the scrim until focus truly leaves the bar.
+	let focused = $state(false);
 	let wideField = $state<HTMLTextAreaElement | null>(null);
 	let noteDate = $state('');
 	let maxNoteDate = $state('');
@@ -105,7 +110,7 @@
 	});
 
 	const FIELD_CLASS =
-		'min-h-11 w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-[15px] leading-snug outline-none max-h-[45dvh]';
+		'min-h-11 w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-base leading-snug outline-none max-h-[45dvh]';
 
 	function autosize() {
 		if (!field) return;
@@ -187,6 +192,13 @@
 	</button>
 {/snippet}
 
+{#if focused && !expanded}
+	<div
+		class="pointer-events-none fixed inset-0 z-10 bg-white/25 backdrop-blur-md dark:bg-stone-950/25"
+		aria-hidden="true"
+		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
+	></div>
+{/if}
 <div class="pointer-events-none fixed inset-x-0 bottom-0 z-20">
 	<div class="pointer-events-auto mx-auto {widthClass} px-6 pb-8">
 		{#if listening}
@@ -204,7 +216,11 @@
 				{/each}
 			</div>
 		{/if}
-		<div bind:this={bar} class="flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-white/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3">
+		<div bind:this={bar}
+			class="flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-white/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3"
+			onfocusin={() => (focused = true)}
+			onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) focused = false; }}
+		>
 			{#if view === 'notes'}
 				<textarea
 					id="composer-field"
@@ -287,7 +303,7 @@
 						max={maxNoteDate}
 						aria-label="Note date and time"
 						title="Leave empty to use the current time"
-						class="min-w-0 max-w-[11rem] bg-transparent text-[11px] text-stone-600 outline-none dark:text-stone-300"
+						class="min-w-0 max-w-[11rem] bg-transparent text-base text-stone-600 outline-none dark:text-stone-300"
 					/>
 				</label>
 				<span class="text-[11px] text-stone-400 dark:text-stone-500">Empty uses now.</span>
@@ -303,7 +319,7 @@
 		<div class="mx-auto flex w-full {widthClass} flex-1 px-6 pb-6 pt-3">
 			<textarea
 				bind:this={wideField}
-				class="h-full w-full resize-none bg-transparent text-[15px] leading-relaxed text-stone-800 dark:text-stone-200 outline-none"
+				class="h-full w-full resize-none bg-transparent text-base leading-relaxed text-stone-800 dark:text-stone-200 outline-none"
 				aria-label={view === 'notes' ? 'Note' : 'Question'}
 				value={wideValue}
 				oninput={(e) => onWideInput(e.currentTarget.value)}

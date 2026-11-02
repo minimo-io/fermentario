@@ -62,4 +62,10 @@ body {
 	.dark .backdrop-blur-md[role='status'] {
 		background-color: rgb(12 10 9 / 0.82);
 	}
+	.backdrop-blur-md[aria-hidden='true'] {
+		background-color: rgb(255 255 255 / 0.78);
+	}
+	.dark .backdrop-blur-md[aria-hidden='true'] {
+		background-color: rgb(12 10 9 / 0.82);
+	}
 }

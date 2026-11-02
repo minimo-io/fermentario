@@ -1696,3 +1696,32 @@
   (`Could not copy — clipboard unavailable.`).
 - Copy the raw `content`, not the rendered markup or the date, so pasted text
   is identical to the stored comment.
+
+## Session: Composer focus scrim
+- Track bar focus with `focusin`/`focusout` on the bar container, not
+  textarea `blur`. A `blur`-only flag drops the scrim when the user taps
+  Save, mic or fullscreen; `focusout` with a `relatedTarget` containment
+  check keeps it until focus truly leaves the bar.
+- Render the scrim as a sibling below the composer (`z-10` under the bar's
+  `z-20`), never inside the bar's own tree. It reuses the loader glass
+  (`bg-white/25 backdrop-blur-md dark:bg-stone-950/25`) and the shared
+  `BACKDROP_MS` fade, so it honors reduced motion.
+- Keep the scrim visual-only (`pointer-events-none`, `aria-hidden`). It must
+  not block taps or trap focus; tapping outside blurs the field and hides
+  it. Suppress it in fullscreen editor mode, which is already opaque.
+- The `app.css` no-blur fallback only covered `role="dialog"` and
+  `role="status"`. An `aria-hidden` scrim needs its own fallback entry with
+  the loader opacity, or engines without `backdrop-filter` get a nearly
+  invisible layer.
+
+## Session: iOS focus zoom
+- iOS Safari auto-zooms on focus when the field is under `16px`. The composer
+  bar used `text-[15px]`, so focusing it on a phone jumped the viewport.
+- Do not fix it with `maximum-scale=1, user-scalable=no`: modern iOS ignores
+  it and it harms accessibility. Bump the fields to `16px` (`text-base`)
+  instead and keep the viewport zoomable.
+- The rule covers every text-taking `input`, `textarea` and `select`:
+  composer bar and fullscreen editor, comment modal, note/task/principle
+  edit fields, date/time and URL inputs, group fields, search, the summary
+  prompt and the model picker. Display text stays at its old size; only the
+  controls move to `text-base`. File pickers take no text and stay small.
