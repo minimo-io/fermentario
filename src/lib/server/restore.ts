@@ -43,6 +43,7 @@ export interface RestoreCounts {
 	holdings: number;
 	goals: number;
 	valueGoals: number;
+	stocks: number;
 }
 
 function sqlString(value: string): string {
@@ -172,6 +173,7 @@ export function copyUploadIntoTarget(
 		if (has('principles')) statements.push('DELETE FROM principles');
 		if (has('tag_colors')) statements.push('DELETE FROM tag_colors');
 		if (has('holdings')) statements.push('DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
+		if (has('stock_items')) statements.push('DELETE FROM stock_items');
 
 		statements.push(
 			`INSERT INTO notes (id, content, created_at, updated_at, featured, video)
@@ -308,6 +310,25 @@ export function copyUploadIntoTarget(
 					FROM backup.category_value_goals`
 			);
 		}
+		if (has('stock_items')) {
+			statements.push(
+				`INSERT INTO stock_items (id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
+					SELECT id, ${column('stock_items', 'kind', "'consumable'")}, name,
+						${column('stock_items', 'note', "''")},
+						${column('stock_items', 'quantity', '0')},
+						${column('stock_items', 'duration_days', '0')},
+						${column('stock_items', 'bought_at', 'NULL')},
+						${column('stock_items', 'price', 'NULL')},
+						${column('stock_items', 'currency', "'BRL'")},
+						${column('stock_items', 'bought_where', "''")},
+						${column('stock_items', 'ended_at', 'NULL')},
+						${column('stock_items', 'photo', 'NULL')},
+						${column('stock_items', 'photo_mime', "''")},
+						${column('stock_items', 'has_photo', '0')},
+						created_at, updated_at
+					FROM backup.stock_items`
+			);
+		}
 
 		target.exec(statements.join(';\n'));
 		// Keep the invariant even when the backup was written by an older
@@ -353,7 +374,8 @@ export function copyUploadIntoTarget(
 		principles: count(target, 'principles'),
 		holdings: count(target, 'holdings'),
 		goals: count(target, 'category_goals'),
-		valueGoals: count(target, 'category_value_goals')
+		valueGoals: count(target, 'category_value_goals'),
+		stocks: count(target, 'stock_items')
 	};
 }
 

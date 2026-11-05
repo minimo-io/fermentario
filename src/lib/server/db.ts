@@ -87,6 +87,13 @@ export const refreshRates = bind('refreshRates');
 export const listTagColors = bind('listTagColors');
 export const listTagCounts = bind('listTagCounts');
 export const setTagColor = bind('setTagColor');
+export const listStockItems = bind('listStockItems');
+export const getStockItem = bind('getStockItem');
+export const createStockItem = bind('createStockItem');
+export const updateStockItem = bind('updateStockItem');
+export const deleteStockItem = bind('deleteStockItem');
+export const setStockItemPhoto = bind('setStockItemPhoto');
+export const getStockItemPhoto = bind('getStockItemPhoto');
 
 export { getDb, getJournal, NoActiveJournalError };
 
@@ -104,5 +111,8 @@ export type {
 	NoteComment,
 	Principle,
 	HoldingAction,
-	HoldingActionKind
+	HoldingActionKind,
+	StockItem,
+	StockKind,
+	StockItemInput
 } from '$lib/platform/journal';

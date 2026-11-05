@@ -77,7 +77,11 @@ sizing. Consult this before changing any of them.
   totals-card refresh button always forces (`{force: true}`) and refetches
   every auto-priced holding, even a quote fetched minutes ago. Staleness
   reads `price_updated_at`, never `updated_at`, so an amount edit cannot
-  make an old quote look fresh. A changed
+  make an old quote look fresh. A
+  forced holdings refresh also runs every 5 minutes while the tab is visible
+  (quiet, 30-second check, skipped while hidden or while a refresh runs; any
+  manual refresh restarts the clock). Both refresh buttons spin while it runs,
+  including the collapsed-header one. A changed
   ticker or category drops the old quote and re-arms auto mode immediately,
   so a saved edit never freezes a price. The cache lives in `fx_rates`.
   Display cards share one height without a fixed value: the rail uses
@@ -129,6 +133,22 @@ sizing. Consult this before changing any of them.
 - **Breakpoints**: mobile-first. `sm:` (640px) is the only breakpoint in use,
   for the desktop adjustments already present (composer padding, modal placement,
   heatmap height).
+- **Section bar**: the left group (Notes, To-Do, Library, Principles,
+  Influences) keeps drag reorder and scrolls as one line. Businesses and
+  Stocks are fixed on the right, outside the persisted order and the Settings
+  section list. Desktop is one row (`justify-between`, left group scrolls);
+  mobile stacks the fixed pair on its own right-aligned line.
+- **Stocks** (`StocksTab`): two tabs, **Consumables** and **Durables**, with
+  counts, persisted in `ferm:stocks-tab`. Consumables show packages and the
+  remaining estimate (`quantity × duration_days` from today, no auto-decrement,
+  empty is muted); the dot is rose ≤7 days, amber ≤30, emerald beyond.
+  Durables show bought date, where, price through the currency rule (currency
+  defaults to BRL, editable, BRL/USD/UYU quick picks) and Owned/Ended state.
+  Cards carry a photo thumbnail or a package icon; tap edits, delete is
+  confirmed. One photo per item: downscaled client-side to 1280 px JPEG,
+  stored as a BLOB with its MIME, served at
+  `/api/stocks/items/<id>/photo?v=<updated_at>`. Lists never embed bytes.
+  Businesses is a real pill with a placeholder page until its own build.
 - **Task rows (To-Do)**: pills — status, tags, comment count — share one wrapped
   row under the title on mobile (< `sm`, `pl-12` indent); the comment pill is
   pushed to the card's bottom-right edge with `ml-auto` (a bare row right-aligns
@@ -482,7 +502,15 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
 - Tag chips are links to `/tags/<tag>`; when a removal handler is present they
   also carry a hover `×` that asks for confirmation.
 - Notes get tags only from hashtags the user types at the end of the note.
-  No AI or background pass creates tags.
+  No AI or background pass creates tags. Typing `#` opens tag suggestions
+  (`TagFinder`, above the field): the top tags on a bare `#`, prefix matches
+  with usage counts as you type, plus a `Create #fragment` row when nothing
+  matches exactly. Only tokens in the trailing hashtag run open the menu — a
+  `#` in prose would not be stored, so it offers nothing. No row is selected
+  when the menu opens: plain `Enter` still saves (bar) or inserts a newline
+  (editors); `↑/↓` or a tap selects, the second `Enter` picks, `Escape`
+  closes. The menu mounts in the composer bar, the fullscreen editor and the
+  note edit dialog.
 - `/tags` is the tag cloud index. It counts every tag in `note_tags`,
   `todo_item_tags` and `principle_tags`, never `tag_colors` alone. The most-used
   tags come first; ties are alphabetical. Every pill uses the same size and

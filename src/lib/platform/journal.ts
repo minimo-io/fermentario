@@ -242,6 +242,38 @@ export interface TodoDoneCursor {
 	id: string;
 }
 
+export type StockKind = 'consumable' | 'durable';
+
+export interface StockItem {
+	id: string;
+	kind: StockKind;
+	name: string;
+	note: string;
+	quantity: number;
+	duration_days: number;
+	bought_at: number | null;
+	price: number | null;
+	currency: string;
+	bought_where: string;
+	ended_at: number | null;
+	hasPhoto: boolean;
+	created_at: number;
+	updated_at: number;
+}
+
+export interface StockItemInput {
+	kind: StockKind;
+	name: string;
+	note?: string;
+	quantity?: number;
+	duration_days?: number;
+	bought_at?: number | null;
+	price?: number | null;
+	currency?: string;
+	bought_where?: string;
+	ended_at?: number | null;
+}
+
 /** A resolved `[[id]]` link: notes and principles share the syntax, and the
  *  label always renders live from the target. */
 export interface LinkRef {
@@ -1479,6 +1511,261 @@ export function createJournal(db: SqlDb) {
 			.all(holdingId) as unknown as HoldingAction[];
 	}
 
+	// --- Stock items ----------------------------------------------------
+
+	interface StockItemRow {
+		id: string;
+		kind: string;
+		name: string;
+		note: string;
+		quantity: number;
+		duration_days: number;
+		bought_at: number | null;
+		price: number | null;
+		currency: string;
+		bought_where: string;
+		ended_at: number | null;
+		has_photo: number;
+		created_at: number;
+		updated_at: number;
+	}
+
+	function cleanStockKind(v: unknown): StockKind {
+		return v === 'durable' ? 'durable' : 'consumable';
+	}
+
+	const rowToStockItem = (r: StockItemRow): StockItem => ({
+		id: r.id,
+		kind: cleanStockKind(r.kind),
+		name: r.name,
+		note: r.note ?? '',
+		quantity: Number(r.quantity ?? 0),
+		duration_days: Number(r.duration_days ?? 0),
+		bought_at: r.bought_at ?? null,
+		price: r.price ?? null,
+		currency: r.currency ?? 'BRL',
+		bought_where: r.bought_where ?? '',
+		ended_at: r.ended_at ?? null,
+		hasPhoto: r.has_photo === 1,
+		created_at: r.created_at,
+		updated_at: r.updated_at
+	});
+
+	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'created_at' | 'updated_at'> | null {
+		const kind = cleanStockKind(input.kind);
+		const name = String(input.name ?? '').trim().slice(0, 80);
+		if (!name) return null;
+		const note = String(input.note ?? '').trim().slice(0, 2000);
+		const num = (v: unknown): number => {
+			const n = Number(v);
+			return Number.isFinite(n) && n >= 0 ? n : NaN;
+		};
+		const currency = /^[A-Z]{3}$/.test(String(input.currency ?? 'BRL').trim().toUpperCase())
+			? String(input.currency ?? 'BRL').trim().toUpperCase()
+			: 'BRL';
+		const boughtWhere = String(input.bought_where ?? '').trim().slice(0, 80);
+		if (kind === 'consumable') {
+			const quantity = num(input.quantity ?? NaN);
+			const duration = num(input.duration_days ?? NaN);
+			if (!Number.isFinite(quantity) || !Number.isFinite(duration)) return null;
+			return {
+				kind,
+				name,
+				note,
+				quantity,
+				duration_days: duration,
+				bought_at: null,
+				price: null,
+				currency: 'BRL',
+				bought_where: '',
+				ended_at: null
+			};
+		}
+		const priceRaw = input.price === undefined || input.price === null ? null : Number(input.price);
+		if (priceRaw !== null && (!Number.isFinite(priceRaw) || priceRaw < 0)) return null;
+		const boughtAt = input.bought_at === undefined || input.bought_at === null ? null : Number(input.bought_at);
+		if (boughtAt !== null && (!Number.isFinite(boughtAt) || boughtAt <= 0)) return null;
+		const endedAt = input.ended_at === undefined || input.ended_at === null ? null : Number(input.ended_at);
+		if (endedAt !== null && (!Number.isFinite(endedAt) || endedAt <= 0)) return null;
+		return {
+			kind,
+			name,
+			note,
+			quantity: 0,
+			duration_days: 0,
+			bought_at: boughtAt,
+			price: priceRaw,
+			currency,
+			bought_where: boughtWhere,
+			ended_at: endedAt
+		};
+	}
+
+	function listStockItems(): StockItem[] {
+		let rows: StockItemRow[];
+		try {
+			rows = db
+				.prepare(
+					`SELECT id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, has_photo, created_at, updated_at
+					 FROM stock_items`
+				)
+				.all() as unknown as StockItemRow[];
+		} catch {
+			// Table arrives with migration 11.
+			return [];
+		}
+		return rows
+			.map(rowToStockItem)
+			.sort((a, b) => {
+				if (a.kind !== b.kind) return a.kind === 'consumable' ? -1 : 1;
+				if (a.kind === 'consumable') {
+					const ra = a.quantity * a.duration_days;
+					const rb = b.quantity * b.duration_days;
+					// Empty stock sinks; otherwise soonest exhaustion first.
+					if (ra <= 0 && rb <= 0) return a.name.localeCompare(b.name);
+					if (ra <= 0) return 1;
+					if (rb <= 0) return -1;
+					return ra - rb || a.name.localeCompare(b.name);
+				}
+				const aActive = a.ended_at === null ? 0 : 1;
+				const bActive = b.ended_at === null ? 0 : 1;
+				if (aActive !== bActive) return aActive - bActive;
+				if (aActive === 0) return (b.bought_at ?? 0) - (a.bought_at ?? 0) || a.name.localeCompare(b.name);
+				return (b.ended_at ?? 0) - (a.ended_at ?? 0) || a.name.localeCompare(b.name);
+			});
+	}
+
+	function getStockItem(id: string): StockItem | null {
+		let r: StockItemRow | undefined;
+		try {
+			r = db
+				.prepare(
+					`SELECT id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, has_photo, created_at, updated_at
+					 FROM stock_items WHERE id = ?`
+				)
+				.get(id) as unknown as StockItemRow | undefined;
+		} catch {
+			return null;
+		}
+		return r ? rowToStockItem(r) : null;
+	}
+
+	function createStockItem(input: StockItemInput): StockItem | null {
+		const clean = cleanStockInput(input);
+		if (!clean) return null;
+		const now = Date.now();
+		const id = crypto.randomUUID();
+		try {
+			db.prepare(
+				`INSERT INTO stock_items (id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', 0, ?, ?)`
+			).run(
+				id,
+				clean.kind,
+				clean.name,
+				clean.note,
+				clean.quantity,
+				clean.duration_days,
+				clean.bought_at,
+				clean.price,
+				clean.currency,
+				clean.bought_where,
+				clean.ended_at,
+				now,
+				now
+			);
+		} catch {
+			return null;
+		}
+		return { ...clean, id, hasPhoto: false, created_at: now, updated_at: now };
+	}
+
+	function updateStockItem(id: string, input: Partial<StockItemInput>): StockItem | null {
+		const existing = getStockItem(id);
+		if (!existing) return null;
+		// The kind is fixed at creation: the form never changes tabs mid-edit.
+		const merged: StockItemInput = {
+			kind: existing.kind,
+			name: input.name !== undefined ? input.name : existing.name,
+			note: input.note !== undefined ? input.note : existing.note,
+			quantity: input.quantity !== undefined ? input.quantity : existing.quantity,
+			duration_days: input.duration_days !== undefined ? input.duration_days : existing.duration_days,
+			bought_at: input.bought_at !== undefined ? input.bought_at : existing.bought_at,
+			price: input.price !== undefined ? input.price : existing.price,
+			currency: input.currency !== undefined ? input.currency : existing.currency,
+			bought_where: input.bought_where !== undefined ? input.bought_where : existing.bought_where,
+			ended_at: input.ended_at !== undefined ? input.ended_at : existing.ended_at
+		};
+		const clean = cleanStockInput(merged);
+		if (!clean) return null;
+		const now = Math.max(Date.now(), existing.created_at + 1);
+		try {
+			db.prepare(
+				`UPDATE stock_items SET name = ?, note = ?, quantity = ?, duration_days = ?, bought_at = ?, price = ?,
+				 currency = ?, bought_where = ?, ended_at = ?, updated_at = ? WHERE id = ?`
+			).run(
+				clean.name,
+				clean.note,
+				clean.quantity,
+				clean.duration_days,
+				clean.bought_at,
+				clean.price,
+				clean.currency,
+				clean.bought_where,
+				clean.ended_at,
+				now,
+				id
+			);
+		} catch {
+			return null;
+		}
+		return getStockItem(id);
+	}
+
+	function deleteStockItem(id: string): boolean {
+		try {
+			return db.prepare('DELETE FROM stock_items WHERE id = ?').run(id).changes > 0;
+		} catch {
+			return false;
+		}
+	}
+
+	function setStockItemPhoto(id: string, photo: Uint8Array | null, mime: string): StockItem | null {
+		const existing = getStockItem(id);
+		if (!existing) return null;
+		const now = Math.max(Date.now(), existing.created_at + 1);
+		try {
+			if (photo === null) {
+				db.prepare('UPDATE stock_items SET photo = NULL, photo_mime = ?, has_photo = 0, updated_at = ? WHERE id = ?').run('', now, id);
+			} else {
+				db.prepare('UPDATE stock_items SET photo = ?, photo_mime = ?, has_photo = 1, updated_at = ? WHERE id = ?').run(
+					photo as unknown as string,
+					mime,
+					now,
+					id
+				);
+			}
+		} catch {
+			return null;
+		}
+		return getStockItem(id);
+	}
+
+	function getStockItemPhoto(id: string): { photo: Uint8Array; mime: string; updatedAt: number } | null {
+		let r: { photo: unknown; photo_mime: string; updated_at: number } | undefined;
+		try {
+			r = db
+				.prepare('SELECT photo, photo_mime, updated_at FROM stock_items WHERE id = ?')
+				.get(id) as unknown as { photo: unknown; photo_mime: string; updated_at: number } | undefined;
+		} catch {
+			return null;
+		}
+		if (!r || r.photo === null || r.photo === undefined) return null;
+		const bytes = toBytes(r.photo);
+		if (bytes.length === 0) return null;
+		return { photo: bytes, mime: r.photo_mime || 'image/jpeg', updatedAt: r.updated_at };
+	}
+
 	function listHoldingActions(holdingId: string): HoldingAction[] | null {
 		const exists = db.prepare('SELECT id FROM holdings WHERE id = ?').get(holdingId);
 		return exists ? readHoldingActions(holdingId) : null;
@@ -2100,6 +2387,13 @@ export function createJournal(db: SqlDb) {
 		getCategoryGoals,
 		setHoldingsGoals,
 		refreshRates,
+		listStockItems,
+		getStockItem,
+		createStockItem,
+		updateStockItem,
+		deleteStockItem,
+		setStockItemPhoto,
+		getStockItemPhoto,
 		listTagColors,
 		listTagCounts,
 		setTagColor

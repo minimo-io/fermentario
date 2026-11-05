@@ -533,6 +533,101 @@
 			}
 		}
 	},
+	"POST /api/stocks/items consumable": {
+		"status": 201,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "consumable",
+				"name": "Toothpaste",
+				"note": "Mint, sensitive",
+				"quantity": 2,
+				"duration_days": 45,
+				"bought_at": null,
+				"price": null,
+				"currency": "BRL",
+				"bought_where": "",
+				"ended_at": null,
+				"hasPhoto": true,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/stocks/items durable": {
+		"status": 201,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "durable",
+				"name": "Watch",
+				"note": "Steel bracelet",
+				"quantity": 0,
+				"duration_days": 0,
+				"bought_at": null,
+				"price": 2500,
+				"currency": "BRL",
+				"bought_where": "Downtown shop",
+				"ended_at": null,
+				"hasPhoto": false,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"PATCH /api/stocks/items/[id]": {
+		"status": 200,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "consumable",
+				"name": "Toothpaste",
+				"note": "Mint, sensitive",
+				"quantity": 1,
+				"duration_days": 45,
+				"bought_at": null,
+				"price": null,
+				"currency": "BRL",
+				"bought_where": "",
+				"ended_at": null,
+				"hasPhoto": true,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"GET /api/stocks/items/[id]/photo": {
+		"status": 200,
+		"contentType": "image/png",
+		"bytes": 70
+	},
+	"POST /api/stocks/items disposable": {
+		"status": 201,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "consumable",
+				"name": "Floss",
+				"note": "",
+				"quantity": 1,
+				"duration_days": 60,
+				"bought_at": null,
+				"price": null,
+				"currency": "BRL",
+				"bought_where": "",
+				"ended_at": null,
+				"hasPhoto": false,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"DELETE /api/stocks/items/[id]": {
+		"status": 200,
+		"body": {
+			"ok": true
+		}
+	},
 	"POST /api/notes link target": {
 		"status": 201,
 		"body": {
@@ -2098,7 +2193,9 @@
 			"holdings": 2,
 			"holdingActions": 4,
 			"goals": 3,
-			"valueGoals": 1
+			"valueGoals": 1,
+			"stocks": 2,
+			"stockPhotos": 1
 		}
 	},
 	"POST /api/import": {
@@ -2122,7 +2219,8 @@
 			"principles": 1,
 			"holdings": 2,
 			"goals": 3,
-			"valueGoals": 1
+			"valueGoals": 1,
+			"stocks": 2
 		}
 	},
 	"GET /api/notes/[id] after restore": {
@@ -2407,6 +2505,50 @@
 			"hasMore": false,
 			"nextCursor": null
 		}
+	},
+	"GET /api/stocks/items after restore": {
+		"status": 200,
+		"body": {
+			"items": [
+				{
+					"id": "<runtime>",
+					"kind": "consumable",
+					"name": "Toothpaste",
+					"note": "Mint, sensitive",
+					"quantity": 1,
+					"duration_days": 45,
+					"bought_at": null,
+					"price": null,
+					"currency": "BRL",
+					"bought_where": "",
+					"ended_at": null,
+					"hasPhoto": true,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"kind": "durable",
+					"name": "Watch",
+					"note": "Steel bracelet",
+					"quantity": 0,
+					"duration_days": 0,
+					"bought_at": null,
+					"price": 2500,
+					"currency": "BRL",
+					"bought_where": "Downtown shop",
+					"ended_at": null,
+					"hasPhoto": false,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/stocks/items/[id]/photo after restore": {
+		"status": 200,
+		"contentType": "image/png",
+		"bytes": 70
 	},
 	"GET /api/notes/[id] link after restore": {
 		"status": 200,

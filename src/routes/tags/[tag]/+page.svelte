@@ -7,6 +7,7 @@
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
+	import { invalidateTagChoices } from '$lib/tag-suggest';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import TagColorModal from '$lib/components/TagColorModal.svelte';
 	import { contentWidthClass } from '$lib/display';
@@ -128,6 +129,7 @@
 				if (wasLoaded && !pager.replaceSorted(note)) {
 					showToast('Note saved. Scroll down to find it.', 'success');
 				}
+				invalidateTagChoices();
 				pinned = pinned
 					.map((x) => (x.id === note.id ? note : x))
 					.sort((a, b) => b.created_at - a.created_at);

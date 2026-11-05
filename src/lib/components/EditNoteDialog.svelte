@@ -7,6 +7,7 @@
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import NoteFinder from '$lib/components/NoteFinder.svelte';
+	import TagFinder from '$lib/components/TagFinder.svelte';
 	import type { Note } from '$lib/types';
 
 	type Props = {
@@ -25,6 +26,7 @@
 	let full = $state(false);
 	let editField = $state<HTMLTextAreaElement | null>(null);
 	let finder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
+	let tagFinder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
 	// svelte-ignore state_referenced_locally
 	let noteDate = $state(datetimeLocalValue(note.created_at));
 	const maxNoteDate = datetimeLocalValue(Date.now());
@@ -96,10 +98,11 @@
 					class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600 {full ? 'min-h-0 flex-1 resize-none' : 'max-h-[50dvh] min-h-32 resize-y'}"
 					value={content}
 					oninput={(e) => onContent(e.currentTarget.value)}
-					onkeydown={(e) => { finder?.handleKey(e); }}
+					onkeydown={(e) => { tagFinder?.handleKey(e); finder?.handleKey(e); }}
 					placeholder="Note text"
 				></textarea>
 				<NoteFinder bind:this={finder} textarea={editField} excludeId={note.id} />
+				<TagFinder bind:this={tagFinder} textarea={editField} />
 			</div>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-date">Date and time</label>
 			<input

@@ -11,6 +11,7 @@
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import NoteFinder from '$lib/components/NoteFinder.svelte';
+	import TagFinder from '$lib/components/TagFinder.svelte';
 
 	type Props = {
 		onNote: (c: string, createdAt?: number) => void;
@@ -70,6 +71,7 @@
 	let bar = $state<HTMLDivElement | null>(null);
 	let expanded = $state(false);
 	let barFinder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
+	let barTagFinder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
 	// Focus scrim: blur the rest while the bar has focus, same glass as the
 	// loader. `focusin`/`focusout` (not textarea blur) so tapping Save, mic
 	// or fullscreen keeps the scrim until focus truly leaves the bar.
@@ -245,9 +247,10 @@
 						value={text}
 						oninput={(e) => { onText(e.currentTarget.value); autosize(); }}
 						placeholder={interim || (compact ? (lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…') : `${lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…'} (${focusHint})`)}
-						onkeydown={(e) => { if (barFinder?.handleKey(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } }}
+						onkeydown={(e) => { if (barTagFinder?.handleKey(e)) return; if (barFinder?.handleKey(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } }}
 					></textarea>
 					<NoteFinder bind:this={barFinder} textarea={field} />
+					<TagFinder bind:this={barTagFinder} textarea={field} />
 				</div>
 				<div class="flex shrink-0 items-center gap-2">
 					<button class="rounded-full p-2.5 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
@@ -344,6 +347,7 @@
 			></textarea>
 			{#if view === 'notes'}
 				<NoteFinder textarea={wideField} />
+				<TagFinder textarea={wideField} />
 			{/if}
 		</div>
 	</div>

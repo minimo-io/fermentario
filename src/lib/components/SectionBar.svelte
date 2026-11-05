@@ -3,11 +3,12 @@
 
 	type Props = {
 		sections: Section[];
+		fixed: Section[];
 		active: SectionId;
 		onSelect: (id: SectionId) => void;
 		onReorder: (ids: SectionId[]) => void;
 	};
-	let { sections, active, onSelect, onReorder }: Props = $props();
+	let { sections, fixed, active, onSelect, onReorder }: Props = $props();
 
 	let dragId = $state<SectionId | null>(null);
 	let overId = $state<SectionId | null>(null);
@@ -82,14 +83,15 @@
 	}
 </script>
 
-<nav aria-label="Sections" class="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+<nav aria-label="Sections" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+	<div class="no-scrollbar -mx-1 flex min-w-0 flex-1 snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:px-0">
 	{#each sections as s, i (s.id)}
 		<button
 			type="button"
 			role="tab"
 			data-section={s.id}
 			aria-selected={active === s.id}
-			class="inline-flex shrink-0 snap-start items-center rounded-full px-4 py-1.5 text-sm font-medium select-none {active === s.id ? 'bg-stone-900 dark:bg-stone-700 text-white' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'} {dragId === s.id ? 'opacity-40' : ''} {dragId && overId === s.id && dragId !== s.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
+			class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium select-none {active === s.id ? 'bg-stone-900 dark:bg-stone-700 text-white' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'} {dragId === s.id ? 'opacity-40' : ''} {dragId && overId === s.id && dragId !== s.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
 			style={dragId ? 'touch-action: none' : ''}
 			onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) onSelect(s.id); }}
 			onpointerdown={(e) => onDown(e, s.id)}
@@ -101,4 +103,20 @@
 			{s.label}
 		</button>
 	{/each}
+	</div>
+	<div class="flex shrink-0 justify-end gap-2">
+	{#each fixed as s (s.id)}
+		<button
+			type="button"
+			role="tab"
+			data-section={s.id}
+			aria-selected={active === s.id}
+			class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium select-none {active === s.id ? 'bg-stone-900 dark:bg-stone-700 text-white' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+			onclick={() => onSelect(s.id)}
+		>
+			<s.icon class="h-3.5 w-3.5" aria-hidden="true" />
+			{s.label}
+		</button>
+	{/each}
+	</div>
 </nav>

@@ -94,7 +94,7 @@
 	>{exporting ? 'Downloading…' : 'Download database'}</a>
 	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
 		A complete SQLite file of your journal: notes, tasks, principles, comments, tags, holdings,
-		goals, trades, recaps and questions. Keep it somewhere safe.
+		goals, trades, stock items, recaps and questions. Keep it somewhere safe.
 	</p>
 	{#if exportErr}
 		<p class="mt-1.5 text-[11px] text-rose-600 dark:text-rose-400">{exportErr}</p>
@@ -120,7 +120,7 @@
 	</div>
 	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
 		Replaces everything currently stored: notes, tasks, principles, comments, tags, holdings,
-		goals, trades, recaps, questions and tag colors. Download a backup first if you want to keep
+		goals, trades, stock items, recaps, questions and tag colors. Download a backup first if you want to keep
 		what is here now.
 	</p>
 	{#if restoreErr}
@@ -143,7 +143,7 @@
 {#if confirming && selected}
 	<ConfirmDialog
 		title="Replace your journal?"
-		message="{selected.name} will replace everything stored right now: every note, task, principle, comment, tag, holding, trade, goal, weekly recap and saved question with its answer. This cannot be undone. Download a backup first if you want to keep what is here."
+		message="{selected.name} will replace everything stored right now: every note, task, principle, comment, tag, holding, trade, goal, stock item, weekly recap and saved question with its answer. This cannot be undone. Download a backup first if you want to keep what is here."
 		confirmLabel="Replace everything"
 		cancelLabel="Cancel"
 		confirmTone="danger"

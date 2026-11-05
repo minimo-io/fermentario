@@ -272,6 +272,36 @@ const todoVideo: Migration = {
 	}
 };
 
+/** Stock pantry and belongings: consumables tracked by packages × days per
+ *  package, durables tracked by purchase, price and end date. Photos stay as
+ *  raw bytes in the table; `has_photo` avoids reading the BLOB for lists. */
+const stockItems: Migration = {
+	version: 11,
+	name: 'stock-items',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_items (
+				id            TEXT PRIMARY KEY,
+				kind          TEXT NOT NULL DEFAULT 'consumable',
+				name          TEXT NOT NULL,
+				note          TEXT NOT NULL DEFAULT '',
+				quantity      REAL NOT NULL DEFAULT 0,
+				duration_days REAL NOT NULL DEFAULT 0,
+				bought_at     INTEGER,
+				price         REAL,
+				currency      TEXT NOT NULL DEFAULT 'BRL',
+				bought_where  TEXT NOT NULL DEFAULT '',
+				ended_at      INTEGER,
+				photo         BLOB,
+				photo_mime    TEXT NOT NULL DEFAULT '',
+				has_photo     INTEGER NOT NULL DEFAULT 0,
+				created_at    INTEGER NOT NULL,
+				updated_at    INTEGER NOT NULL
+			);
+		`);
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -282,7 +312,8 @@ export const MIGRATIONS: Migration[] = [
 	holdingActions,
 	holdingActionCash,
 	categoryValueGoals,
-	todoVideo
+	todoVideo,
+	stockItems
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

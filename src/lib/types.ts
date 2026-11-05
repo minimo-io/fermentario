@@ -210,7 +210,31 @@ export interface TodoDoneCursor {
 	id: string;
 }
 
-export interface TodoDonePage {
+export type StockKind = 'consumable' | 'durable';
+
+export interface StockItem {
+	id: string;
+	kind: StockKind;
+	name: string;
+	note: string;
+	/** Consumables: packages in stock. Durables: unused. */
+	quantity: number;
+	/** Consumables: days one package lasts for one person. */
+	duration_days: number;
+	/** Durables only, ms epoch; null when unset. */
+	bought_at: number | null;
+	/** Durables only; null when unset. */
+	price: number | null;
+	/** Durables only, 3-letter code. */
+	currency: string;
+	/** Durables only: shop or place of purchase. */
+	bought_where: string;
+	/** Durables only, ms epoch; null while active. */
+	ended_at: number | null;
+	hasPhoto: boolean;
+	created_at: number;
+	updated_at: number;
+}export interface TodoDonePage {
 	items: TodoProgressItem[];
 	count: number;
 	hasMore: boolean;

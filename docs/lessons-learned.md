@@ -1980,3 +1980,42 @@
 - Local copies of `fmtMoney` drift. The cash card and the stats modal
   disagreed on UYU. One `$lib/currency.ts` helper is the rule enforcer;
   call sites pass only the value, currency and decimals.
+
+## Session: Tag suggestions without stealing Enter
+- A suggestion menu in a composer where Enter saves must open with no row
+  selected. Preselecting the first row turns every plain Enter into a tag
+  pick and breaks the save flow. Arrows or a tap opt in; the picking Enter
+  is the second one.
+- Only offer what the save path stores. Tag suggestions open solely in the
+  trailing hashtag run (validated past the caret, not just before it), or a
+  prose `#` offers tags the parser would drop. Mid-token carets still count:
+  extend the token past the caret before validating.
+- The `[[` finder and the `#` finder share a field, so parent key handlers
+  must call the tag handler first and return when it consumes the key. Both
+  finders also listen on the field itself; picks close the menu, making the
+  second call a no-op.
+
+## Session: Holdings auto-refresh clock
+- Stamp the clock at refresh start, not on success. A failed auto fetch
+  must still push the next tick out, or failures retry every 30 seconds.
+- Guard the tick twice: skip while hidden and while a refresh runs.
+  Overlapping PUTs race `holdingsRefreshing` and duplicate the stagger cost.
+- Any manual refresh (buttons, create, edit, goals) restarts the 5-minute
+  clock, or a manual tap is followed by an immediate auto duplicate.
+
+## Session: Stocks section and photo storage
+- Brand-new tables ride migrations only, not SCHEMA. Holdings set the
+  precedent: migration 3 creates its tables and new journals run every
+  migration in order. `export type`/`export interface` cannot live inside
+  `createJournal` — modifiers are illegal there. Declare stock types at
+  module level, keep only the row mapper and queries inside.
+- Store photo bytes as a BLOB with a MIME column, never base64 in the table.
+  Base64 is transport-only (`data:` URL to the API). Lists return `hasPhoto`
+  plus `updated_at`; bytes load through a photo URL with `?v=<updated_at>`.
+- `Response` accepts a `Uint8Array` body directly; set an immutable
+  `cache-control` and an etag of `id-updatedAt` so edits bust the cache.
+- Fixed section pills must not join the persisted order. `sanitizeSectionOrder`
+  drops them and Settings lists only the reorderable five; otherwise a saved
+  order with stocks/banks reshuffles on older code.
+- Svelte 5 `$effect` tracks reads inside async callbacks too — a timer that
+  reads refresh state re-arms on every refresh. Timers belong in `onMount`.

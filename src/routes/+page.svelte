@@ -16,6 +16,7 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
+	import { invalidateTagChoices } from '$lib/tag-suggest';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { formatNotesForClipboard } from '$lib/note-export';
 	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
@@ -35,7 +36,8 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
 	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
-	import { SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
+	import StocksTab from '$lib/components/StocksTab.svelte';
+	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
@@ -87,6 +89,9 @@ function langTag(p: Lang): string {
 		sanitizeSectionOrder(config.sections)
 			.map((id) => SECTIONS.find((s) => s.id === id))
 			.filter((s) => s !== undefined)
+	);
+	const fixedSections = $derived(
+		FIXED_SECTIONS.map((id) => SECTIONS.find((s) => s.id === id)).filter((s) => s !== undefined)
 	);
 	/** The composer only knows notes vs ask. Every other section uses note mode. */
 	const composerView = $derived(view === 'ask' ? 'ask' : 'notes');
@@ -164,6 +169,7 @@ function langTag(p: Lang): string {
 		principles: number;
 		holdings: number;
 		goals: number;
+		stocks: number;
 	};
 
 	function closeRestore() {
@@ -242,12 +248,13 @@ function langTag(p: Lang): string {
 			await pager.open();
 			await loadAsks();
 			await tagColors.reload();
+			invalidateTagChoices();
 			// The import already copied weekly_recaps and cleared the server
 			// memo. Refresh silently: forcing here regenerated the recap and
 			// re-opened the hidden weekly card.
 			refreshSummaryAnswer(false, null, false);
 			showToast(
-				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.holdings ?? 0} holdings, ${counts?.goals ?? 0} goals, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
+				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.holdings ?? 0} holdings, ${counts?.goals ?? 0} goals, ${counts?.stocks ?? 0} stock items, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
 				'success'
 			);
 			setTimeout(closeRestore, 2500);
@@ -289,6 +296,31 @@ function langTag(p: Lang): string {
 		try {
 			sessionStorage.setItem('fermentario.view', view);
 		} catch {}
+	});
+
+	// Holdings auto-refresh: every 5 minutes while the tab is visible. Quiet
+	// and forced — without force the server would answer from its daily cache
+	// and the spinner would update nothing. The guard skips hidden tabs and
+	// in-flight refreshes; any manual refresh restarts the clock. onMount,
+	// not $effect: the tick reads refresh state that must not re-arm the
+	// timer on every refresh.
+	onMount(() => {
+		if (typeof document === 'undefined') return;
+		const tick = () => {
+			if (document.hidden) return;
+			if (holdingsRefreshing) return;
+			if (Date.now() - lastHoldingsRefresh < HOLDINGS_AUTO_MS) return;
+			void refreshHoldings(true, true);
+		};
+		const timer = setInterval(tick, 30_000);
+		const onVisible = () => {
+			if (!document.hidden) tick();
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => {
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', onVisible);
+		};
 	});
 
 	$effect(() => {
@@ -366,6 +398,8 @@ function langTag(p: Lang): string {
 	let holdingsRefreshing = $state(false);
 	let confirmingHolding = $state<Holding | null>(null);
 	let holdingsAutoRefreshed = false;
+	let lastHoldingsRefresh = $state(0);
+	const HOLDINGS_AUTO_MS = 5 * 60 * 1000;
 
 	async function loadHoldings() {
 		try {
@@ -495,6 +529,9 @@ function langTag(p: Lang): string {
 	async function refreshHoldings(quiet = false, force = false) {
 		if (holdingsRefreshing) return;
 		holdingsRefreshing = true;
+		// Every refresh — manual or automatic — moves the 5-minute auto tick
+		// out, so a manual tap is never followed by a duplicate auto fetch.
+		lastHoldingsRefresh = Date.now();
 		try {
 			const res = await fetch('/api/holdings', {
 				method: 'PUT',
@@ -587,6 +624,7 @@ function langTag(p: Lang): string {
 				if (!fitsLoadedPage) showToast('Note saved. Scroll down to find it.', 'success');
 				else showToast('Note saved.', 'success');
 				clearDraft();
+				invalidateTagChoices();
 				refreshSummaryAnswer(false, null, false);
 				setTimeout(() => {
 					if (!notes.some((n) => n.pending)) void pager.sync().catch(() => {});
@@ -651,6 +689,7 @@ function langTag(p: Lang): string {
 		featured = featured
 			.map((f) => (f.id === note.id ? note : f))
 			.sort((a, b) => b.created_at - a.created_at);
+		invalidateTagChoices();
 		refreshSummaryAnswer(false, null, false);
 	}
 
@@ -819,6 +858,7 @@ function langTag(p: Lang): string {
 		<div class="mb-4" role="tablist" aria-label="Views">
 			<SectionBar
 				sections={orderedSections}
+				fixed={fixedSections}
 				active={view === 'ask' ? lastSection : view}
 				onSelect={selectSection}
 				onReorder={(ids) => saveConfig({ sections: ids })}
@@ -886,6 +926,10 @@ function langTag(p: Lang): string {
 			<TodoTab onError={(m) => showToast(m)} lang={config.entriesLang} widthClass={contentClass} />
 		{:else if view === 'principles'}
 			<PrinciplesTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
+		{:else if view === 'stocks'}
+			<StocksTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
+		{:else if view === 'businesses'}
+			<SectionPlaceholder label="Businesses" />
 		{:else}
 			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
 		{/if}

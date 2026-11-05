@@ -148,8 +148,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 10) {
-		console.error('The legacy import did not register an active v10 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 11) {
+		console.error('The legacy import did not register an active v11 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -387,6 +387,86 @@ const principleComment = await api(
 must('POST /api/principles/[id]/comments', principleComment, (r) => r.status === 201, '201');
 volatile.add(principleComment.body.comment.id);
 volatile.add(principleComment.body.comment.created_at);
+
+// --- Stocks ---------------------------------------------------------------
+// A 1x1 PNG. Small enough to stay inline, real enough to exercise the bytes.
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+const consumable = await api(
+	'POST /api/stocks/items consumable',
+	'/api/stocks/items',
+	json({ kind: 'consumable', name: 'Toothpaste', note: 'Mint, sensitive', quantity: 2, duration_days: 45, photo: TINY_PNG })
+);
+must(
+	'POST /api/stocks/items consumable',
+	consumable,
+	(r) => r.status === 201 && !!r.body.item && r.body.item.kind === 'consumable' && r.body.item.hasPhoto === true,
+	'201 with a consumable and its photo flag'
+);
+const consumableId = consumable.body.item.id;
+volatile.add(consumableId);
+volatile.add(consumable.body.item.created_at);
+volatile.add(consumable.body.item.updated_at);
+
+const durable = await api(
+	'POST /api/stocks/items durable',
+	'/api/stocks/items',
+	json({ kind: 'durable', name: 'Watch', note: 'Steel bracelet', price: 2500, currency: 'BRL', bought_where: 'Downtown shop' })
+);
+must(
+	'POST /api/stocks/items durable',
+	durable,
+	(r) => r.status === 201 && !!r.body.item && r.body.item.kind === 'durable' && r.body.item.currency === 'BRL' && r.body.item.hasPhoto === false,
+	'201 with a durable in BRL and no photo'
+);
+const durableId = durable.body.item.id;
+volatile.add(durableId);
+volatile.add(durable.body.item.created_at);
+volatile.add(durable.body.item.updated_at);
+
+const consumablePatch = await api(
+	'PATCH /api/stocks/items/[id]',
+	`/api/stocks/items/${consumableId}`,
+	json({ quantity: 1 }, 'PATCH')
+);
+must(
+	'PATCH /api/stocks/items/[id]',
+	consumablePatch,
+	(r) => r.status === 200 && r.body.item?.quantity === 1 && r.body.item?.hasPhoto === true,
+	'200 with the new quantity and the kept photo'
+);
+volatile.add(consumablePatch.body.item.updated_at);
+
+const stockPhoto = await fetch(`${base}/api/stocks/items/${consumableId}/photo`);
+const stockPhotoBytes = new Uint8Array(await stockPhoto.arrayBuffer());
+results.push([
+	'GET /api/stocks/items/[id]/photo',
+	{ status: stockPhoto.status, contentType: stockPhoto.headers.get('content-type'), bytes: stockPhotoBytes.length }
+]);
+must(
+	'GET /api/stocks/items/[id]/photo',
+	{ status: stockPhoto.status, body: { contentType: stockPhoto.headers.get('content-type'), bytes: stockPhotoBytes.length } },
+	(r) => r.status === 200 && r.body.contentType === 'image/png' && r.body.bytes > 0,
+	'200 with the stored PNG bytes'
+);
+
+const disposable = await api(
+	'POST /api/stocks/items disposable',
+	'/api/stocks/items',
+	json({ kind: 'consumable', name: 'Floss', quantity: 1, duration_days: 60 })
+);
+must('POST /api/stocks/items disposable', disposable, (r) => r.status === 201 && !!r.body.item, '201 with a disposable item');
+const disposableId = disposable.body.item.id;
+volatile.add(disposableId);
+volatile.add(disposable.body.item.created_at);
+volatile.add(disposable.body.item.updated_at);
+
+const deletedStock = await api(
+	'DELETE /api/stocks/items/[id]',
+	`/api/stocks/items/${disposableId}`,
+	{ method: 'DELETE' }
+);
+must('DELETE /api/stocks/items/[id]', deletedStock, (r) => r.status === 200, '200 with the item gone');
 
 // --- Note links -----------------------------------------------------------
 // The label is never stored: it renders live from the target's first line.
@@ -881,7 +961,9 @@ try {
 		holdings: count('holdings'),
 		holdingActions: count('holding_actions'),
 		goals: count('category_goals'),
-		valueGoals: count('category_value_goals')
+		valueGoals: count('category_value_goals'),
+		stocks: count('stock_items'),
+		stockPhotos: d.prepare('SELECT COUNT(*) AS c FROM stock_items WHERE has_photo = 1').get().c
 	};
 	d.close();
 } catch (e) {
@@ -946,7 +1028,8 @@ must(
 		r.body.done?.principles === 1 &&
 		r.body.done?.holdings === 2 &&
 		r.body.done?.goals === 3 &&
-		r.body.done?.valueGoals === 1,
+		r.body.done?.valueGoals === 1 &&
+		r.body.done?.stocks === 2,
 	'200 with a count for every restored section'
 );
 
@@ -1093,6 +1176,31 @@ for (const t of restoredTrades.body.items ?? []) {
 	volatile.add(t.id);
 	volatile.add(t.created_at);
 }
+
+const restoredStocks = await api('GET /api/stocks/items after restore', '/api/stocks/items');
+must(
+	'GET /api/stocks/items after restore',
+	restoredStocks,
+	(r) =>
+		r.status === 200 &&
+		r.body.items?.length === 2 &&
+		r.body.items.some((i) => i.id === consumableId && i.kind === 'consumable' && i.name === 'Toothpaste' && i.quantity === 1 && i.duration_days === 45 && i.hasPhoto === true) &&
+		r.body.items.some((i) => i.id === durableId && i.kind === 'durable' && i.name === 'Watch' && i.price === 2500 && i.currency === 'BRL' && i.bought_where === 'Downtown shop'),
+	'the consumable with its photo flag and the durable with its price'
+);
+
+const restoredStockPhoto = await fetch(`${base}/api/stocks/items/${consumableId}/photo`);
+const restoredStockPhotoBytes = new Uint8Array(await restoredStockPhoto.arrayBuffer());
+results.push([
+	'GET /api/stocks/items/[id]/photo after restore',
+	{ status: restoredStockPhoto.status, contentType: restoredStockPhoto.headers.get('content-type'), bytes: restoredStockPhotoBytes.length }
+]);
+must(
+	'GET /api/stocks/items/[id]/photo after restore',
+	{ status: restoredStockPhoto.status, body: { contentType: restoredStockPhoto.headers.get('content-type'), bytes: restoredStockPhotoBytes.length } },
+	(r) => r.status === 200 && r.body.contentType === 'image/png' && r.body.bytes > 0,
+	'the photo bytes survive the export and import'
+);
 
 const restoredLink = await api('GET /api/notes/[id] link after restore', `/api/notes/${linkSourceId}`);
 must(

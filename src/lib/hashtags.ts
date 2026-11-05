@@ -7,7 +7,7 @@ const MAX_TAGS = 8;
 const MAX_TAG_LENGTH = 30;
 
 const TRAILING_TAG = /(?:\s|^)(#[\p{L}\p{N}][\p{L}\p{N}_-]{0,29})$/u;
-const TAG_TOKEN = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,29}$/u;
+export const TAG_TOKEN = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,29}$/u;
 
 /** Split a note into its text and the hashtags typed at the end of it.
  *
