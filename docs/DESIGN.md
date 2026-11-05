@@ -17,6 +17,9 @@ sizing. Consult this before changing any of them.
   the loading state: `white/25` plus `backdrop-blur-md`, `stone-950/25` in
   dark). It fades with the shared backdrop timing, stays while any bar
   control has focus, hides in fullscreen editor mode, and never blocks taps.
+  Publishing a note or asking a question releases the bar, so the scrim fades
+  and the result is visible; do not leave an empty focused bar blurring the
+  page.
   The full-screen note
   editor carries an optional date/time pill; an empty value uses the current
   time. The chosen time becomes the note's `created_at` and the card enters the
@@ -27,6 +30,89 @@ sizing. Consult this before changing any of them.
 - **Bottom clearance**: the page reserves `pb-[calc(var(--composer-h,4.5rem)+2.5rem)]`
   so the last note is never hidden behind the bar. The bar publishes its height
   as `--composer-h` via a `ResizeObserver`.
+- **Holdings** (every view, between the header and the section bar): a
+  touch-friendly horizontal
+  carousel (`overflow-x-auto no-scrollbar snap-x`, no visible bar) of square
+  boxes. First card is the black USD total — whole dollars, no cents, never
+  truncated — with the BRL and UYU equivalents in grey beneath it, plus
+  as-of date, stale mark, refresh, Stats (holding-stats modal) and the goals
+  modal. Holdings follow sorted by monetary value, highest first,
+  position only breaking ties. A BTC slot is always visible:
+  it shows the holding when one exists, otherwise a fixed placeholder that
+  opens the add form prefilled with BTC. A chevron header slides the strip
+  shut (state in `ferm:holdings-collapsed`); the chevron rotates and, with
+  the title, forms one toggle button. The collapsed row shows USD, BRL and
+  UYU totals; only the USD total is bold.
+  Each box shows ticker bold
+  top-left — with a category-health dot once goals exist: green when the
+  category is within 2 points of its goal, yellow within 5, red beyond; no
+  goals means no dot, individual holdings have no goals of their own, and
+  absolute value targets never change the dot — and
+  the monetary value big; below it the share count
+  (`146 shares`, `0,1 BTC` — never a currency, shares are not money),
+  the share of the total in percent, and an approximation in the other
+  currency on the same row (`≈ R$ …` for USD holdings, `≈ $…` otherwise).
+  Tap a box edits ticker, 3-letter currency, category, bank, country and the
+  average cost; the amount only appears when adding. A small grey `+` at the
+  top-right corner opens the buy/sell modal instead of the edit form.
+  Delete is confirmed. The modal states when the price was last written
+  (`price_updated_at`), so a stale quote is visible before editing. There is no
+  price field: every quote comes from the market through the cache. Cash
+  holdings name their bank and country; the ticker
+  is derived from the bank and the price stays 1. Fiat converts through cached
+  `fx_rates`, BTC-ticker rows take the fetched BTC price, and B3/FII tickers
+  take the Fundamentus quote. Refresh runs at most once a day per quote: home
+  open asks quietly and the server answers from cache until a quote is a day
+  old, while failures keep cached values with a stale mark. The
+  totals-card refresh button always forces (`{force: true}`). A changed
+  ticker or category drops the old quote and re-arms auto mode immediately,
+  so a saved edit never freezes a price. The cache lives in `fx_rates`.
+  Display cards share one height without a fixed value: the rail uses
+  `items-stretch`, so the tallest card sets the row and every card matches it.
+  Cards must not use `h-44`; that fixed box left ~30 px of dead space between
+  the detail lines and Delete after forms moved to global modals.
+  Card content starts at the top edge in every card: the asset card's edit
+  button is a flex column, because a stretched `<button>` centres its content
+  and drops the label and amount below the totals card's. The totals footer
+  and the asset Delete row both sit on the bottom edge.
+  The add form renders in the slot that opened it (BTC placeholder or `+`
+  box), tracked by one flag, never in both.
+- **Prices roadmap**: BTC auto-prices (Coinbase spot); B3 quotes come from
+  Fundamentus (`Cotação` row, comma decimals normalized); every other ticker
+  uses the Yahoo chart, and fiat converts for the USD total. A full exchange
+  API and a scheduled refresh are future work; the schema (`price`,
+  `price_auto`, `currency`, `fx_rates`) already carries them, so no migration
+  was needed when quotes landed. The UI never sends a price: the API keeps
+  `price` for compatibility, and a supplied price still clears auto mode.
+  Amounts are share counts, never money — cards show `146 shares`, value comes
+  from shares × price.
+- **Allocation goals**: tapping the total card opens the goals modal. Its
+  allocation section edits BTC/FII/cash target percents, which must add to
+  100 (`category_goals`, enforced server-side).
+  Every holding card carries a category-health dot when goals exist: green
+  within 2 points of the category goal, yellow within 5, red beyond. The
+  Stats modal shows per-category USD, actual and goal percent, each asset
+  as a share of its own category, and the gap amount in USD, BRL and UYU
+  (`Need` when under, `Trim` when over). Holdings carry a category
+  (`btc`/`fii`/`cash`, auto from ticker with an in-form override) and no
+  goal of their own. Cash holdings count at face value.
+- **Card order**: totals card first, then every cash holding, then the BTC
+  placeholder when no BTC row exists, then the remaining holdings by value.
+  Cash is the money you can spend, so it sits next to the total and ignores
+  the value sort; several cash accounts keep their API order. Cash cards use a
+  muted emerald tint (`border-emerald-200/80 bg-emerald-50/80`,
+  `dark:border-emerald-900/70 dark:bg-emerald-950/40`), softer than the black
+  totals card but distinct from the white asset cards. Cash and non-cash cards
+  share one snippet, so their markup cannot drift.
+- **Value targets** are independent from allocation goals: a category can keep
+  its percent goal and also store an optional absolute target in
+  `category_value_goals`. The goals modal edits both sections in one save.
+  BTC targets are in USD; FII and cash targets are in BRL, fixed server-side.
+  The Stats modal adds a neutral progress bar (emerald when reached) with the
+  current value, target, percent of target and the signed gap. The ±2/±5
+  allocation bands do not apply. A missing FX rate shows "rate unavailable"
+  and null progress; never assume 1:1. The growth target is display-only and
+  never changes the category-health dot.
 - **Breakpoints**: mobile-first. `sm:` (640px) is the only breakpoint in use,
   for the desktop adjustments already present (composer padding, modal placement,
   heatmap height).
@@ -108,6 +194,34 @@ sizing. Consult this before changing any of them.
   (`src/lib/markdown-inline.ts`, escape-first then two tag rules) — in the
   timeline (folded and full) and the note page; editors, copies and
   exports stay raw.
+- **Note links**: `[[uuid]]` links to a note or a principle — notes resolve
+  first, then principles — and the label always renders live from the
+  target's first line, both inline (as a pill) and in the linked-entries pill
+  row at the top of the card and the detail page. Typing `[[` in the composer,
+  fullscreen editor, note edit dialog or principle add/edit fields opens an
+  inline finder over `/api/search` (notes and principles, Enter picks,
+  arrows move, Escape closes). A finder pick writes the id into the raw
+  text, so copies and exports carry `[[id]]`. Deleted targets render as
+  muted text, never a dead link. Links are derived from content at read
+  time (`linkedNotes` batched in `withTags` and the principle queries); no
+  link table, no migration. Principle surfaces stay markdown-free: pills
+  render through a links-only pass, and tapping a card-embedded pill never
+  folds the note or opens the edit dialog.
+- **Holdings add/edit** opens in a global modal (same overlay standard as the
+  comment modal), so the carousel cards never resize around a form. The modal
+  owns its draft, validation and saving; the carousel only opens it with an
+  initial value and refreshes on success.
+- **Buy/sell ledger** also opens in a global modal: a small form at the top,
+  the recorded actions scrolling below it. Buys and deposits are green, sells
+  and withdrawals are red. The opening row is the quantity the holding had
+  when the ledger started, and its price is the average cost. Every later row
+  snapshots the market quote at record time; the card keeps showing the live
+  quote. A sell larger than the current total is rejected, and an amount edit
+  through the API shifts the opening row so the ledger still sums to the
+  total. Cash rows hide the stored face-value unit price: the deposit,
+  withdrawal or opening balance shows one signed money value, never
+  `R$ 1,00 / unit` or a repeated total. v1 records only: no backdating,
+  editing or deleting past actions.
 - **Note card gestures**: tapping the note text only folds/unfolds —
   opening a note lives in the ⋮ menu ("Open note"; not offered by the ⋮
   menu on the note's own page). The hour stamp is a label, not a link. On
@@ -223,7 +337,7 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   composer, the section bar or the header controls.
 - The home page has no tagline. The header is only the journal controls and
   settings; do not add a marketing line above the timeline. The view pills run
-  **Heatmap**, **Tags**, **Search**; the first two are links, so the notes
+  **Heatmaps**, **Tags**, **Search**; the first two are links, so the notes
   timeline stays on the home page.
 
 ## Interaction
@@ -296,11 +410,26 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   hand-written translations).
 - The heatmap packs the year backwards, seven per column from 31 December, so
   the newest days sit at the top left and any slack is at the bottom right.
-- Below the heatmap, **Done tasks** lists completed tasks across every group and
-  year, latest `done_at` first. It groups them under month headings such as
+- The heatmap has two tabs. **Notes & tasks** keeps the amber note-intensity
+  grid and the Done tasks list. **Investments** has its own grid and trade
+  history. One square cannot carry note, buy and sell intensities at once,
+  so the views never share a cell. The tab choice is stored in
+  `fermentario.heatmapView`; the selected year is shared.
+- Investments colours: buys use an emerald scale, sells a rose scale. Each
+  side has four bands from its own busiest day (up to 25%, 50%, 75%, 100%),
+  matching the note scale. A day with both sides splits diagonally; each
+  half carries its own band, drawn with alpha over the neutral base so it
+  reads in both themes. A split legend square explains the case.
+- **Done tasks** (under Notes & tasks) lists completed tasks across every group
+  and year, latest `done_at` first. It groups them under month headings such as
   **October 2026**, with undated completions under **Date unavailable**. It
   loads 50 at a time with a cursor and an `IntersectionObserver` sentinel near
   the bottom; the list is not filtered by the selected heatmap year.
+- **Trade history** (under Investments) lists every buy and sell across all
+  holdings, newest first, with the same month grouping and cursor pagination.
+  Buys are green, sells red; cash reads Deposit and Withdrawal. Opening
+  balances are the starting quantity, not an event, so they never appear.
+  Like Done tasks, it covers every year.
 - Ticking a task from open to done asks for confirmation; unmarking a done task
   stays immediate. The confirm button is green: completion is a positive
   change, not a destructive one.

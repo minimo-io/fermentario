@@ -1,11 +1,23 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { contentWidthClass } from '$lib/display';
 	import DoneTasks from '$lib/components/DoneTasks.svelte';
-	import type { TodoDonePage } from '$lib/types';
+	import TradeHistory from '$lib/components/TradeHistory.svelte';
+	import type { TodoDonePage, TradeDay, TradeHistoryPage } from '$lib/types';
 
-	type Props = { data: { days: { day: string; count: number }[]; notes: number; done: TodoDonePage } };
+	type View = 'notes' | 'trades';
+
+	type Props = {
+		data: {
+			days: { day: string; count: number }[];
+			trades: TradeDay[];
+			notes: number;
+			done: TodoDonePage;
+			tradeHistory: TradeHistoryPage;
+		};
+	};
 	let { data }: Props = $props();
 
 	let lang = $state('en');
@@ -21,9 +33,30 @@
 		} catch {}
 	});
 
+	// Notes and investments are two different questions. One square cannot
+	// carry three intensities, so each view gets its own scale and history.
+	let view = $state<View>('notes');
+	let viewStored = $state(false);
+	onMount(() => {
+		try {
+			const raw = localStorage.getItem('fermentario.heatmapView');
+			if (raw === 'notes' || raw === 'trades') view = raw;
+		} catch {}
+		viewStored = true;
+	});
+	$effect(() => {
+		if (viewStored) {
+			try {
+				localStorage.setItem('fermentario.heatmapView', view);
+			} catch {}
+		}
+	});
+
 	const counts = $derived(new Map(data.days.map((d) => [d.day, d.count])));
+	const tradeCounts = $derived(new Map(data.trades.map((t) => [t.day, t])));
 	const maxCount = $derived(data.days.reduce((m, d) => Math.max(m, d.count), 0));
-	const totalDays = $derived(data.days.length);
+	const maxBuys = $derived(data.trades.reduce((m, t) => Math.max(m, t.buys), 0));
+	const maxSells = $derived(data.trades.reduce((m, t) => Math.max(m, t.sells), 0));
 
 	const today = new Date();
 	const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
@@ -31,7 +64,11 @@
 	).padStart(2, '0')}`;
 
 	const years = $derived([
-		...new Set([...data.days.map((d) => Number(d.day.slice(0, 4))), today.getFullYear()])
+		...new Set([
+			...data.days.map((d) => Number(d.day.slice(0, 4))),
+			...data.trades.map((t) => Number(t.day.slice(0, 4))),
+			today.getFullYear()
+		])
 	].sort((a, b) => a - b));
 
 	let year = $state(today.getFullYear());
@@ -50,6 +87,8 @@
 		key: string;
 		date: Date;
 		count: number;
+		buys: number;
+		sells: number;
 		future: boolean;
 	}
 
@@ -61,6 +100,17 @@
 			(best, d) => (d.count > (best?.count ?? 0) ? d : best),
 			null
 		)
+	);
+
+	const yearTrades = $derived(data.trades.filter((t) => t.day.slice(0, 4) === String(year)));
+	const yearBuys = $derived(yearTrades.reduce((sum, t) => sum + t.buys, 0));
+	const yearSells = $derived(yearTrades.reduce((sum, t) => sum + t.sells, 0));
+	const yearTradeDays = $derived(yearTrades.length);
+	const yearBusiestTrade = $derived(
+		yearTrades.reduce<{ day: string; total: number } | null>((best, t) => {
+			const total = t.buys + t.sells;
+			return total > (best?.total ?? 0) ? { day: t.day, total } : best;
+		}, null)
 	);
 
 	/** One rectangle for the year: the days in reverse calendar order, seven per
@@ -78,7 +128,15 @@
 			const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(
 				cursor.getDate()
 			).padStart(2, '0')}`;
-			days.push({ key, date: new Date(cursor), count: counts.get(key) ?? 0, future: key > todayKey });
+			const trade = tradeCounts.get(key);
+			days.push({
+				key,
+				date: new Date(cursor),
+				count: counts.get(key) ?? 0,
+				buys: trade?.buys ?? 0,
+				sells: trade?.sells ?? 0,
+				future: key > todayKey
+			});
 			cursor.setDate(cursor.getDate() + 1);
 		}
 		// Newest first, so December sits on the left and January on the right.
@@ -103,7 +161,7 @@
 		return { columns, labels };
 	});
 
-	function shade(cell: Cell): string {
+	function shadeNotes(cell: Cell): string {
 		// One style for every day without notes, past or not yet reached, so the
 		// grid reads as a single uniform block. Only real counts get colour.
 		if (cell.count <= 0) return 'bg-stone-200 dark:bg-stone-700';
@@ -115,7 +173,54 @@
 		return 'bg-amber-500';
 	}
 
+	// Four bands per side, like the note scale. A day with one event on a
+	// one-event maximum uses band 3, matching the notes' single-event shade.
+	function band(n: number, max: number): number {
+		if (n <= 0) return 0;
+		if (max <= 1) return 3;
+		const ratio = n / max;
+		if (ratio <= 0.25) return 1;
+		if (ratio <= 0.5) return 2;
+		if (ratio <= 0.75) return 3;
+		return 4;
+	}
+
+	const BUY_CLASS = ['', 'bg-emerald-200 dark:bg-emerald-900', 'bg-emerald-300 dark:bg-emerald-800', 'bg-emerald-400 dark:bg-emerald-600', 'bg-emerald-500'] as const;
+	const SELL_CLASS = ['', 'bg-rose-200 dark:bg-rose-900', 'bg-rose-300 dark:bg-rose-800', 'bg-rose-400 dark:bg-rose-600', 'bg-rose-500'] as const;
+	const TRADE_BASE = 'bg-stone-200 dark:bg-stone-700';
+	const BUY_RGB = '16, 185, 129';
+	const SELL_RGB = '244, 63, 94';
+	const BAND_ALPHA = [0, 0.3, 0.5, 0.7, 1] as const;
+
+	function tradeClass(cell: Cell): string {
+		const b = band(cell.buys, maxBuys);
+		const s = band(cell.sells, maxSells);
+		if (b > 0 && s > 0) return TRADE_BASE;
+		if (b > 0) return BUY_CLASS[b];
+		if (s > 0) return SELL_CLASS[s];
+		return TRADE_BASE;
+	}
+
+	/** A day with both sides splits diagonally. The alpha carries the
+	 *  intensity over the neutral base, so it reads in both themes. */
+	function tradeStyle(cell: Cell): string | undefined {
+		const b = band(cell.buys, maxBuys);
+		const s = band(cell.sells, maxSells);
+		if (b === 0 || s === 0) return undefined;
+		return `background-image: linear-gradient(135deg, rgba(${BUY_RGB}, ${BAND_ALPHA[b]}) 50%, rgba(${SELL_RGB}, ${BAND_ALPHA[s]}) 50%)`;
+	}
+
 	let tip = $state<{ x: number; y: number; text: string } | null>(null);
+
+	function cellText(cell: Cell): string {
+		if (view === 'trades') {
+			const parts: string[] = [];
+			if (cell.buys > 0) parts.push(`${cell.buys} ${cell.buys === 1 ? 'buy' : 'buys'}`);
+			if (cell.sells > 0) parts.push(`${cell.sells} ${cell.sells === 1 ? 'sell' : 'sells'}`);
+			return parts.length > 0 ? parts.join(' · ') : 'no trades';
+		}
+		return `${cell.count} ${cell.count === 1 ? 'note' : 'notes'}`;
+	}
 
 	function showTip(e: { clientX: number; clientY: number }, cell: Cell) {
 		const when = cell.date.toLocaleDateString(lang, {
@@ -127,24 +232,50 @@
 		tip = {
 			x: e.clientX,
 			y: e.clientY,
-			text: cell.future
-				? `${when} — not yet`
-				: `${when} — ${cell.count} ${cell.count === 1 ? 'note' : 'notes'}${cell.key === todayKey ? ' · today' : ''}`
+			text: cell.future ? `${when} — not yet` : `${when} — ${cellText(cell)}${cell.key === todayKey ? ' · today' : ''}`
 		};
 	}
 </script>
 
 <svelte:head>
-	<title>Heatmap · fermentario</title>
+	<title>Heatmaps · fermentario</title>
 </svelte:head>
 
 <main class="min-h-dvh">
 	<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
 		<header class="mb-6">
-			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200">
-				<ArrowLeft class="h-3.5 w-3.5" /> All notes
-			</a>
-			<h1 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">Heatmap</h1>
+			<button
+				type="button"
+				class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200"
+				onclick={() => { if (window.history.length > 1) window.history.back(); else goto('/'); }}
+			>
+				<ArrowLeft class="h-3.5 w-3.5" /> Back
+			</button>
+			<h1 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">Heatmaps</h1>
+		</header>
+
+		<div class="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Heatmap view">
+			<button
+				type="button"
+				role="tab"
+				aria-selected={view === 'notes'}
+				class="rounded-full border px-3 py-1 text-xs font-medium {view === 'notes'
+					? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white'
+					: 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+				onclick={() => (view = 'notes')}
+			>Notes &amp; tasks</button>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={view === 'trades'}
+				class="rounded-full border px-3 py-1 text-xs font-medium {view === 'trades'
+					? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white'
+					: 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+				onclick={() => (view = 'trades')}
+			>Investments</button>
+		</div>
+
+		{#if view === 'notes'}
 			<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">
 				{yearNotes}
 				{yearNotes === 1 ? 'note' : 'notes'} in {year}, across {yearActiveDays}
@@ -154,15 +285,20 @@
 				{/if}
 				· {data.notes} in total
 			</p>
-		</header>
-
-		{#if data.notes === 0}
-			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400">
-				No notes yet — the heatmap fills in as you write.
-			</p>
 		{:else}
+			<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">
+				{yearBuys} {yearBuys === 1 ? 'buy' : 'buys'} · {yearSells}
+				{yearSells === 1 ? 'sell' : 'sells'} in {year}, across {yearTradeDays}
+				{yearTradeDays === 1 ? 'day' : 'days'}
+				{#if yearBusiestTrade}
+					· busiest day {yearBusiestTrade.total} {yearBusiestTrade.total === 1 ? 'trade' : 'trades'} on {yearBusiestTrade.day}
+				{/if}
+			</p>
+		{/if}
+
+		{#if view === 'notes' ? data.notes > 0 : data.trades.length > 0}
 			{#if years.length > 1}
-				<div class="mb-4 flex flex-wrap gap-2">
+				<div class="mb-4 mt-3 flex flex-wrap gap-2">
 					{#each years as y (y)}
 						<button
 							type="button"
@@ -191,8 +327,9 @@
 										<button
 											type="button"
 											tabindex="-1"
-											class="h-3 w-3 cursor-default rounded-[2px] p-0 {shade(cell)} {isToday ? 'ring-1 ring-stone-900/50 dark:ring-stone-100/50' : ''}"
-											aria-label={cell.date.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ': ' + cell.count + (cell.count === 1 ? ' note' : ' notes') + (isToday ? ' (today)' : '')}
+											class="h-3 w-3 cursor-default rounded-[2px] p-0 {view === 'notes' ? shadeNotes(cell) : tradeClass(cell)} {isToday ? 'ring-1 ring-stone-900/50 dark:ring-stone-100/50' : ''}"
+											style={view === 'trades' ? tradeStyle(cell) : undefined}
+											aria-label={cell.date.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ': ' + cellText(cell) + (isToday ? ' (today)' : '')}
 											onmouseenter={(e) => showTip(e, cell)}
 											onmouseleave={() => (tip = null)}
 											onclick={(e) => showTip(e, cell)}
@@ -207,21 +344,70 @@
 				</div>
 			</div>
 
-			<div class="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-stone-400 dark:text-stone-500">
-				<span>less</span>
-				<span class="h-3 w-3 rounded-[2px] bg-stone-200 dark:bg-stone-700"></span>
-				<span class="h-3 w-3 rounded-[2px] bg-amber-200 dark:bg-amber-900"></span>
-				<span class="h-3 w-3 rounded-[2px] bg-amber-300 dark:bg-amber-800"></span>
-				<span class="h-3 w-3 rounded-[2px] bg-amber-400 dark:bg-amber-600"></span>
-				<span class="h-3 w-3 rounded-[2px] bg-amber-500"></span>
-				<span>more</span>
-				<span class="ml-1 h-3 w-3 rounded-[2px] bg-stone-200 dark:bg-stone-700 ring-1 ring-stone-900/50 dark:ring-stone-100/50"></span>
-				<span>today</span>
-				<span class="ml-3">Hover a square, or tap it, for that day's count.</span>
-			</div>
+			{#if view === 'notes'}
+				<div class="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-stone-400 dark:text-stone-500">
+					<span>less</span>
+					<span class="h-3 w-3 rounded-[2px] bg-stone-200 dark:bg-stone-700"></span>
+					<span class="h-3 w-3 rounded-[2px] bg-amber-200 dark:bg-amber-900"></span>
+					<span class="h-3 w-3 rounded-[2px] bg-amber-300 dark:bg-amber-800"></span>
+					<span class="h-3 w-3 rounded-[2px] bg-amber-400 dark:bg-amber-600"></span>
+					<span class="h-3 w-3 rounded-[2px] bg-amber-500"></span>
+					<span>more</span>
+					<span class="ml-1 h-3 w-3 rounded-[2px] bg-stone-200 dark:bg-stone-700 ring-1 ring-stone-900/50 dark:ring-stone-100/50"></span>
+					<span>today</span>
+					<span class="ml-3">Hover a square, or tap it, for that day's count.</span>
+				</div>
+			{:else}
+				<div class="mt-4 space-y-1.5 text-[11px] text-stone-400 dark:text-stone-500">
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="w-10">Buys</span>
+						<span>less</span>
+						<span class="h-3 w-3 rounded-[2px] bg-emerald-200 dark:bg-emerald-900"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-emerald-300 dark:bg-emerald-800"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-emerald-400 dark:bg-emerald-600"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-emerald-500"></span>
+						<span>more</span>
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="w-10">Sells</span>
+						<span>less</span>
+						<span class="h-3 w-3 rounded-[2px] bg-rose-200 dark:bg-rose-900"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-rose-300 dark:bg-rose-800"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-rose-400 dark:bg-rose-600"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-rose-500"></span>
+						<span>more</span>
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="w-10">Both</span>
+						<span
+							class="h-3 w-3 rounded-[2px] bg-stone-200 dark:bg-stone-700"
+							style="background-image: linear-gradient(135deg, rgba(16, 185, 129, 1) 50%, rgba(244, 63, 94, 1) 50%)"
+						></span>
+						<span>buy and sell on the same day</span>
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="w-10"></span>
+						<span class="h-3 w-3 rounded-[2px] bg-stone-200 dark:bg-stone-700 ring-1 ring-stone-900/50 dark:ring-stone-100/50"></span>
+						<span>today</span>
+						<span class="ml-3">Hover a square, or tap it, for that day's trades.</span>
+					</div>
+				</div>
+			{/if}
+		{:else}
+			<p class="mt-3 rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400">
+				{#if view === 'notes'}
+					No notes yet — the heatmap fills in as you write.
+				{:else}
+					No trades yet — record a buy or sell to fill this heatmap.
+				{/if}
+			</p>
 		{/if}
 
-		<DoneTasks initial={data.done} lang={lang} />
+		{#if view === 'notes'}
+			<DoneTasks initial={data.done} {lang} />
+		{:else}
+			<TradeHistory initial={data.tradeHistory} {lang} />
+		{/if}
 	</div>
 </main>
 

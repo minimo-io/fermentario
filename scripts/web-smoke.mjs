@@ -51,6 +51,14 @@ cpSync(FIXTURE, join(dataDir, 'fermentario.db'));
 /** Values created during the run: replaced by placeholders in the output so
  *  the golden stays stable while the assertions still see the real values. */
 const volatile = new Set();
+/** Action ids and times are fresh on every run: hide them from the golden. */
+const rememberActions = (r) => {
+	for (const a of r.body?.actions ?? []) {
+		volatile.add(a.id);
+		volatile.add(a.created_at);
+	}
+	return r;
+};
 const mask = (value) => {
 	if (typeof value === 'string') {
 		if (volatile.has(value)) return '<runtime>';
@@ -140,8 +148,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 2) {
-		console.error('The legacy import did not register an active v2 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 9) {
+		console.error('The legacy import did not register an active v9 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -372,6 +380,466 @@ must('POST /api/principles/[id]/comments', principleComment, (r) => r.status ===
 volatile.add(principleComment.body.comment.id);
 volatile.add(principleComment.body.comment.created_at);
 
+// --- Note links -----------------------------------------------------------
+// The label is never stored: it renders live from the target's first line.
+const linkTarget = await api(
+	'POST /api/notes link target',
+	'/api/notes',
+	json({ content: 'Link target note about kayaking trips' })
+);
+must('POST /api/notes link target', linkTarget, (r) => r.status === 201 && !!r.body.note, '201 with a note');
+volatile.add(linkTarget.body.note.id);
+volatile.add(linkTarget.body.note.created_at);
+volatile.add(linkTarget.body.note.updated_at);
+const linkTargetId = linkTarget.body.note.id;
+
+const linkSource = await api(
+	'POST /api/notes link source',
+	'/api/notes',
+	json({ content: `Note that links to [[${linkTargetId}]] and [[${principleId}]] for trips` })
+);
+must('POST /api/notes link source', linkSource, (r) => r.status === 201 && !!r.body.note, '201 with a note');
+volatile.add(linkSource.body.note.id);
+volatile.add(linkSource.body.note.created_at);
+volatile.add(linkSource.body.note.updated_at);
+volatile.add(linkSource.body.note.content);
+const linkSourceId = linkSource.body.note.id;
+
+const linked = await api('GET /api/notes/[id] linked', `/api/notes/${linkSourceId}`);
+must(
+	'GET /api/notes/[id] linked',
+	linked,
+	(r) =>
+		r.status === 200 &&
+		r.body.note?.linkedNotes?.length === 2 &&
+		r.body.note.linkedNotes.some((l) => l.id === linkTargetId && l.kind === 'note' && l.label === 'Link target note about kayaking trips') &&
+		r.body.note.linkedNotes.some((l) => l.id === principleId && l.kind === 'principle' && l.label === 'Principle that must survive a restore'),
+	'the outgoing links with live labels and kinds'
+);
+
+// --- Holdings ---------------------------------------------------------------
+const btc = await api(
+	'POST /api/holdings btc',
+	'/api/holdings',
+	json({ ticker: 'BTC', amount: 0.5, price: null, currency: 'USD', category: 'btc', goal: null })
+);
+must(
+	'POST /api/holdings btc',
+	btc,
+	(r) => r.status === 201 && r.body.holding?.price === null && r.body.holding?.category === 'btc' && r.body.holding?.price_updated_at === 0,
+	'201 with an auto-price BTC holding and no price timestamp yet'
+);
+volatile.add(btc.body.holding.id);
+volatile.add(btc.body.holding.created_at);
+volatile.add(btc.body.holding.updated_at);
+const btcId = btc.body.holding.id;
+
+const fii = await api(
+	'POST /api/holdings fii',
+	'/api/holdings',
+	json({ ticker: 'MXRF11', amount: 100, price: 10, currency: 'BRL', avgPrice: 9.5 })
+);
+must(
+	'POST /api/holdings fii',
+	fii,
+	(r) =>
+		r.status === 201 &&
+		!!r.body.holding &&
+		r.body.holding.price_updated_at > 0 &&
+		r.body.holding.avgPrice === 9.5,
+	'201 with a holding, its price timestamp and the opening average'
+);
+volatile.add(fii.body.holding.id);
+volatile.add(fii.body.holding.created_at);
+volatile.add(fii.body.holding.updated_at);
+volatile.add(fii.body.holding.price_updated_at);
+const fiiId = fii.body.holding.id;
+
+const holdingsSummary = await api('GET /api/holdings', '/api/holdings');
+must(
+	'GET /api/holdings',
+	holdingsSummary,
+	(r) =>
+		r.status === 200 &&
+		r.body.holdings?.length === 2 &&
+		r.body.holdings[0]?.ticker === 'MXRF11' &&
+		r.body.totalUsd === 1000 &&
+		r.body.stale === true &&
+		r.body.actual?.fii === 100 &&
+		r.body.displayTotals?.USD === 1000 &&
+		r.body.displayTotals?.BRL === null &&
+		r.body.displayTotals?.UYU === null,
+	'highest value first, FII-only total at fallback rate, stale without rates'
+);
+
+const openingActions = rememberActions(await api('GET /api/holdings/[id]/actions', `/api/holdings/${fiiId}/actions`));
+must(
+	'GET /api/holdings/[id]/actions',
+	openingActions,
+	(r) =>
+		r.status === 200 &&
+		r.body.actions?.length === 1 &&
+		r.body.actions[0]?.kind === 'opening' &&
+		r.body.actions[0]?.amount === 100 &&
+		r.body.actions[0]?.price === 9.5 &&
+		r.body.actions[0]?.currency === 'BRL',
+	'the create seeds one opening row with the average cost'
+);
+
+const bought = rememberActions(await api(
+	'POST /api/holdings/[id]/actions buy',
+	`/api/holdings/${fiiId}/actions`,
+	json({ kind: 'buy', amount: 10 })
+));
+must(
+	'POST /api/holdings/[id]/actions buy',
+	bought,
+	(r) =>
+		r.status === 201 &&
+		r.body.action?.kind === 'buy' &&
+		r.body.action?.amount === 10 &&
+		r.body.action?.price === 10 &&
+		r.body.holding?.amount === 110 &&
+		r.body.summary?.totalUsd === 1100 &&
+		r.body.actions?.length === 2,
+	'a buy adds shares, snapshots the quote and returns the new history'
+);
+volatile.add(bought.body.holding.updated_at);
+
+const sold = rememberActions(await api(
+	'POST /api/holdings/[id]/actions sell',
+	`/api/holdings/${fiiId}/actions`,
+	json({ kind: 'sell', amount: 5 })
+));
+must(
+	'POST /api/holdings/[id]/actions sell',
+	sold,
+	(r) =>
+		r.status === 201 &&
+		r.body.action?.kind === 'sell' &&
+		r.body.action?.amount === 5 &&
+		r.body.holding?.amount === 105 &&
+		r.body.summary?.totalUsd === 1050 &&
+		r.body.actions?.length === 3,
+	'a sell subtracts shares and returns the new history'
+);
+volatile.add(sold.body.holding.updated_at);
+
+must(
+	'POST /api/holdings/[id]/actions oversell',
+	await api(
+		'POST /api/holdings/[id]/actions oversell',
+		`/api/holdings/${fiiId}/actions`,
+		json({ kind: 'sell', amount: 1000 })
+	),
+	(r) => r.status === 400,
+	'400 when a sell is larger than the holding'
+);
+
+const tradePage1 = await api('GET /api/holdings/actions', '/api/holdings/actions?limit=1');
+must(
+	'GET /api/holdings/actions',
+	tradePage1,
+	(r) =>
+		r.status === 200 &&
+		r.body.count === 2 &&
+		r.body.hasMore === true &&
+		r.body.items?.length === 1 &&
+		r.body.items[0]?.kind === 'sell' &&
+		r.body.items[0]?.ticker === 'MXRF11' &&
+		r.body.items[0]?.category === 'fii' &&
+		r.body.items[0]?.amount === 5 &&
+		r.body.items[0]?.price === 10 &&
+		r.body.items[0]?.currency === 'BRL' &&
+		r.body.nextCursor?.id === r.body.items[0].id,
+	'newest trade first, opening rows excluded, one more page'
+);
+for (const t of tradePage1.body.items ?? []) {
+	volatile.add(t.id);
+	volatile.add(t.created_at);
+}
+if (tradePage1.body.nextCursor) {
+	volatile.add(tradePage1.body.nextCursor.id);
+	volatile.add(tradePage1.body.nextCursor.created_at);
+}
+const tradePage2 = await api(
+	'GET /api/holdings/actions page 2',
+	`/api/holdings/actions?limit=1&before=${tradePage1.body.nextCursor.created_at}&before_id=${encodeURIComponent(tradePage1.body.nextCursor.id)}`
+);
+must(
+	'GET /api/holdings/actions page 2',
+	tradePage2,
+	(r) =>
+		r.status === 200 &&
+		r.body.hasMore === false &&
+		r.body.items?.length === 1 &&
+		r.body.items[0]?.kind === 'buy' &&
+		r.body.items[0]?.amount === 10,
+	'the cursor returns the older buy and stops'
+);
+for (const t of tradePage2.body.items ?? []) {
+	volatile.add(t.id);
+	volatile.add(t.created_at);
+}
+
+const amountOnly = await api(
+	'PATCH /api/holdings/[id] amount',
+	`/api/holdings/${fiiId}`,
+	json({ amount: 101 }, 'PATCH')
+);
+must(
+	'PATCH /api/holdings/[id] amount',
+	amountOnly,
+	(r) =>
+		r.status === 200 &&
+		r.body.holding?.amount === 101 &&
+		r.body.holding?.price === 10 &&
+		r.body.holding?.price_updated_at === fii.body.holding.price_updated_at,
+	'an amount edit leaves the price timestamp alone'
+);
+volatile.add(amountOnly.body.holding.updated_at);
+
+const retickered = await api(
+	'PATCH /api/holdings/[id] ticker',
+	`/api/holdings/${fiiId}`,
+	json({ ticker: 'HGLG11' }, 'PATCH')
+);
+must(
+	'PATCH /api/holdings/[id] ticker',
+	retickered,
+	(r) =>
+		r.status === 200 &&
+		r.body.holding?.ticker === 'HGLG11' &&
+		r.body.holding?.price === null &&
+		r.body.holding?.priceAuto === true &&
+		r.body.holding?.price_updated_at === 0,
+	'a ticker change drops the old quote and re-arms auto'
+);
+volatile.add(retickered.body.holding.updated_at);
+
+const patchedHolding = await api(
+	'PATCH /api/holdings/[id]',
+	`/api/holdings/${fiiId}`,
+	json({ ticker: 'MXRF11', amount: 100, price: 20 }, 'PATCH')
+);
+must(
+	'PATCH /api/holdings/[id]',
+	patchedHolding,
+	(r) =>
+		r.status === 200 &&
+		r.body.holding?.price === 20 &&
+		r.body.summary?.totalUsd === 2000 &&
+		r.body.holding?.price_updated_at >= fii.body.holding.price_updated_at,
+	'manual price, total follows, price timestamp moves'
+);
+volatile.add(patchedHolding.body.holding.updated_at);
+volatile.add(patchedHolding.body.holding.price_updated_at);
+const avgEdited = await api(
+	'PATCH /api/holdings/[id] avgPrice',
+	`/api/holdings/${fiiId}`,
+	json({ avgPrice: 12 }, 'PATCH')
+);
+must(
+	'PATCH /api/holdings/[id] avgPrice',
+	avgEdited,
+	(r) => r.status === 200 && r.body.holding?.avgPrice === 12 && r.body.summary?.totalUsd === 2000,
+	'the average cost lives on the opening row and leaves the quote alone'
+);
+volatile.add(avgEdited.body.holding.updated_at);
+
+const ledgerAfterEdits = rememberActions(await api(
+	'GET /api/holdings/[id]/actions after edits',
+	`/api/holdings/${fiiId}/actions`
+));
+must(
+	'GET /api/holdings/[id]/actions after edits',
+	ledgerAfterEdits,
+	(r) =>
+		r.status === 200 &&
+		r.body.actions?.length === 3 &&
+		r.body.actions.find((a) => a.kind === 'opening')?.amount === 95 &&
+		r.body.actions.find((a) => a.kind === 'opening')?.price === 12 &&
+		r.body.actions.filter((a) => a.kind !== 'opening').every((a) => a.price === 10),
+	'an amount edit shifts the opening row so the ledger still sums to the total'
+);
+
+const deletedHolding = await api('DELETE /api/holdings/[id]', `/api/holdings/${btcId}`, { method: 'DELETE' });
+must(
+	'DELETE /api/holdings/[id]',
+	deletedHolding,
+	(r) => r.status === 200 && r.body.summary?.holdings?.length === 1 && r.body.summary?.totalUsd === 2000,
+	'one holding left, total follows'
+);
+
+// Cash counts at face value: the ticker is derived from the bank name.
+const cash = await api(
+	'POST /api/holdings cash',
+	'/api/holdings',
+	json({ amount: 1000, currency: 'BRL', category: 'cash', bank: 'Nubank', country: 'BR' })
+);
+must(
+	'POST /api/holdings cash',
+	cash,
+	(r) =>
+		r.status === 201 &&
+		r.body.holding?.ticker === 'NUBANK' &&
+		r.body.holding?.price === 1 &&
+		r.body.holding?.bank === 'Nubank' &&
+		r.body.holding?.country === 'BR' &&
+		r.body.holding?.price_updated_at > 0 &&
+		r.body.holding?.avgPrice === 1 &&
+		r.body.summary?.totalUsd === 3000,
+	'cash holding with bank-derived ticker, face value, price timestamp and total'
+);
+volatile.add(cash.body.holding.id);
+volatile.add(cash.body.holding.created_at);
+volatile.add(cash.body.holding.updated_at);
+volatile.add(cash.body.holding.price_updated_at);
+const cashId = cash.body.holding.id;
+
+const cashActions = rememberActions(
+	await api('GET /api/holdings/[id]/actions cash', `/api/holdings/${cashId}/actions`)
+);
+must(
+	'GET /api/holdings/[id]/actions cash',
+	cashActions,
+	(r) =>
+		r.status === 200 &&
+		r.body.actions?.length === 1 &&
+		r.body.actions[0]?.amount === 1000 &&
+		r.body.actions[0]?.price === 1,
+	'the cash opening row counts at face value'
+);
+
+// The trades are recorded at the current time, so the day key is runtime
+// data: mask it before the golden is written.
+const heatmapWithTrades = await api('GET /api/stats/heatmap trades', '/api/stats/heatmap');
+for (const t of heatmapWithTrades.body.trades ?? []) volatile.add(t.day);
+must(
+	'GET /api/stats/heatmap trades',
+	heatmapWithTrades,
+	(r) =>
+		r.status === 200 &&
+		r.body.trades?.length === 1 &&
+		r.body.trades[0]?.buys === 1 &&
+		r.body.trades[0]?.sells === 1,
+	'one buy and one sell on the same day, opening rows excluded'
+);
+
+const goals = await api(
+	'PUT /api/holdings/goals',
+	'/api/holdings/goals',
+	json({ btc: 50, fii: 20, cash: 30 }, 'PUT')
+);
+must(
+	'PUT /api/holdings/goals',
+	goals,
+	(r) =>
+		r.status === 200 &&
+		r.body.summary?.goals?.cash === 30 &&
+		Math.abs(r.body.summary?.actual?.fii - 66.67) < 0.01 &&
+		r.body.summary?.drift?.length === 2 &&
+		r.body.summary.drift.some((d) => d.category === 'fii') &&
+		r.body.summary.drift.some((d) => d.category === 'btc'),
+	'goals stored, off-target categories drift, cash within band'
+);
+must('PUT /api/holdings/goals bad sum', await api('PUT /api/holdings/goals bad sum', '/api/holdings/goals', json({ btc: 50, fii: 50, cash: 50 }, 'PUT')), (r) => r.status === 400, '400 unless goals add to 100');
+must(
+	'PUT /api/holdings/goals bad combined sum',
+	await api(
+		'PUT /api/holdings/goals bad combined sum',
+		'/api/holdings/goals',
+		json({ pct: { btc: 40, fii: 20, cash: 30 }, values: { btc: null, fii: null, cash: null } }, 'PUT')
+	),
+	(r) => r.status === 400,
+	'400 unless the combined allocation goals add to 100'
+);
+
+// Value targets are independent: the FII allocation stays 20%, while its
+// absolute target is R$ 250.000. No FX is available in this run, so the
+// progress must be unknown rather than a made-up 1:1 rate.
+const valueGoals = await api(
+	'PUT /api/holdings/goals values',
+	'/api/holdings/goals',
+	json({ values: { btc: null, fii: 250000, cash: null } }, 'PUT')
+);
+must(
+	'PUT /api/holdings/goals values',
+	valueGoals,
+	(r) =>
+		r.status === 200 &&
+		r.body.summary?.goals?.fii === 20 &&
+		r.body.summary?.goals?.cash === 30 &&
+		r.body.summary?.valueGoals?.fii?.amount === 250000 &&
+		r.body.summary?.valueGoals?.fii?.currency === 'BRL' &&
+		r.body.summary?.valueGoals?.btc === null &&
+		r.body.summary?.valueGoals?.cash === null &&
+		r.body.summary?.valueProgress?.length === 1 &&
+		r.body.summary.valueProgress[0]?.category === 'fii' &&
+		r.body.summary.valueProgress[0]?.target === 250000 &&
+		r.body.summary.valueProgress[0]?.actual === null &&
+		r.body.summary.valueProgress[0]?.gap === null &&
+		r.body.summary.valueProgress[0]?.pct === null,
+	'the FII target stored in BRL with null progress while the rate is missing'
+);
+
+// BTC targets use USD, so no FX is needed: the value is exact. The values
+// object replaces every target, which clears FII when it is absent.
+const usdValueTarget = await api(
+	'PUT /api/holdings/goals usd value',
+	'/api/holdings/goals',
+	json({ values: { btc: 1000 } }, 'PUT')
+);
+must(
+	'PUT /api/holdings/goals usd value',
+	usdValueTarget,
+	(r) =>
+		r.status === 200 &&
+		r.body.summary?.valueGoals?.btc?.amount === 1000 &&
+		r.body.summary?.valueGoals?.btc?.currency === 'USD' &&
+		r.body.summary?.valueGoals?.fii === null &&
+		r.body.summary?.valueProgress?.length === 1 &&
+		r.body.summary.valueProgress[0]?.category === 'btc' &&
+		r.body.summary.valueProgress[0]?.actual === 0 &&
+		r.body.summary.valueProgress[0]?.gap === 1000 &&
+		r.body.summary.valueProgress[0]?.pct === 0,
+	'USD target computed at rate 1 and the missing key cleared the FII target'
+);
+must(
+	'PUT /api/holdings/goals bad value',
+	await api(
+		'PUT /api/holdings/goals bad value',
+		'/api/holdings/goals',
+		json({ values: { btc: -5, fii: null, cash: null } }, 'PUT')
+	),
+	(r) => r.status === 400,
+	'400 unless each value target is null or greater than 0'
+);
+
+// Leave one value target behind so export and restore have to carry it.
+const clearValueGoals = await api(
+	'PUT /api/holdings/goals clear values',
+	'/api/holdings/goals',
+	json({ values: { btc: null, fii: null, cash: null } }, 'PUT')
+);
+must(
+	'PUT /api/holdings/goals clear values',
+	clearValueGoals,
+	(r) => r.status === 200 && r.body.summary?.valueGoals === null && r.body.summary?.valueProgress?.length === 0,
+	'a values-only write can clear every target'
+);
+const reseedValueGoal = await api(
+	'PUT /api/holdings/goals reseed value',
+	'/api/holdings/goals',
+	json({ values: { btc: null, fii: 250000, cash: null } }, 'PUT')
+);
+must(
+	'PUT /api/holdings/goals reseed value',
+	reseedValueGoal,
+	(r) => r.status === 200 && r.body.summary?.valueGoals?.fii?.amount === 250000 && r.body.summary?.goals?.fii === 20,
+	'the FII target is restored without touching the allocation goals'
+);
+
 const color = await api('PUT /api/tags/[tag]', '/api/tags/garden', json({ color: 'violet' }, 'PUT'));
 must('PUT /api/tags/[tag]', color, (r) => r.status === 200 && r.body.color === 'violet', '200 with violet');
 
@@ -401,7 +869,11 @@ try {
 		taskComments: count('task_comments'),
 		principles: count('principles'),
 		principleComments: count('principle_comments'),
-		tagColors: count('tag_colors')
+		tagColors: count('tag_colors'),
+		holdings: count('holdings'),
+		holdingActions: count('holding_actions'),
+		goals: count('category_goals'),
+		valueGoals: count('category_value_goals')
 	};
 	d.close();
 } catch (e) {
@@ -463,7 +935,10 @@ must(
 		r.body.errors.length === 0 &&
 		r.body.done?.todoGroups === 1 &&
 		r.body.done?.todoItems === 1 &&
-		r.body.done?.principles === 1,
+		r.body.done?.principles === 1 &&
+		r.body.done?.holdings === 2 &&
+		r.body.done?.goals === 3 &&
+		r.body.done?.valueGoals === 1,
 	'200 with a count for every restored section'
 );
 
@@ -558,6 +1033,69 @@ must(
 	restoredColors,
 	(r) => r.status === 200 && r.body.colors?.garden === 'violet',
 	'the tag color'
+);
+
+const restoredHoldings = await api('GET /api/holdings after restore', '/api/holdings');
+must(
+	'GET /api/holdings after restore',
+	restoredHoldings,
+	(r) =>
+		r.status === 200 &&
+		r.body.holdings?.length === 2 &&
+		r.body.holdings.some((h) => h.ticker === 'MXRF11' && h.price === 20 && h.price_updated_at > 0 && h.avgPrice === 12) &&
+		r.body.holdings.some((h) => h.ticker === 'NUBANK' && h.bank === 'Nubank' && h.country === 'BR' && h.price === 1 && h.price_updated_at > 0 && h.avgPrice === 1) &&
+		r.body.totalUsd === 3000 &&
+		r.body.goals?.cash === 30 &&
+		r.body.valueGoals?.fii?.amount === 250000 &&
+		r.body.valueGoals?.fii?.currency === 'BRL' &&
+		r.body.drift?.some((d) => d.category === 'fii'),
+	'the FII with its average cost and the cash holding with bank and country intact'
+);
+
+const restoredActions = rememberActions(await api(
+	'GET /api/holdings/[id]/actions after restore',
+	`/api/holdings/${fiiId}/actions`
+));
+must(
+	'GET /api/holdings/[id]/actions after restore',
+	restoredActions,
+	(r) =>
+		r.status === 200 &&
+		r.body.actions?.length === 3 &&
+		r.body.actions.find((a) => a.kind === 'opening')?.amount === 95 &&
+		r.body.actions.find((a) => a.kind === 'opening')?.price === 12 &&
+		r.body.actions.some((a) => a.kind === 'buy' && a.amount === 10 && a.price === 10) &&
+		r.body.actions.some((a) => a.kind === 'sell' && a.amount === 5 && a.price === 10),
+	'the buy and sell history survives the export and import'
+);
+
+const restoredTrades = await api('GET /api/holdings/actions after restore', '/api/holdings/actions?limit=50');
+must(
+	'GET /api/holdings/actions after restore',
+	restoredTrades,
+	(r) =>
+		r.status === 200 &&
+		r.body.count === 2 &&
+		r.body.items?.length === 2 &&
+		r.body.items.some((t) => t.kind === 'buy' && t.amount === 10 && t.ticker === 'MXRF11') &&
+		r.body.items.some((t) => t.kind === 'sell' && t.amount === 5 && t.ticker === 'MXRF11'),
+	'the trade list survives the export and import'
+);
+for (const t of restoredTrades.body.items ?? []) {
+	volatile.add(t.id);
+	volatile.add(t.created_at);
+}
+
+const restoredLink = await api('GET /api/notes/[id] link after restore', `/api/notes/${linkSourceId}`);
+must(
+	'GET /api/notes/[id] link after restore',
+	restoredLink,
+	(r) =>
+		r.status === 200 &&
+		r.body.note?.linkedNotes?.length === 2 &&
+		r.body.note.linkedNotes.some((l) => l.id === linkTargetId && l.kind === 'note') &&
+		r.body.note.linkedNotes.some((l) => l.id === principleId && l.kind === 'principle'),
+	'the note and principle links resolve after restore'
 );
 
 stop();

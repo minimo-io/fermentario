@@ -6,7 +6,9 @@
 	import Star from '@lucide/svelte/icons/star';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import TagChip from '$lib/components/TagChip.svelte';
-	import { inlineMarkdown } from '$lib/markdown-inline';
+	import { renderNoteContent } from '$lib/note-links';
+	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
+	import NoteFinder from '$lib/components/NoteFinder.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import CommentModal from '$lib/components/CommentModal.svelte';
@@ -279,25 +281,31 @@
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
+					{#if !editing && (note.linkedNotes?.length ?? 0) > 0}
+						<div class="mb-1.5"><NoteLinkPills links={note.linkedNotes ?? []} /></div>
+					{/if}
 					{#if editing}
-						<textarea
-							bind:this={editField}
-							use:focusEditor
-							class="max-h-[50dvh] w-full resize-none overflow-y-auto rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-							aria-label="Note text"
-							placeholder="Note text"
-							value={editContent}
-							oninput={(e) => { editContent = e.currentTarget.value; autosizeEditor(); }}
-							onkeydown={(e) => {
-								if (e.key === 'Escape') {
-									e.preventDefault();
-									cancelEdit();
-								} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-									e.preventDefault();
-									void saveEdit();
-								}
-							}}
-						></textarea>
+						<div class="relative">
+							<textarea
+								bind:this={editField}
+								use:focusEditor
+								class="max-h-[50dvh] w-full resize-none overflow-y-auto rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+								aria-label="Note text"
+								placeholder="Note text"
+								value={editContent}
+								oninput={(e) => { editContent = e.currentTarget.value; autosizeEditor(); }}
+								onkeydown={(e) => {
+									if (e.key === 'Escape') {
+										e.preventDefault();
+										cancelEdit();
+									} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+										e.preventDefault();
+										void saveEdit();
+									}
+								}}
+							></textarea>
+							<NoteFinder textarea={editField} excludeId={note.id} />
+						</div>
 						<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-date">Date and time</label>
 						<input
 							id="edit-note-date"
@@ -334,7 +342,7 @@
 							>{editSaving ? 'Saving…' : 'Save'}</button>
 						</div>
 					{:else}
-						<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(note.content)}</p>
+						<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html renderNoteContent(note.content, note.linkedNotes)}</p>
 					{/if}
 				</div>
 				{#if !editing}

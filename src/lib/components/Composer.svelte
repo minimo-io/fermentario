@@ -10,6 +10,7 @@
 	import Square from '@lucide/svelte/icons/square';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
+	import NoteFinder from '$lib/components/NoteFinder.svelte';
 
 	type Props = {
 		onNote: (c: string, createdAt?: number) => void;
@@ -68,6 +69,7 @@
 	let field = $state<HTMLTextAreaElement | null>(null);
 	let bar = $state<HTMLDivElement | null>(null);
 	let expanded = $state(false);
+	let barFinder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
 	// Focus scrim: blur the rest while the bar has focus, same glass as the
 	// loader. `focusin`/`focusout` (not textarea blur) so tapping Save, mic
 	// or fullscreen keeps the scrim until focus truly leaves the bar.
@@ -96,10 +98,19 @@
 		if (view === 'notes') onText(v);
 		else onQuestion(v);
 	}
-	function closeWide() {
+	function closeWide(refocus = true) {
 		expanded = false;
 		noteDate = '';
-		field?.focus();
+		if (refocus) field?.focus();
+	}
+
+	/** Drop focus from the bar after a submit so the focus scrim fades and the
+	 *  saved note or answer is readable. Clicking Save leaves focus on the
+	 *  button, so blur whatever inside the bar holds it. */
+	function releaseBar() {
+		const active = document.activeElement as HTMLElement | null;
+		if (active && bar?.contains(active)) active.blur();
+		focused = false;
 	}
 
 	$effect(() => {
@@ -166,12 +177,14 @@
 		onText('');
 		interim = '';
 		noteDate = '';
+		releaseBar();
 	}
 	function submitAsk() {
 		const q = question.trim();
 		if (!q || answering) return;
 		onAsk(q);
 		onQuestion('');
+		releaseBar();
 	}
 </script>
 
@@ -217,22 +230,25 @@
 			</div>
 		{/if}
 		<div bind:this={bar}
-			class="flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-white/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3"
+			class="relative flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-white/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3"
 			onfocusin={() => (focused = true)}
 			onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) focused = false; }}
 		>
 			{#if view === 'notes'}
-				<textarea
-					id="composer-field"
-					bind:this={field}
-					rows="1"
-					aria-label="Note"
-					class={FIELD_CLASS}
-					value={text}
-					oninput={(e) => { onText(e.currentTarget.value); autosize(); }}
-					placeholder={interim || (compact ? (lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…') : `${lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…'} (${focusHint})`)}
-					onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } }}
-				></textarea>
+				<div class="relative min-w-0 flex-1">
+					<textarea
+						id="composer-field"
+						bind:this={field}
+						rows="1"
+						aria-label="Note"
+						class={FIELD_CLASS}
+						value={text}
+						oninput={(e) => { onText(e.currentTarget.value); autosize(); }}
+						placeholder={interim || (compact ? (lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…') : `${lang === 'es' ? 'Di o escribe…' : lang === 'pt' ? 'Diga ou escreva…' : 'Say or type…'} (${focusHint})`)}
+						onkeydown={(e) => { if (barFinder?.handleKey(e)) return; if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote(); } }}
+					></textarea>
+					<NoteFinder bind:this={barFinder} textarea={field} />
+				</div>
 				<div class="flex shrink-0 items-center gap-2">
 					<button class="rounded-full p-2.5 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700" aria-label="Write in fullscreen" onclick={() => (expanded = true)}><Maximize2 class="h-4 w-4" /></button>
 					{@render micButton()}
@@ -280,16 +296,16 @@
 			<button
 				type="button"
 				class="rounded-full border border-stone-300 dark:border-stone-700 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-				onclick={closeWide}
+				onclick={() => closeWide()}
 			>Close</button>
 			{#if view === 'notes'}
-				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { saveNote(noteTimestamp()); closeWide(); }} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
+				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { saveNote(noteTimestamp()); closeWide(false); }} disabled={!text.trim() || saving}>{saving ? 'Saving…' : 'Save'}</button>
 			{:else if answering}
 				<button type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800" onclick={onStop}>
 					<Square class="h-3 w-3 fill-current" /> Stop
 				</button>
 			{:else}
-				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { submitAsk(); closeWide(); }} disabled={!question.trim()}>Ask</button>
+				<button class="shrink-0 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white" onclick={() => { submitAsk(); closeWide(false); }} disabled={!question.trim()}>Ask</button>
 			{/if}
 		</div>
 		{#if view === 'notes'}
@@ -316,7 +332,7 @@
 				{/each}
 			</div>
 		{/if}
-		<div class="mx-auto flex w-full {widthClass} flex-1 px-6 pb-6 pt-3">
+		<div class="relative mx-auto flex w-full {widthClass} flex-1 px-6 pb-6 pt-3">
 			<textarea
 				bind:this={wideField}
 				class="h-full w-full resize-none bg-transparent text-base leading-relaxed text-stone-800 dark:text-stone-200 outline-none"
@@ -324,8 +340,11 @@
 				value={wideValue}
 				oninput={(e) => onWideInput(e.currentTarget.value)}
 				placeholder={view === 'notes' ? 'Write…' : 'Ask about your notes…'}
-				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (view === 'notes') { saveNote(noteTimestamp()); closeWide(); } else if (!answering) { submitAsk(); closeWide(); } } }}
+				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (view === 'notes') { saveNote(noteTimestamp()); closeWide(false); } else if (!answering) { submitAsk(); closeWide(false); } } }}
 			></textarea>
+			{#if view === 'notes'}
+				<NoteFinder textarea={wideField} />
+			{/if}
 		</div>
 	</div>
 {/if}

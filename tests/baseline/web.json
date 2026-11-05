@@ -74,7 +74,8 @@
 					"featured": false,
 					"video": "",
 					"tags": [],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111101",
@@ -86,7 +87,8 @@
 					"tags": [
 						"garden"
 					],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				}
 			],
 			"hasMore": true,
@@ -112,7 +114,8 @@
 					"tags": [
 						"work"
 					],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111104",
@@ -125,7 +128,8 @@
 						"garden",
 						"work"
 					],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				}
 			],
 			"hasMore": true,
@@ -151,7 +155,8 @@
 					"tags": [
 						"garden"
 					],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111104",
@@ -164,7 +169,8 @@
 						"garden",
 						"work"
 					],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111105",
@@ -176,7 +182,8 @@
 					"tags": [
 						"garden"
 					],
-					"commentCount": 0
+					"commentCount": 0,
+					"linkedNotes": []
 				}
 			],
 			"hasMore": false,
@@ -219,6 +226,7 @@
 					"count": 2
 				}
 			],
+			"trades": [],
 			"notes": 5
 		}
 	},
@@ -290,7 +298,8 @@
 				"tags": [
 					"work"
 				],
-				"commentCount": 0
+				"commentCount": 0,
+				"linkedNotes": []
 			}
 		}
 	},
@@ -340,7 +349,8 @@
 				"tags": [
 					"work"
 				],
-				"commentCount": 0
+				"commentCount": 0,
+				"linkedNotes": []
 			}
 		}
 	},
@@ -399,7 +409,8 @@
 				"featured": true,
 				"video": "dQw4w9WgXcQ",
 				"tags": [],
-				"commentCount": 0
+				"commentCount": 0,
+				"linkedNotes": []
 			}
 		}
 	},
@@ -499,6 +510,1542 @@
 			}
 		}
 	},
+	"POST /api/notes link target": {
+		"status": 201,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "Link target note about kayaking trips",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"tags": []
+			}
+		}
+	},
+	"POST /api/notes link source": {
+		"status": 201,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "<runtime>",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"tags": []
+			}
+		}
+	},
+	"GET /api/notes/[id] linked": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "<runtime>",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"tags": [],
+				"commentCount": 0,
+				"linkedNotes": [
+					{
+						"id": "<runtime>",
+						"label": "Link target note about kayaking trips",
+						"kind": "note"
+					},
+					{
+						"id": "<runtime>",
+						"label": "Principle that must survive a restore",
+						"kind": "principle"
+					}
+				]
+			}
+		}
+	},
+	"POST /api/holdings btc": {
+		"status": 201,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "BTC",
+				"amount": 0.5,
+				"price": null,
+				"priceAuto": false,
+				"currency": "USD",
+				"category": "btc",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 0,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": 0,
+				"avgPrice": null,
+				"valueUsd": 0
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 0,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 0,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 0,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"POST /api/holdings fii": {
+		"status": 201,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 100,
+				"price": 10,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 9.5,
+				"valueUsd": 1000
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 10,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 9.5,
+						"valueUsd": 1000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 1000,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 1000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"GET /api/holdings": {
+		"status": 200,
+		"body": {
+			"holdings": [
+				{
+					"id": "<runtime>",
+					"ticker": "MXRF11",
+					"amount": 100,
+					"price": 10,
+					"priceAuto": false,
+					"currency": "BRL",
+					"category": "fii",
+					"goal": null,
+					"bank": "",
+					"country": "",
+					"position": 1,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"price_updated_at": "<runtime>",
+					"avgPrice": 9.5,
+					"valueUsd": 1000
+				},
+				{
+					"id": "<runtime>",
+					"ticker": "BTC",
+					"amount": 0.5,
+					"price": null,
+					"priceAuto": false,
+					"currency": "USD",
+					"category": "btc",
+					"goal": null,
+					"bank": "",
+					"country": "",
+					"position": 0,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"price_updated_at": 0,
+					"avgPrice": null,
+					"valueUsd": 0
+				}
+			],
+			"totalUsd": 1000,
+			"asOf": null,
+			"stale": true,
+			"goals": null,
+			"valueGoals": null,
+			"valueProgress": [],
+			"actual": {
+				"btc": 0,
+				"fii": 100,
+				"cash": 0
+			},
+			"drift": [],
+			"displayTotals": {
+				"USD": 1000,
+				"BRL": null,
+				"UYU": null
+			}
+		}
+	},
+	"GET /api/holdings/[id]/actions": {
+		"status": 200,
+		"body": {
+			"actions": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "opening",
+					"amount": 100,
+					"price": 9.5,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"POST /api/holdings/[id]/actions buy": {
+		"status": 201,
+		"body": {
+			"action": {
+				"id": "<runtime>",
+				"holding_id": "<runtime>",
+				"kind": "buy",
+				"amount": 10,
+				"price": 10,
+				"currency": "BRL",
+				"created_at": "<runtime>"
+			},
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 110,
+				"price": 10,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 9.5,
+				"valueUsd": 1100
+			},
+			"actions": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "buy",
+					"amount": 10,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "opening",
+					"amount": 100,
+					"price": 9.5,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				}
+			],
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 110,
+						"price": 10,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 9.5,
+						"valueUsd": 1100
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 1100,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 1100,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"POST /api/holdings/[id]/actions sell": {
+		"status": 201,
+		"body": {
+			"action": {
+				"id": "<runtime>",
+				"holding_id": "<runtime>",
+				"kind": "sell",
+				"amount": 5,
+				"price": 10,
+				"currency": "BRL",
+				"created_at": "<runtime>"
+			},
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 105,
+				"price": 10,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 9.5,
+				"valueUsd": 1050
+			},
+			"actions": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "sell",
+					"amount": 5,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "buy",
+					"amount": 10,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "opening",
+					"amount": 100,
+					"price": 9.5,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				}
+			],
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 105,
+						"price": 10,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 9.5,
+						"valueUsd": 1050
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 1050,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 1050,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"POST /api/holdings/[id]/actions oversell": {
+		"status": 400,
+		"body": {
+			"error": "not enough to sell"
+		}
+	},
+	"GET /api/holdings/actions": {
+		"status": 200,
+		"body": {
+			"items": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "sell",
+					"amount": 5,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>",
+					"ticker": "MXRF11",
+					"bank": "",
+					"category": "fii"
+				}
+			],
+			"count": 2,
+			"hasMore": true,
+			"nextCursor": {
+				"created_at": "<runtime>",
+				"id": "<runtime>"
+			}
+		}
+	},
+	"GET /api/holdings/actions page 2": {
+		"status": 200,
+		"body": {
+			"items": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "buy",
+					"amount": 10,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>",
+					"ticker": "MXRF11",
+					"bank": "",
+					"category": "fii"
+				}
+			],
+			"count": 2,
+			"hasMore": false,
+			"nextCursor": null
+		}
+	},
+	"PATCH /api/holdings/[id] amount": {
+		"status": 200,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 101,
+				"price": 10,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 9.5,
+				"valueUsd": 1010
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 101,
+						"price": 10,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 9.5,
+						"valueUsd": 1010
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 1010,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 1010,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PATCH /api/holdings/[id] ticker": {
+		"status": 200,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "HGLG11",
+				"amount": 101,
+				"price": null,
+				"priceAuto": true,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": 0,
+				"avgPrice": 9.5,
+				"valueUsd": 0
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "HGLG11",
+						"amount": 101,
+						"price": null,
+						"priceAuto": true,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": 9.5,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 0,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 0,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 0,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PATCH /api/holdings/[id]": {
+		"status": 200,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 100,
+				"price": 20,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 9.5,
+				"valueUsd": 2000
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 9.5,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 2000,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 2000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PATCH /api/holdings/[id] avgPrice": {
+		"status": 200,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 100,
+				"price": 20,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 12,
+				"valueUsd": 2000
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"avgPrice": null,
+						"valueUsd": 0
+					}
+				],
+				"totalUsd": 2000,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 2000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"GET /api/holdings/[id]/actions after edits": {
+		"status": 200,
+		"body": {
+			"actions": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "sell",
+					"amount": 5,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "buy",
+					"amount": 10,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "opening",
+					"amount": 95,
+					"price": 12,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"DELETE /api/holdings/[id]": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					}
+				],
+				"totalUsd": 2000,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 2000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"POST /api/holdings cash": {
+		"status": 201,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "NUBANK",
+				"amount": 1000,
+				"price": 1,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "cash",
+				"goal": null,
+				"bank": "Nubank",
+				"country": "BR",
+				"position": 2,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"avgPrice": 1,
+				"valueUsd": 1000
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "NUBANK",
+						"amount": 1000,
+						"price": 1,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "cash",
+						"goal": null,
+						"bank": "Nubank",
+						"country": "BR",
+						"position": 2,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 1,
+						"valueUsd": 1000
+					}
+				],
+				"totalUsd": 3000,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 66.66666666666666,
+					"cash": 33.33333333333333
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 3000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"GET /api/holdings/[id]/actions cash": {
+		"status": 200,
+		"body": {
+			"actions": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "opening",
+					"amount": 1000,
+					"price": 1,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/stats/heatmap trades": {
+		"status": 200,
+		"body": {
+			"days": [
+				{
+					"day": "2024-11-03",
+					"count": 1
+				},
+				{
+					"day": "2025-02-23",
+					"count": 1
+				},
+				{
+					"day": "2025-03-02",
+					"count": 1
+				},
+				{
+					"day": "2025-03-04",
+					"count": 2
+				},
+				{
+					"day": "<runtime>",
+					"count": 2
+				}
+			],
+			"trades": [
+				{
+					"day": "<runtime>",
+					"buys": 1,
+					"sells": 1
+				}
+			],
+			"notes": 7
+		}
+	},
+	"PUT /api/holdings/goals": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "NUBANK",
+						"amount": 1000,
+						"price": 1,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "cash",
+						"goal": null,
+						"bank": "Nubank",
+						"country": "BR",
+						"position": 2,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 1,
+						"valueUsd": 1000
+					}
+				],
+				"totalUsd": 3000,
+				"asOf": null,
+				"stale": true,
+				"goals": {
+					"btc": 50,
+					"fii": 20,
+					"cash": 30
+				},
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 66.66666666666666,
+					"cash": 33.33333333333333
+				},
+				"drift": [
+					{
+						"category": "btc",
+						"actual": 0,
+						"goal": 50
+					},
+					{
+						"category": "fii",
+						"actual": 66.66666666666666,
+						"goal": 20
+					}
+				],
+				"displayTotals": {
+					"USD": 3000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PUT /api/holdings/goals bad sum": {
+		"status": 400,
+		"body": {
+			"error": "allocation goals must be 0-100 each and add up to 100"
+		}
+	},
+	"PUT /api/holdings/goals bad combined sum": {
+		"status": 400,
+		"body": {
+			"error": "allocation goals must be 0-100 each and add up to 100"
+		}
+	},
+	"PUT /api/holdings/goals values": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "NUBANK",
+						"amount": 1000,
+						"price": 1,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "cash",
+						"goal": null,
+						"bank": "Nubank",
+						"country": "BR",
+						"position": 2,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 1,
+						"valueUsd": 1000
+					}
+				],
+				"totalUsd": 3000,
+				"asOf": null,
+				"stale": true,
+				"goals": {
+					"btc": 50,
+					"fii": 20,
+					"cash": 30
+				},
+				"valueGoals": {
+					"btc": null,
+					"fii": {
+						"amount": 250000,
+						"currency": "BRL"
+					},
+					"cash": null
+				},
+				"valueProgress": [
+					{
+						"category": "fii",
+						"target": 250000,
+						"currency": "BRL",
+						"actual": null,
+						"actualUsd": 1999.9999999999995,
+						"gap": null,
+						"pct": null
+					}
+				],
+				"actual": {
+					"btc": 0,
+					"fii": 66.66666666666666,
+					"cash": 33.33333333333333
+				},
+				"drift": [
+					{
+						"category": "btc",
+						"actual": 0,
+						"goal": 50
+					},
+					{
+						"category": "fii",
+						"actual": 66.66666666666666,
+						"goal": 20
+					}
+				],
+				"displayTotals": {
+					"USD": 3000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PUT /api/holdings/goals usd value": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "NUBANK",
+						"amount": 1000,
+						"price": 1,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "cash",
+						"goal": null,
+						"bank": "Nubank",
+						"country": "BR",
+						"position": 2,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 1,
+						"valueUsd": 1000
+					}
+				],
+				"totalUsd": 3000,
+				"asOf": null,
+				"stale": true,
+				"goals": {
+					"btc": 50,
+					"fii": 20,
+					"cash": 30
+				},
+				"valueGoals": {
+					"btc": {
+						"amount": 1000,
+						"currency": "USD"
+					},
+					"fii": null,
+					"cash": null
+				},
+				"valueProgress": [
+					{
+						"category": "btc",
+						"target": 1000,
+						"currency": "USD",
+						"actual": 0,
+						"actualUsd": 0,
+						"gap": 1000,
+						"pct": 0
+					}
+				],
+				"actual": {
+					"btc": 0,
+					"fii": 66.66666666666666,
+					"cash": 33.33333333333333
+				},
+				"drift": [
+					{
+						"category": "btc",
+						"actual": 0,
+						"goal": 50
+					},
+					{
+						"category": "fii",
+						"actual": 66.66666666666666,
+						"goal": 20
+					}
+				],
+				"displayTotals": {
+					"USD": 3000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PUT /api/holdings/goals bad value": {
+		"status": 400,
+		"body": {
+			"error": "value targets must be null or greater than 0"
+		}
+	},
+	"PUT /api/holdings/goals clear values": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "NUBANK",
+						"amount": 1000,
+						"price": 1,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "cash",
+						"goal": null,
+						"bank": "Nubank",
+						"country": "BR",
+						"position": 2,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 1,
+						"valueUsd": 1000
+					}
+				],
+				"totalUsd": 3000,
+				"asOf": null,
+				"stale": true,
+				"goals": {
+					"btc": 50,
+					"fii": 20,
+					"cash": 30
+				},
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 66.66666666666666,
+					"cash": 33.33333333333333
+				},
+				"drift": [
+					{
+						"category": "btc",
+						"actual": 0,
+						"goal": 50
+					},
+					{
+						"category": "fii",
+						"actual": 66.66666666666666,
+						"goal": 20
+					}
+				],
+				"displayTotals": {
+					"USD": 3000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"PUT /api/holdings/goals reseed value": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 100,
+						"price": 20,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 12,
+						"valueUsd": 2000
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "NUBANK",
+						"amount": 1000,
+						"price": 1,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "cash",
+						"goal": null,
+						"bank": "Nubank",
+						"country": "BR",
+						"position": 2,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"avgPrice": 1,
+						"valueUsd": 1000
+					}
+				],
+				"totalUsd": 3000,
+				"asOf": null,
+				"stale": true,
+				"goals": {
+					"btc": 50,
+					"fii": 20,
+					"cash": 30
+				},
+				"valueGoals": {
+					"btc": null,
+					"fii": {
+						"amount": 250000,
+						"currency": "BRL"
+					},
+					"cash": null
+				},
+				"valueProgress": [
+					{
+						"category": "fii",
+						"target": 250000,
+						"currency": "BRL",
+						"actual": null,
+						"actualUsd": 1999.9999999999995,
+						"gap": null,
+						"pct": null
+					}
+				],
+				"actual": {
+					"btc": 0,
+					"fii": 66.66666666666666,
+					"cash": 33.33333333333333
+				},
+				"drift": [
+					{
+						"category": "btc",
+						"actual": 0,
+						"goal": 50
+					},
+					{
+						"category": "fii",
+						"actual": 66.66666666666666,
+						"goal": 20
+					}
+				],
+				"displayTotals": {
+					"USD": 3000,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
 	"PUT /api/tags/[tag]": {
 		"status": 200,
 		"body": {
@@ -512,9 +2059,9 @@
 		"filename": "attachment; filename=\"fermentario-<date>.db\"",
 		"check": {
 			"quickCheck": "ok",
-			"notes": 5,
+			"notes": 7,
 			"vectors": 5,
-			"fts": 5,
+			"fts": 7,
 			"featured": 1,
 			"videos": 1,
 			"noteComments": 1,
@@ -524,7 +2071,11 @@
 			"taskComments": 1,
 			"principles": 1,
 			"principleComments": 1,
-			"tagColors": 1
+			"tagColors": 1,
+			"holdings": 2,
+			"holdingActions": 4,
+			"goals": 3,
+			"valueGoals": 1
 		}
 	},
 	"POST /api/import": {
@@ -539,13 +2090,16 @@
 		],
 		"errors": [],
 		"done": {
-			"notes": 5,
+			"notes": 7,
 			"tags": 5,
 			"recaps": 1,
 			"asks": 0,
 			"todoGroups": 1,
 			"todoItems": 1,
-			"principles": 1
+			"principles": 1,
+			"holdings": 2,
+			"goals": 3,
+			"valueGoals": 1
 		}
 	},
 	"GET /api/notes/[id] after restore": {
@@ -559,7 +2113,8 @@
 				"featured": true,
 				"video": "dQw4w9WgXcQ",
 				"tags": [],
-				"commentCount": 1
+				"commentCount": 1,
+				"linkedNotes": []
 			}
 		}
 	},
@@ -641,7 +2196,8 @@
 					"tags": [
 						"trip"
 					],
-					"commentCount": 1
+					"commentCount": 1,
+					"linkedNotes": []
 				}
 			]
 		}
@@ -665,6 +2221,193 @@
 		"body": {
 			"colors": {
 				"garden": "violet"
+			}
+		}
+	},
+	"GET /api/holdings after restore": {
+		"status": 200,
+		"body": {
+			"holdings": [
+				{
+					"id": "<runtime>",
+					"ticker": "MXRF11",
+					"amount": 100,
+					"price": 20,
+					"priceAuto": false,
+					"currency": "BRL",
+					"category": "fii",
+					"goal": null,
+					"bank": "",
+					"country": "",
+					"position": 1,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"price_updated_at": "<runtime>",
+					"avgPrice": 12,
+					"valueUsd": 2000
+				},
+				{
+					"id": "<runtime>",
+					"ticker": "NUBANK",
+					"amount": 1000,
+					"price": 1,
+					"priceAuto": false,
+					"currency": "BRL",
+					"category": "cash",
+					"goal": null,
+					"bank": "Nubank",
+					"country": "BR",
+					"position": 2,
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"price_updated_at": "<runtime>",
+					"avgPrice": 1,
+					"valueUsd": 1000
+				}
+			],
+			"totalUsd": 3000,
+			"asOf": null,
+			"stale": true,
+			"goals": {
+				"btc": 50,
+				"fii": 20,
+				"cash": 30
+			},
+			"valueGoals": {
+				"btc": null,
+				"fii": {
+					"amount": 250000,
+					"currency": "BRL"
+				},
+				"cash": null
+			},
+			"valueProgress": [
+				{
+					"category": "fii",
+					"target": 250000,
+					"currency": "BRL",
+					"actual": null,
+					"actualUsd": 1999.9999999999995,
+					"gap": null,
+					"pct": null
+				}
+			],
+			"actual": {
+				"btc": 0,
+				"fii": 66.66666666666666,
+				"cash": 33.33333333333333
+			},
+			"drift": [
+				{
+					"category": "btc",
+					"actual": 0,
+					"goal": 50
+				},
+				{
+					"category": "fii",
+					"actual": 66.66666666666666,
+					"goal": 20
+				}
+			],
+			"displayTotals": {
+				"USD": 3000,
+				"BRL": null,
+				"UYU": null
+			}
+		}
+	},
+	"GET /api/holdings/[id]/actions after restore": {
+		"status": 200,
+		"body": {
+			"actions": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "sell",
+					"amount": 5,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "buy",
+					"amount": 10,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "opening",
+					"amount": 95,
+					"price": 12,
+					"currency": "BRL",
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/holdings/actions after restore": {
+		"status": 200,
+		"body": {
+			"items": [
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "sell",
+					"amount": 5,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>",
+					"ticker": "MXRF11",
+					"bank": "",
+					"category": "fii"
+				},
+				{
+					"id": "<runtime>",
+					"holding_id": "<runtime>",
+					"kind": "buy",
+					"amount": 10,
+					"price": 10,
+					"currency": "BRL",
+					"created_at": "<runtime>",
+					"ticker": "MXRF11",
+					"bank": "",
+					"category": "fii"
+				}
+			],
+			"count": 2,
+			"hasMore": false,
+			"nextCursor": null
+		}
+	},
+	"GET /api/notes/[id] link after restore": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "<runtime>",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"tags": [],
+				"commentCount": 0,
+				"linkedNotes": [
+					{
+						"id": "<runtime>",
+						"label": "Link target note about kayaking trips",
+						"kind": "note"
+					},
+					{
+						"id": "<runtime>",
+						"label": "Principle that must survive a restore",
+						"kind": "principle"
+					}
+				]
 			}
 		}
 	}

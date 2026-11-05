@@ -1697,6 +1697,93 @@
 - Copy the raw `content`, not the rendered markup or the date, so pasted text
   is identical to the stored comment.
 
+## Session: Note links + holdings carousel
+- `[[id]]` links need no migration: parse outgoing ids from content at read
+  time and batch the labels in `withTags`, the same way tags and comment
+  counts already batch. Self-links are filtered; unknown ids render muted.
+- The finder must not fight the composer: same-node Svelte `onkeydown`
+  handlers run before a component's own `addEventListener`, so plain-Enter
+  submit would fire before the pick. Call the finder's `handleKey` as the
+  first line of the composer's handler; the pick then closes the finder and
+  the submit never runs. Ancestor handlers (dialog Escape) are safe behind
+  `stopPropagation` at the textarea target.
+- A pick writes through the real `input` event (`el.value` + dispatched
+  `input`), not around the parent state. The controlled `value`/`oninput`
+  flow stays the single path, so drafts, autosize and save logic see the id.
+- Principle links reuse the whole mechanism: `[[id]]` resolves notes first,
+  then principles, with the destination in the pill href. Principle surfaces
+  render pills through a links-only pass (no markdown), and card-embedded
+  pills stop at the anchor — the tap handler bails on `closest('a')` so a
+  pill tap never folds the note or opens the edit dialog.
+- Holdings add/edit lives in a global modal (comment-modal standard), not in
+  the strip. One shared form, opened with an initial value; the carousel only
+  refreshes on success, so cards never resize around a form.
+- The Holding stats modal is read-only over the existing summary (per-category
+  USD, shares, goals, drift, per-asset rows) — no new endpoint. Its `Stats`
+  entry point sits next to refresh on the totals card; goal editing stays
+  behind tapping the total itself, so the two never fight for the same tap.
+- One health rule, two surfaces: `bandFor(actual, goal)` (green ≤ 2 points,
+  yellow ≤ 5, red beyond) drives both the dot on every holding card and the
+  bars in Holding stats. The dot describes the card's *category*, never the
+  holding's price, and individual holdings have no goal of their own. Compute
+  the band once per surface from the same helper or the two drift apart.
+- The totals card carries only the total, BRL/UYU, as-of/stale, refresh and
+  `Stats`. Off-goal detail belongs in the modal; repeating the drift lines on
+  the card duplicated the modal and crowded the smallest box.
+- Adding the same cash row twice silently doubles that balance. Re-read the
+  holdings list before an "add" and after any batch that touches data; the
+  cards look identical, so only the list (or a total that jumped by the
+  balance) shows the duplicate.
+- `holdings.price_updated_at` (migration 6) means "the price was written",
+  not "the row changed". Create, a manual price edit and every quote refresh
+  write it; editing the amount or bank leaves it alone, so the modal cannot
+  claim a fresh quote. A changed ticker or category writes `NULL` and resets
+  it to 0: the old quote belongs to another asset, and auto mode is re-armed.
+  The stock refresh gate reads it too, so an amount edit no longer delays the
+  next quote fetch. Migration 6 backfills it from `updated_at`; restore falls
+  back to `updated_at` for older backups.
+- The holding modal used to pre-fill the cached price and send it back on
+  save. The API read that as a hand edit, cleared `price_auto`, and the daily
+  refresh skipped the row forever. Fix: the modal has no price field and the
+  client never sends `price`; after a create or a ticker/category change the
+  page runs `refreshHoldings(true)` (quiet, non-forced), so a new quote
+  arrives immediately without bypassing the cache or showing a toast. Home
+  open asks the same way once per session for any non-cash auto quote; the
+  server's day-old gate keeps that to one request and no network when fresh.
+- The stats gap amount is one derivation: `(goal − actual) / 100 × totalUsd`.
+  Show the absolute value as `Need` when under and `Trim` when over, then
+  multiply by `displayTotals.BRL / totalUsd` and `displayTotals.UYU / totalUsd`
+  for the other two lines. Do not keep a second copy of the rates.
+- Collapsing the strip uses `slide` with `motionMs(180)`, the same duration
+  pattern as the to-do groups; the chevron rotates instead of swapping icons.
+  The `{#if}` still owns the mount, so the out transition runs before removal.
+- Holdings math lives server-side (`getHoldingsSummary`): one rule for the
+  page, the API and the smoke test. Fiat converts through `fx_rates`,
+  missing rates fall back to 1 and mark the summary stale, never an error.
+- The rates refresh is best-effort by design: it skips the network when no
+  non-USD holding exists or rates are younger than a day, and the route
+  answers cached values plus the error instead of a 502. The smoke test
+  stays offline and asserts the fallback math; refresh is verified manually.
+- A manual price edit clears `price_auto` so the BTC auto-price never
+  overwrites a hand-set price; clearing the price re-arms auto mode.
+- Never ask the price of BTC: the form hides the price field for BTC
+  tickers, home auto-refreshes while the cached rate is older than a day,
+  and the cache lives in `fx_rates`. Amount fields must accept the comma
+  decimal separator (`0,1` on Spanish pads) — normalize to a dot before
+  `Number()`, or the form rejects valid input with a confusing error.
+- Equal card sizes need a fixed height, not stretch: `items-stretch` makes
+  every slot match the tallest one, so an open edit form stretched the whole
+  row. Fixed `h-44` display surfaces plus naturally-sized forms keep siblings
+  still; the form slot alone grows.
+- The add form must render where it was opened. One shared form with a slot
+  flag (`btc`/`end`) beats two forms; Cancel and save clear the slot, and
+  starting an edit clears it too, or a stale form lingers in the wrong box.
+- Allocation goals live in their own table with a sum-to-100 rule enforced
+  on both sides; drift is computed server-side with a fixed 5-point band so
+  the page, the API and the smoke test agree. Category is stored per holding
+  (auto from ticker, overridable in the form) — inferring it at read time
+  would split the rule across client and server.
+
 ## Session: Composer focus scrim
 - Track bar focus with `focusin`/`focusout` on the bar container, not
   textarea `blur`. A `blur`-only flag drops the scrim when the user taps
@@ -1725,3 +1812,109 @@
   edit fields, date/time and URL inputs, group fields, search, the summary
   prompt and the model picker. Display text stays at its old size; only the
   controls move to `text-base`. File pickers take no text and stay small.
+
+## Session: Buy/sell ledger
+- `SqlDb.transaction(fn)` runs `fn` immediately and returns its value. It is
+  not a factory: `db.transaction(fn)()` calls the result and fails when the
+  callback returns a boolean or a union. Call it once and return its value.
+- The ledger and `holdings.amount` are one invariant: the opening row plus
+  every buy minus every sell must equal `amount`. The API amount PATCH shifts
+  the opening row by the delta instead of adding a synthetic action, so old
+  clients cannot break the sum. Adding or selling moves `updated_at` but not
+  `price_updated_at`; only a quote or a hand price edit moves the latter.
+- A holding action snapshots the quote at record time, and the opening row
+  carries the average cost. Never reuse `holdings.price` as cost basis — the
+  card and the totals must keep the market quote.
+- Delete removes `holding_actions` explicitly before the holding. The foreign
+  key cascades too, but restore and tests run with tables in an order where
+  the explicit delete makes the intent visible and keeps older backups safe.
+- Restore copies `holding_actions` when the backup has them; for older
+  backups it seeds one opening row from `holdings.amount`. Do not leave a
+  restored holding without an opening row or the next amount edit has nothing
+  to shift.
+- A backfill cannot derive a price the old schema never stored. Migration 7
+  wrote NULL opening prices for every holding, including cash; migration 8
+  repairs cash to face value 1, and restore applies the same rule to exports
+  made before it. Keep the read-side rule on the row, not only in the form.
+- The smoke test creates fresh action ids and timestamps on every run. Put
+  both into the `volatile` set from each actions response, or the golden
+  differs every time even though the behavior is identical.
+- A Svelte 5 `$state(prop)` copy is intentional in a modal that owns its own
+  editable snapshot; silence `state_referenced_locally` with a comment
+  instead of spreading the prop into a derived value that resets the edits.
+
+## Session: Independent value targets and cash history
+- Allocation and absolute goals are two different questions. Keep the
+  `category_goals` percent table and its sum-to-100 rule untouched and add
+  `category_value_goals(category, amount, currency)`. Replacing the percent
+  with an amount, or mixing both into one column, forces the editor to
+  suppress one goal whenever the other is set.
+- Currency belongs to the category, not the request: BTC targets in USD, FII
+  and cash targets in BRL. Letting the client send a currency lets a browser
+  turn a real target into a different one on the next save.
+- `fx_rates.rate_to_usd` is per USD, so the value in the target currency is
+  `usd / rate`. A missing rate must produce `null` progress. The `?? 1`
+  fallback used by display totals is not valid here: it silently turns
+  R$ 250.000 into US$ 250.000.
+- `{@const}` is only allowed as an immediate child of an `{#each}`, `{#if}`
+  or `{#await}` block. Put it beside the other consts at the top of the
+  block; inside an element it is a compile error.
+- For a modal draft seeded from props, read the prop inside a small helper
+  function (`seedPct()`, `seedValues()`) and call it in the `$state(...)`
+  initializer. Svelte then sees a closure, not a direct local reference, so
+  there is no `state_referenced_locally` warning and no need for
+  `svelte-ignore`.
+- Cash stores `price = 1` because the ledger invariant, the sell guard and
+  the face-value rule depend on it. The display layer hides it for cash
+  rows; do not remove the value or the total arithmetic.
+- `pnpm run test:web:update` runs a build and regenerates the fixture first.
+  The resulting golden diff can include older behaviour that was recorded
+  before an earlier unrecorded change. Read the whole diff and separate the
+  intended change from pre-existing drift before accepting it.
+- A running dev server applies pending journal migrations on open, so a
+  real journal may already be at the new schema. Check `journals.schema_version`,
+  the journal's `user_version` and `data/backups/` before running
+  `pnpm run db:migrate:all`; do not migrate twice.
+
+## Session: Heatmap tabs and trade history
+- Do not put three quantities on one 12px cell. Notes, buys and sells each
+  need an intensity scale; a single grid forces one of them to hide the
+  others. Split the page into two tabs instead: one scale per view.
+- Intensity must be relative to its own side. Use the busiest buy day for
+  the green bands and the busiest sell day for the red bands. A shared
+  maximum makes one side look inactive whenever the other side dominates.
+- A day with both a buy and a sell needs a split cell. Draw it with
+  `linear-gradient(135deg, … 50%, … 50%)` and encode each half's intensity
+  as the alpha over the neutral cell background. That reads in both light
+  and dark themes; a single inline hex cannot.
+- `holding_actions.kind = 'opening'` is the starting balance, not an event.
+  Every activity query must filter `kind IN ('buy', 'sell')`, and that filter
+  belongs in the count too, or the list header disagrees with the rows.
+- Trades are recorded with `Date.now()`. Any heatmap day key derived from
+  them is runtime data: add each `trades[].day` to the smoke `volatile` set
+  before masking, or the golden fails tomorrow. The same key also masks a
+  note written on the same day.
+- A second paginated list over `holding_actions` needs its own cursor
+  `(created_at, id)` and an explicit `LIMIT n+1`. The per-holding list sorts
+  by `rowid`; a cross-holding list should not expose a rowid as a cursor.
+
+## Session: Aligning holding cards
+- A `<button>` that stretches to fill its card (via `flex-1`) centres its
+  content vertically. That pushed every asset card's label and amount about
+  15 px below the totals card, which uses a non-stretched button. Fix: make
+  the stretched button `flex flex-col items-stretch`, so its children start
+  at the top. Do not add a compensating margin to the totals card.
+- `items-stretch` is required. The browser's default button `align-items`
+  would otherwise shrink the children and centre them horizontally.
+- A fixed card height hides vertical centring bugs: `h-44` kept the labels
+  at different heights, then made the row look too tall once the content was
+  top-aligned. Size cards from their content and let `items-stretch` equalise
+  the row; do not chase the gap with a compensating margin.
+
+## Session: Releasing the composer after publish
+- The focus scrim stays while any control in the composer bar has focus,
+  including the Save button. Clearing the text does not clear it, so the new
+  note stays blurred. Blur the focused bar child and set `focused = false`
+  after a submit (`releaseBar()`).
+- After saving from the fullscreen editor, close it with `closeWide(false)`.
+  The default refocuses the bar, which brings the scrim back over the note.

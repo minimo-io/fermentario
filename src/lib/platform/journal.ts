@@ -130,6 +130,8 @@ export interface Note {
 	tags: string[];
 	/** Comments live in note_comments; batched with the tags query. */
 	commentCount?: number;
+	/** Outgoing `[[id]]` links with live labels, batched with the tags query. */
+	linkedNotes?: LinkRef[];
 }
 
 export interface NoteRow {
@@ -192,6 +194,8 @@ export interface Principle {
 	video: string;
 	tags: string[];
 	commentCount: number;
+	/** Outgoing `[[id]]` links with live labels, batched like note links. */
+	linkedNotes?: LinkRef[];
 }
 
 export interface PrincipleComment {
@@ -236,6 +240,14 @@ export interface TodoDoneCursor {
 	id: string;
 }
 
+/** A resolved `[[id]]` link: notes and principles share the syntax, and the
+ *  label always renders live from the target. */
+export interface LinkRef {
+	id: string;
+	label: string;
+	kind: 'note' | 'principle';
+}
+
 export interface TodoDonePage {
 	items: TodoProgressItem[];
 	count: number;
@@ -243,7 +255,143 @@ export interface TodoDonePage {
 	nextCursor: TodoDoneCursor | null;
 }
 
-const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0): Note => ({
+/** Outgoing note links use `[[uuid]]`. The label is never stored: it renders
+ *  live from the target's current first line, so edits never go stale. */
+const LINK_RE = /\[\[([0-9a-fA-F-]{36})\]\]/g;
+
+export function noteLinkIds(content: string): string[] {
+	const ids: string[] = [];
+	LINK_RE.lastIndex = 0;
+	let m: RegExpExecArray | null;
+	while ((m = LINK_RE.exec(content)) !== null) {
+		if (!ids.includes(m[1])) ids.push(m[1]);
+	}
+	return ids;
+}
+
+/** Pill label: first non-empty line, capped so a long note stays a pill. */
+export function noteLabel(content: string): string {
+	const line = content.split('\n').map((s) => s.trim()).find(Boolean) ?? '';
+	return line.length > 80 ? `${line.slice(0, 80)}…` : line;
+}
+
+export interface Holding {
+	id: string;
+	ticker: string;
+	amount: number;
+	/** Manual price in the holding's currency; null until set. */
+	price: number | null;
+	/** True when the price came from the rates refresh (BTC auto-price). */
+	priceAuto: boolean;
+	currency: string;
+	category: HoldingCategory;
+	/** Desired amount in the holding's currency; null until set. */
+	goal: number | null;
+	bank: string;
+	country: string;
+	position: number;
+	created_at: number;
+	updated_at: number;
+	/** Last write of `price` (quote refresh or hand edit); 0 when never set. */
+	price_updated_at: number;
+	/** Average cost per unit on the opening row; null until set. */
+	avgPrice: number | null;
+	/** Converted value in USD; present on list output. */
+	valueUsd?: number;
+}
+
+export type HoldingActionKind = 'opening' | 'buy' | 'sell';
+
+export interface HoldingAction {
+	id: string;
+	holding_id: string;
+	kind: HoldingActionKind;
+	amount: number;
+	/** Unit price at the time of the action; null when no quote was cached. */
+	price: number | null;
+	currency: string;
+	created_at: number;
+}
+
+export type HoldingCategory = 'btc' | 'fii' | 'cash';
+
+/** Buys and sells per calendar day, for the investments heatmap. */
+export interface TradeDay {
+	day: string;
+	buys: number;
+	sells: number;
+}
+
+export interface TradeHistoryItem {
+	id: string;
+	holding_id: string;
+	ticker: string;
+	bank: string;
+	category: HoldingCategory;
+	kind: 'buy' | 'sell';
+	amount: number;
+	price: number | null;
+	currency: string;
+	created_at: number;
+}
+
+export interface TradeHistoryCursor {
+	created_at: number;
+	id: string;
+}
+
+export interface TradeHistoryPage {
+	items: TradeHistoryItem[];
+	count: number;
+	hasMore: boolean;
+	nextCursor: TradeHistoryCursor | null;
+}
+
+export interface CategoryShare {
+	category: HoldingCategory;
+	actual: number;
+	goal: number;
+}
+
+/** Absolute target, independent from the percent allocation goals. */
+export interface CategoryValueGoal {
+	amount: number;
+	currency: string;
+}
+
+export interface CategoryValueProgress {
+	category: HoldingCategory;
+	target: number;
+	currency: string;
+	/** Current category value in the target currency; null when no rate exists. */
+	actual: number | null;
+	/** Current category value in USD, the value the totals use. */
+	actualUsd: number;
+	/** target - actual; null when no rate exists. */
+	gap: number | null;
+	/** actual / target * 100; null when no rate exists. */
+	pct: number | null;
+}
+
+export interface HoldingsSummary {
+	holdings: Holding[];
+	totalUsd: number;
+	/** Newest rate timestamp behind the total; null when no FX was needed. */
+	asOf: number | null;
+	/** True when a needed rate is missing or older than a day. */
+	stale: boolean;
+	goals: { btc: number; fii: number; cash: number } | null;
+	/** Independent absolute targets; null when none are set. */
+	valueGoals: { btc: CategoryValueGoal | null; fii: CategoryValueGoal | null; cash: CategoryValueGoal | null } | null;
+	/** Progress for each category that has an absolute target. */
+	valueProgress: CategoryValueProgress[];
+	actual: { btc: number; fii: number; cash: number };
+	/** Configured categories off their goal by more than 5 points. */
+	drift: CategoryShare[];
+	displayTotals: { USD: number; BRL: number | null; UYU: number | null };
+}
+
+const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0, links: LinkRef[] = []): Note => ({
 	id: r.id,
 	content: r.content,
 	created_at: r.created_at,
@@ -251,7 +399,8 @@ const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0): Note => ({
 	featured: r.featured === 1,
 	video: r.video ?? '',
 	tags,
-	commentCount: comments
+	commentCount: comments,
+	linkedNotes: links
 });
 
 const rowToAsk = (r: AskRow) => ({
@@ -310,10 +459,65 @@ export function createJournal(db: SqlDb) {
 		return map;
 	}
 
+	/** Linked-entry labels per source id, batched the way tagsByNote batches
+	 *  tags. Notes resolve first, then principles; ids with no live target
+	 *  resolve to no entry and render as plain text. */
+	function resolveLinks(wanted: Map<string, string[]>): Map<string, LinkRef[]> {
+		const map = new Map<string, LinkRef[]>();
+		if (wanted.size === 0) return map;
+		const allIds = [...new Set([...wanted.values()].flat())];
+		const placeholders = allIds.map(() => '?').join(',');
+		const found = new Map<string, LinkRef>();
+		const noteTargets = db
+			.prepare(`SELECT id, content FROM notes WHERE id IN (${placeholders})`)
+			.all(...allIds) as unknown as { id: string; content: string }[];
+		for (const t of noteTargets) found.set(t.id, { id: t.id, label: noteLabel(t.content), kind: 'note' });
+		const missing = allIds.filter((id) => !found.has(id));
+		if (missing.length > 0) {
+			const missingPlaceholders = missing.map(() => '?').join(',');
+			const principleTargets = db
+				.prepare(`SELECT id, content FROM principles WHERE id IN (${missingPlaceholders})`)
+				.all(...missing) as unknown as { id: string; content: string }[];
+			for (const t of principleTargets) found.set(t.id, { id: t.id, label: noteLabel(t.content), kind: 'principle' });
+		}
+		for (const [sourceId, ids] of wanted) {
+			const links: LinkRef[] = [];
+			for (const id of ids) {
+				const target = found.get(id);
+				if (target !== undefined) links.push(target);
+			}
+			if (links.length > 0) map.set(sourceId, links);
+		}
+		return map;
+	}
+
+	function linksByNote(rows: { id: string; content: string }[]): Map<string, LinkRef[]> {
+		if (rows.length === 0) return new Map();
+		const wanted = new Map<string, string[]>();
+		for (const r of rows) {
+			const ids = noteLinkIds(r.content).filter((id) => id !== r.id);
+			if (ids.length > 0) wanted.set(r.id, ids);
+		}
+		return resolveLinks(wanted);
+	}
+
+	function linksByPrinciple(rows: { id: string; content: string }[]): Map<string, LinkRef[]> {
+		if (rows.length === 0) return new Map();
+		const wanted = new Map<string, string[]>();
+		for (const r of rows) {
+			const ids = noteLinkIds(r.content).filter((id) => id !== r.id);
+			if (ids.length > 0) wanted.set(r.id, ids);
+		}
+		return resolveLinks(wanted);
+	}
+
 	function withTags(rows: NoteRow[]): Note[] {
 		const tags = tagsByNote(rows);
 		const comments = commentsByNote(rows);
-		return rows.map((r) => rowToNote(r, tags.get(r.id) ?? [], comments.get(r.id) ?? 0));
+		const links = linksByNote(rows);
+		return rows.map((r) =>
+			rowToNote(r, tags.get(r.id) ?? [], comments.get(r.id) ?? 0, links.get(r.id) ?? [])
+		);
 	}
 
 	function createNote(content: string, createdAt: number): Note {
@@ -819,9 +1023,10 @@ export function createJournal(db: SqlDb) {
 				`SELECT p.*, (SELECT COUNT(*) FROM principle_comments c WHERE c.principle_id = p.id) AS comment_count
 				 FROM principles p ORDER BY p.position ASC, p.created_at ASC, p.id ASC`
 			)
-			.all() as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video'> & { video: string; comment_count: number })[];
+			.all() as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video' | 'linkedNotes'> & { video: string; comment_count: number })[];
 		const tags = tagsByPrinciple(rows);
-		return rows.map((r) => ({ ...r, video: r.video ?? '', tags: tags.get(r.id) ?? [], commentCount: r.comment_count ?? 0 }));
+		const links = linksByPrinciple(rows);
+		return rows.map((r) => ({ ...r, video: r.video ?? '', tags: tags.get(r.id) ?? [], commentCount: r.comment_count ?? 0, linkedNotes: links.get(r.id) ?? [] }));
 	}
 
 	function listPrinciplesByTag(tag: string): Principle[] {
@@ -833,9 +1038,10 @@ export function createJournal(db: SqlDb) {
 				 FROM principles p JOIN principle_tags t ON t.principle_id = p.id
 				 WHERE t.tag = ? ORDER BY p.position ASC, p.created_at ASC, p.id ASC`
 			)
-			.all(clean) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video'> & { video: string; comment_count: number })[];
+			.all(clean) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video' | 'linkedNotes'> & { video: string; comment_count: number })[];
 		const tags = tagsByPrinciple(rows);
-		return rows.map((r) => ({ ...r, video: r.video ?? '', tags: tags.get(r.id) ?? [], commentCount: r.comment_count ?? 0 }));
+		const links = linksByPrinciple(rows);
+		return rows.map((r) => ({ ...r, video: r.video ?? '', tags: tags.get(r.id) ?? [], commentCount: r.comment_count ?? 0, linkedNotes: links.get(r.id) ?? [] }));
 	}
 
 	function createPrinciple(content: string): Principle | null {
@@ -869,10 +1075,10 @@ export function createJournal(db: SqlDb) {
 	}
 
 	function updatePrincipleKeepTags(id: string): Principle | null {
-		const row = db.prepare('SELECT * FROM principles WHERE id = ?').get(id) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video'> & { video: string } | undefined);
+		const row = db.prepare('SELECT * FROM principles WHERE id = ?').get(id) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video' | 'linkedNotes'> & { video: string } | undefined);
 		if (!row) return null;
 		const count = db.prepare('SELECT COUNT(*) AS c FROM principle_comments WHERE principle_id = ?').get(id) as { c: number };
-		return { ...row, video: row.video ?? '', tags: tagsByPrinciple([row]).get(id) ?? [], commentCount: count.c ?? 0 };
+		return { ...row, video: row.video ?? '', tags: tagsByPrinciple([row]).get(id) ?? [], commentCount: count.c ?? 0, linkedNotes: linksByPrinciple([row]).get(id) ?? [] };
 	}
 
 	/** Replace a principle's tags. Passing an empty array clears them. */
@@ -948,6 +1154,652 @@ export function createJournal(db: SqlDb) {
 		db.transaction(() => {
 			ids.forEach((id, i) => upd.run(i, id));
 		});
+	}
+
+	// --- Holdings ------------------------------------------------------------
+	// Investing boxes on the home carousel. Prices are manual until the rates
+	// refresh fills them: fiat converts through fx_rates, BTC-ticker rows take
+	// the fetched BTC price while their price is auto (or unset). A manual
+	// price edit clears the auto flag so refreshes never overwrite it.
+
+	type HoldingRow = {
+		id: string;
+		ticker: string;
+		amount: number;
+		price: number | null;
+		price_auto: number;
+		currency: string;
+		category: string;
+		goal: number | null;
+		bank: string;
+		country: string;
+		position: number;
+		created_at: number;
+		updated_at: number;
+		price_updated_at: number;
+	};
+
+	const DAY_MS = 24 * 60 * 60 * 1000;
+	const RATES_URL = 'https://api.coinbase.com/v2/exchange-rates?currency=USD';
+	const YAHOO_UA =
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+
+	/** Yahoo symbol: B3 codes get `.SA` (`SNEL11` → `SNEL11.SA`); a ticker
+	 *  that already carries a dot is used as-is (`AAPL` stays US). */
+	function yahooSymbol(ticker: string): string {
+		const t = ticker.toUpperCase();
+		if (t.includes('.')) return t;
+		return isB3(t) ? `${t}.SA` : t;
+	}
+
+	function isB3(ticker: string): boolean {
+		const t = ticker.toUpperCase();
+		return !t.includes('.') && /^[A-Z]{4}\d{1,2}[A-Z0-9]?$/.test(t);
+	}
+
+	/** Latest quote for a B3 ticker from Fundamentus (`Cotação` row).
+	 *  Null on any failure — unknown ticker, layout change, non-numeric. */
+	async function fetchFundamentusQuote(ticker: string): Promise<number | null> {
+		try {
+			const res = await fetch(
+				`https://www.fundamentus.com.br/detalhes.php?papel=${encodeURIComponent(ticker.toUpperCase())}`,
+				{ signal: AbortSignal.timeout(10000), headers: { 'user-agent': YAHOO_UA } }
+			);
+			if (!res.ok) return null;
+			const html = new TextDecoder('iso-8859-1').decode(new Uint8Array(await res.arrayBuffer()));
+			const m = /Cotação<\/span><\/td>\s*<td class="data[^"]*"><span class="txt">([\d.,]+)<\/span>/.exec(html);
+			if (!m) return null;
+			// Brazilian format: dots group thousands, comma is the decimal.
+			const v = Number(m[1].replace(/\./g, '').replace(',', '.'));
+			return Number.isFinite(v) && v > 0 ? v : null;
+		} catch {
+			return null;
+		}
+	}
+
+	/** Latest price from the Yahoo chart API. Null on any failure — the
+	 *  caller keeps the cached price and marks the summary stale instead. */
+	async function fetchQuote(symbol: string): Promise<number | null> {
+		try {
+			const res = await fetch(
+				`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+				{ signal: AbortSignal.timeout(8000), headers: { 'user-agent': YAHOO_UA } }
+			);
+			if (!res.ok) return null;
+			const body = (await res.json()) as {
+				chart?: { result?: { meta?: { regularMarketPrice?: unknown } }[] };
+			};
+			const p = body?.chart?.result?.[0]?.meta?.regularMarketPrice;
+			return typeof p === 'number' && Number.isFinite(p) && p > 0 ? p : null;
+		} catch {
+			return null;
+		}
+	}
+
+	function cleanBank(v: unknown): string {
+		return String(v ?? '').trim().slice(0, 40);
+	}
+
+	function cleanCountry(v: unknown): string {
+		const c = String(v ?? '').trim().toUpperCase();
+		return /^[A-Z]{2}$/.test(c) ? c : '';
+	}
+
+	/** Cash holdings are named by bank: the ticker is a slug of it. */
+	function bankTicker(bank: string): string | null {
+		const t = bank
+			.trim()
+			.toUpperCase()
+			.replace(/\s+/g, '-')
+			.replace(/[^A-Z0-9._-]/g, '')
+			.slice(0, 12);
+		return /^[A-Z0-9._-]{1,12}$/.test(t) ? t : null;
+	}
+
+	function rowToHolding(r: HoldingRow, toUsd: Map<string, number>, avgPrice: number | null = null): Holding {
+		const rate = toUsd.get(r.currency) ?? 1;
+		return {
+			id: r.id,
+			ticker: r.ticker,
+			amount: r.amount,
+			price: r.price,
+			priceAuto: r.price_auto === 1,
+			currency: r.currency,
+			category: cleanCategory(r.category, r.ticker),
+			goal: r.goal,
+			bank: r.bank ?? '',
+			country: r.country ?? '',
+			position: r.position,
+			created_at: r.created_at,
+			updated_at: r.updated_at,
+			price_updated_at: r.price_updated_at ?? 0,
+			avgPrice,
+			valueUsd: r.amount * (r.price ?? 0) * rate
+		};
+	}
+
+	/** Opening average prices in one query; keep listing holdings cheap. */
+	function openingPrices(): Map<string, number | null> {
+		const rows = db
+			.prepare("SELECT holding_id, price FROM holding_actions WHERE kind = 'opening'")
+			.all() as unknown as { holding_id: string; price: number | null }[];
+		return new Map(rows.map((r) => [r.holding_id, r.price]));
+	}
+
+	function fxToUsd(): { rates: Map<string, number>; at: Map<string, number> } {
+		const rates = new Map<string, number>([['USD', 1]]);
+		const at = new Map<string, number>();
+		try {
+			const rows = db.prepare('SELECT currency, rate_to_usd, fetched_at FROM fx_rates').all() as unknown as {
+				currency: string;
+				rate_to_usd: number;
+				fetched_at: number;
+			}[];
+			for (const row of rows) {
+				rates.set(row.currency, row.rate_to_usd);
+				at.set(row.currency, row.fetched_at);
+			}
+		} catch {
+			// Table arrives with migration 3; an older open journal reads USD-only.
+		}
+		return { rates, at };
+	}
+
+	function listHoldings(): Holding[] {
+		const { rates } = fxToUsd();
+		const avg = openingPrices();
+		const rows = db
+			.prepare('SELECT * FROM holdings ORDER BY position ASC, created_at ASC, id ASC')
+			.all() as unknown as HoldingRow[];
+		// Totals stay fixed first in the UI; the rest sort by money, with
+		// position only breaking ties. Rates are known only post-query, so
+		// the sort happens here, not in SQL.
+		return rows
+			.map((r) => rowToHolding(r, rates, avg.get(r.id) ?? null))
+			.sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0) || a.position - b.position);
+	}
+
+	function cleanTicker(v: unknown): string | null {
+		const t = String(v ?? '').trim().toUpperCase();
+		return /^[A-Z0-9._-]{1,12}$/.test(t) ? t : null;
+	}
+
+	function cleanCurrency(v: unknown): string {
+		const c = String(v ?? 'USD').trim().toUpperCase();
+		return /^[A-Z]{3}$/.test(c) ? c : 'USD';
+	}
+
+	const HOLDING_CATEGORIES = ['btc', 'fii', 'cash'] as const;
+
+	function cleanCategory(v: unknown, ticker: string): HoldingCategory {
+		if (v === 'btc' || v === 'fii' || v === 'cash') return v;
+		return ticker.toUpperCase() === 'BTC' ? 'btc' : 'fii';
+	}
+
+	function createHolding(
+		ticker: string,
+		amount: number,
+		price?: number | null,
+		currency?: string,
+		category?: string,
+		goal?: number | null,
+		bank?: string,
+		country?: string,
+		avgPrice?: number | null
+	): Holding | null {
+		const a = Number(amount);
+		const p = price === undefined || price === null ? null : Number(price);
+		const g = goal === undefined || goal === null ? null : Number(goal);
+		const avg = avgPrice === undefined || avgPrice === null ? null : Number(avgPrice);
+		if (!Number.isFinite(a) || a < 0) return null;
+		if (p !== null && (!Number.isFinite(p) || p < 0)) return null;
+		if (g !== null && (!Number.isFinite(g) || g < 0)) return null;
+		if (avg !== null && (!Number.isFinite(avg) || avg < 0)) return null;
+		const cat = cleanCategory(category, String(ticker ?? ''));
+		const t = cat === 'cash' ? bankTicker(bank ?? '') : cleanTicker(ticker);
+		if (!t) return null;
+		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM holdings').get() as { m: number };
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		const c = cat === 'btc' ? 'USD' : cleanCurrency(currency);
+		// Cash counts at face value; BTC takes the fetched price — both hide
+		// the price field, so the stored price is derived, never typed.
+		const storedPrice = cat === 'cash' ? 1 : cat === 'btc' ? null : p;
+		const b = cat === 'cash' ? cleanBank(bank) : '';
+		const co = cat === 'cash' ? cleanCountry(country) : '';
+		// The opening row is the base quantity. Its price is the average cost
+		// the user enters; it never becomes the live quote.
+		const openingPrice = cat === 'cash' ? 1 : avg;
+		db.transaction(() => {
+			db.prepare(
+				'INSERT INTO holdings (id, ticker, amount, price, price_auto, currency, category, goal, bank, country, position, created_at, updated_at, price_updated_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+			).run(id, t, a, storedPrice, c, cat, g, b, co, max.m + 1, now, now, storedPrice === null ? 0 : now);
+			db.prepare(
+				'INSERT INTO holding_actions (id, holding_id, kind, amount, price, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+			).run(crypto.randomUUID(), id, 'opening', a, openingPrice, c, now);
+		});
+		const { rates } = fxToUsd();
+		return rowToHolding(
+			{ id, ticker: t, amount: a, price: storedPrice, price_auto: 0, currency: c, category: cat, goal: g, bank: b, country: co, position: max.m + 1, created_at: now, updated_at: now, price_updated_at: storedPrice === null ? 0 : now },
+			rates,
+			openingPrice
+		);
+	}
+
+	function updateHolding(
+		id: string,
+		patch: { ticker?: string; amount?: number; price?: number | null; currency?: string; category?: string; goal?: number | null; bank?: string; country?: string; avgPrice?: number | null }
+	): Holding | null {
+		const current = db.prepare('SELECT * FROM holdings WHERE id = ?').get(id) as unknown as HoldingRow | undefined;
+		if (!current) return null;
+		const prevCategory = cleanCategory(current.category, current.ticker);
+		const category = patch.category === undefined ? prevCategory : cleanCategory(patch.category, patch.ticker ?? current.ticker);
+		const bank = patch.bank === undefined ? (current.bank ?? '') : cleanBank(patch.bank);
+		const country = patch.country === undefined ? (current.country ?? '') : cleanCountry(patch.country);
+		const ticker = category === 'cash' ? bankTicker(bank) : patch.ticker === undefined ? current.ticker : cleanTicker(patch.ticker);
+		if (!ticker) return null;
+		const amount = patch.amount === undefined ? current.amount : Number(patch.amount);
+		if (!Number.isFinite(amount) || amount < 0) return null;
+		const currency = category === 'btc' ? 'USD' : patch.currency === undefined ? current.currency : cleanCurrency(patch.currency);
+		// A different ticker or category makes the stored quote meaningless:
+		// drop it and re-arm auto mode so the next refresh fills the new one.
+		// An explicit price still wins (API compatibility); cash never uses
+		// one, and BTC always prices itself.
+		const identityChanged = category !== prevCategory || ticker !== current.ticker;
+		let price: number | null;
+		if (category === 'cash') price = 1;
+		else if (category === 'btc') price = identityChanged ? null : current.price;
+		else if (patch.price !== undefined) price = patch.price === null ? null : Number(patch.price);
+		else price = identityChanged ? null : current.price;
+		if (price !== null && (!Number.isFinite(price) || price < 0)) return null;
+		const goal = patch.goal === undefined ? current.goal : patch.goal === null ? null : Number(patch.goal);
+		if (goal !== null && (!Number.isFinite(goal) || goal < 0)) return null;
+		const priceAuto = category === 'cash' ? 0 : patch.price === undefined ? (identityChanged ? 1 : current.price_auto) : 0;
+		// The average cost lives on the opening row. An API amount change
+		// shifts that row by the same delta, so the ledger keeps summing to
+		// the current total; the UI changes quantity through actions only.
+		const avgProvided = patch.avgPrice !== undefined;
+		const avg = avgProvided ? (category === 'cash' ? 1 : patch.avgPrice === null ? null : Number(patch.avgPrice)) : null;
+		if (avg !== null && (!Number.isFinite(avg) || avg < 0)) return null;
+		type OpeningRow = { id: string; amount: number; price: number | null };
+		const opening = db
+			.prepare("SELECT id, amount, price FROM holding_actions WHERE holding_id = ? AND kind = 'opening' ORDER BY created_at ASC, rowid ASC LIMIT 1")
+			.get(id) as unknown as OpeningRow | undefined;
+		const nextOpeningAmount = opening ? opening.amount + (amount - current.amount) : amount;
+		if (nextOpeningAmount < 0) return null;
+		const now = Date.now();
+		// The date shown on the card means "price fetched or typed", so only a
+		// real price change moves it — editing the amount must not fake it.
+		const priceUpdatedAt = price === current.price ? current.price_updated_at ?? 0 : price === null ? 0 : now;
+		db.transaction(() => {
+			db.prepare(
+				'UPDATE holdings SET ticker = ?, amount = ?, price = ?, price_auto = ?, currency = ?, category = ?, goal = ?, bank = ?, country = ?, updated_at = ?, price_updated_at = ? WHERE id = ?'
+			).run(ticker, amount, price, priceAuto, currency, category, goal, bank, country, now, priceUpdatedAt, id);
+			if (opening) {
+				if (nextOpeningAmount !== opening.amount) {
+					db.prepare('UPDATE holding_actions SET amount = ? WHERE id = ?').run(nextOpeningAmount, opening.id);
+				}
+				if (avgProvided) {
+					db.prepare('UPDATE holding_actions SET price = ?, currency = ? WHERE id = ?').run(avg, currency, opening.id);
+				}
+			} else {
+				db.prepare(
+					'INSERT INTO holding_actions (id, holding_id, kind, amount, price, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+				).run(crypto.randomUUID(), id, 'opening', amount, avgProvided ? avg : null, currency, current.created_at);
+			}
+		});
+		const openingNow = db
+			.prepare("SELECT price FROM holding_actions WHERE holding_id = ? AND kind = 'opening' LIMIT 1")
+			.get(id) as unknown as { price: number | null } | undefined;
+		const { rates } = fxToUsd();
+		return rowToHolding(
+			{ ...current, ticker, amount, price, price_auto: priceAuto, currency, category, goal, bank, country, updated_at: now, price_updated_at: priceUpdatedAt },
+			rates,
+			openingNow?.price ?? null
+		);
+	}
+
+	function deleteHolding(id: string): boolean {
+		return db.transaction(() => {
+			db.prepare('DELETE FROM holding_actions WHERE holding_id = ?').run(id);
+			return db.prepare('DELETE FROM holdings WHERE id = ?').run(id).changes > 0;
+		});
+	}
+
+	function readHoldingActions(holdingId: string): HoldingAction[] {
+		return db
+			.prepare(
+				'SELECT id, holding_id, kind, amount, price, currency, created_at FROM holding_actions WHERE holding_id = ? ORDER BY created_at DESC, rowid DESC'
+			)
+			.all(holdingId) as unknown as HoldingAction[];
+	}
+
+	function listHoldingActions(holdingId: string): HoldingAction[] | null {
+		const exists = db.prepare('SELECT id FROM holdings WHERE id = ?').get(holdingId);
+		return exists ? readHoldingActions(holdingId) : null;
+	}
+
+	/** Buys and sells across every holding, newest first. Opening rows are
+	 *  the starting balance, not an event, so they stay out. */
+	function listTradeHistory(
+		limit = 50,
+		cursor: TradeHistoryCursor | null = null
+	): TradeHistoryPage {
+		const safeLimit = Number.isFinite(limit) ? Math.min(100, Math.max(1, Math.trunc(limit))) : 50;
+		const cursorSql = cursor ? 'AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?))' : '';
+		const params: SqlValue[] = cursor ? [cursor.created_at, cursor.created_at, cursor.id] : [];
+		const rows = db
+			.prepare(
+				`SELECT a.id, a.holding_id, a.kind, a.amount, a.price, a.currency, a.created_at,
+				        h.ticker, h.bank, h.category
+				 FROM holding_actions a JOIN holdings h ON h.id = a.holding_id
+				 WHERE a.kind IN ('buy', 'sell') ${cursorSql}
+				 ORDER BY a.created_at DESC, a.id DESC LIMIT ?`
+			)
+			.all(...params, safeLimit + 1) as unknown as TradeHistoryItem[];
+		const hasMore = rows.length > safeLimit;
+		const items = hasMore ? rows.slice(0, safeLimit) : rows;
+		const last = items[items.length - 1];
+		const count = (
+			db.prepare("SELECT COUNT(*) AS c FROM holding_actions WHERE kind IN ('buy', 'sell')").get() as {
+				c: number;
+			}
+		).c;
+		return {
+			items,
+			count,
+			hasMore,
+			nextCursor: hasMore && last ? { created_at: last.created_at, id: last.id } : null
+		};
+	}
+
+	type RecordActionResult =
+		| { ok: true; action: HoldingAction; holding: Holding; actions: HoldingAction[] }
+		| { ok: false; reason: 'not_found' | 'invalid' | 'insufficient' };
+
+	function recordHoldingAction(holdingId: string, kind: string, amount: number): RecordActionResult {
+		if (kind !== 'buy' && kind !== 'sell') return { ok: false, reason: 'invalid' };
+		const qty = Number(amount);
+		if (!Number.isFinite(qty) || qty <= 0) return { ok: false, reason: 'invalid' };
+		return db.transaction((): RecordActionResult => {
+			const current = db.prepare('SELECT * FROM holdings WHERE id = ?').get(holdingId) as unknown as HoldingRow | undefined;
+			if (!current) return { ok: false, reason: 'not_found' };
+			if (kind === 'sell' && qty > current.amount + 1e-9) return { ok: false, reason: 'insufficient' };
+			const now = Date.now();
+			const action: HoldingAction = {
+				id: crypto.randomUUID(),
+				holding_id: holdingId,
+				kind,
+				amount: qty,
+				price: current.price,
+				currency: current.currency,
+				created_at: now
+			};
+			db.prepare(
+				'INSERT INTO holding_actions (id, holding_id, kind, amount, price, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+			).run(action.id, holdingId, kind, qty, action.price, action.currency, now);
+			const next = kind === 'buy' ? current.amount + qty : current.amount - qty;
+			const clean = next < 1e-9 ? 0 : next;
+			db.prepare('UPDATE holdings SET amount = ?, updated_at = ? WHERE id = ?').run(clean, now, holdingId);
+			const updated = db.prepare('SELECT * FROM holdings WHERE id = ?').get(holdingId) as unknown as HoldingRow;
+			const opening = db
+				.prepare("SELECT price FROM holding_actions WHERE holding_id = ? AND kind = 'opening' LIMIT 1")
+				.get(holdingId) as unknown as { price: number | null } | undefined;
+			const { rates } = fxToUsd();
+			return {
+				ok: true,
+				action,
+				holding: rowToHolding(updated, rates, opening?.price ?? null),
+				actions: readHoldingActions(holdingId)
+			};
+		});
+	}
+
+	function getCategoryGoals(): { btc: number; fii: number; cash: number } | null {
+		try {
+			const rows = db.prepare('SELECT category, pct FROM category_goals').all() as unknown as { category: string; pct: number }[];
+			const map = new Map(rows.map((r) => [r.category, r.pct]));
+			const btc = map.get('btc');
+			const fii = map.get('fii');
+			const cash = map.get('cash');
+			if (btc === undefined || fii === undefined || cash === undefined) return null;
+			return { btc, fii, cash };
+		} catch {
+			// Table arrives with migration 4.
+			return null;
+		}
+	}
+
+	function getCategoryValueGoals(): {
+		btc: CategoryValueGoal | null;
+		fii: CategoryValueGoal | null;
+		cash: CategoryValueGoal | null;
+	} | null {
+		try {
+			const rows = db
+				.prepare('SELECT category, amount, currency FROM category_value_goals')
+				.all() as unknown as { category: string; amount: number; currency: string }[];
+			if (rows.length === 0) return null;
+			const map = new Map(rows.map((r) => [r.category, { amount: r.amount, currency: r.currency }]));
+			return {
+				btc: map.get('btc') ?? null,
+				fii: map.get('fii') ?? null,
+				cash: map.get('cash') ?? null
+			};
+		} catch {
+			// Table arrives with migration 9.
+			return null;
+		}
+	}
+
+	type GoalWrite = { ok: true } | { ok: false; field: 'pct' | 'values' };
+
+	/** Absolute targets are optional per category and independent from the
+	 *  percent goals. A `null` category clears its target. */
+	function setHoldingsGoals(
+		pct: { btc: number; fii: number; cash: number } | null,
+		values: { btc: number | null; fii: number | null; cash: number | null } | null
+	): GoalWrite {
+		if (pct) {
+			for (const v of [pct.btc, pct.fii, pct.cash]) {
+				if (!Number.isFinite(v) || v < 0 || v > 100) return { ok: false, field: 'pct' };
+			}
+			if (Math.abs(pct.btc + pct.fii + pct.cash - 100) > 1e-9) return { ok: false, field: 'pct' };
+		}
+		if (values) {
+			for (const c of HOLDING_CATEGORIES) {
+				const v = values[c];
+				if (v !== null && (!Number.isFinite(v) || v <= 0)) return { ok: false, field: 'values' };
+			}
+		}
+		const VALUE_CURRENCY: Record<HoldingCategory, string> = { btc: 'USD', fii: 'BRL', cash: 'BRL' };
+		db.transaction(() => {
+			if (pct) {
+				const put = db.prepare(
+					'INSERT INTO category_goals (category, pct) VALUES (?, ?) ON CONFLICT (category) DO UPDATE SET pct = excluded.pct'
+				);
+				put.run('btc', pct.btc);
+				put.run('fii', pct.fii);
+				put.run('cash', pct.cash);
+			}
+			if (values) {
+				db.prepare('DELETE FROM category_value_goals').run();
+				const put = db.prepare(
+					'INSERT INTO category_value_goals (category, amount, currency) VALUES (?, ?, ?)'
+				);
+				for (const c of HOLDING_CATEGORIES) {
+					const v = values[c];
+					if (v !== null) put.run(c, v, VALUE_CURRENCY[c]);
+				}
+			}
+		});
+		return { ok: true };
+	}
+
+	function getHoldingsSummary(): HoldingsSummary {
+		const holdings = listHoldings();
+		const { rates, at } = fxToUsd();
+		const now = Date.now();
+		let stale = false;
+		let asOf: number | null = null;
+		const needBtc = holdings.some((h) => h.ticker === 'BTC' && (h.priceAuto || h.price === null));
+		const consider = (c: string) => {
+			const fetched = at.get(c);
+			if (fetched === undefined || !rates.has(c)) {
+				stale = true;
+				return;
+			}
+			asOf = asOf === null ? fetched : Math.min(asOf, fetched);
+			if (now - fetched > DAY_MS) stale = true;
+		};
+		for (const h of holdings) {
+			if (h.currency === 'USD') continue;
+			consider(h.currency);
+		}
+		if (needBtc) consider('BTC');
+		// The collapsed header and the totals card state UYU and BRL totals,
+		// so those rates are needed display data, not just conversion input.
+		consider('BRL');
+		consider('UYU');
+		if (
+			holdings.some(
+				(h) =>
+					h.ticker !== 'BTC' &&
+					h.category !== 'cash' &&
+					(h.price === null || (h.priceAuto && now - h.updated_at > DAY_MS))
+			)
+		) {
+			stale = true;
+		}
+		const totalUsd = holdings.reduce((s, h) => s + (h.valueUsd ?? 0), 0);
+		const displayTotals = {
+			USD: totalUsd,
+			BRL: rates.has('BRL') ? totalUsd / (rates.get('BRL') as number) : null,
+			UYU: rates.has('UYU') ? totalUsd / (rates.get('UYU') as number) : null
+		};
+		const actual = { btc: 0, fii: 0, cash: 0 };
+		if (totalUsd > 0) {
+			for (const h of holdings) actual[h.category] += (h.valueUsd ?? 0) / totalUsd;
+			for (const k of HOLDING_CATEGORIES) actual[k] = actual[k] * 100;
+		}
+		const goals = getCategoryGoals();
+		const drift: CategoryShare[] =
+			goals === null
+				? []
+				: HOLDING_CATEGORIES.filter((c) => Math.abs(actual[c] - goals[c]) > 5).map((c) => ({
+						category: c,
+						actual: actual[c],
+						goal: goals[c]
+					}));
+		const valueGoals = getCategoryValueGoals();
+		const valueProgress: CategoryValueProgress[] = [];
+		if (valueGoals) {
+			for (const c of HOLDING_CATEGORIES) {
+				const goal = valueGoals[c];
+				if (!goal) continue;
+				const actualUsd = (actual[c] / 100) * totalUsd;
+				// Rates are per USD; divide to express the value in the target
+				// currency. A missing rate leaves the progress unknown, never 1:1.
+				const rate = goal.currency === 'USD' ? 1 : rates.get(goal.currency);
+				const actualValue = rate === undefined ? null : actualUsd / rate;
+				valueProgress.push({
+					category: c,
+					target: goal.amount,
+					currency: goal.currency,
+					actual: actualValue,
+					actualUsd,
+					gap: actualValue === null ? null : goal.amount - actualValue,
+					pct: actualValue === null ? null : (actualValue / goal.amount) * 100
+				});
+			}
+		}
+		return { holdings, totalUsd, asOf, stale, goals, valueGoals, valueProgress, actual, drift, displayTotals };
+	}
+
+	/** Refresh fiat rates and auto-prices (BTC plus stock/FII quotes). Skips
+	 *  the network when every needed rate is younger than a day, unless
+	 *  forced. Throws on network or parse failure; the route answers with
+	 *  the cached summary instead. A single bad ticker never stops the rest. */
+	async function refreshRates(force = false): Promise<HoldingsSummary> {
+		const rows = db.prepare('SELECT DISTINCT UPPER(currency) AS c FROM holdings').all() as unknown as { c: string }[];
+		// BRL and UYU are always needed: the header and totals card state
+		// those totals even for an all-USD portfolio.
+		const fiats = [...new Set([...rows.map((r) => r.c), 'BRL', 'UYU'])].filter((c) => c !== 'USD');
+		const btcEmpty = db.prepare("SELECT id FROM holdings WHERE UPPER(ticker) = 'BTC' AND price IS NULL").all() as unknown as {
+			id: string;
+		}[];
+		const btcAuto = db.prepare("SELECT id FROM holdings WHERE UPPER(ticker) = 'BTC' AND price_auto = 1 AND price IS NOT NULL").all() as unknown as {
+			id: string;
+		}[];
+		const stockEmpty = db
+			.prepare("SELECT id, ticker FROM holdings WHERE UPPER(ticker) != 'BTC' AND category != 'cash' AND price IS NULL")
+			.all() as unknown as { id: string; ticker: string }[];
+		const stockStale = db
+			.prepare(
+				"SELECT id, ticker FROM holdings WHERE UPPER(ticker) != 'BTC' AND category != 'cash' AND price_auto = 1 AND price IS NOT NULL AND price_updated_at < ?"
+			)
+			.all(Date.now() - DAY_MS) as unknown as { id: string; ticker: string }[];
+		const stockRows = [...stockEmpty, ...stockStale.filter((r) => !stockEmpty.some((e) => e.id === r.id))];
+		if (fiats.length === 0 && btcEmpty.length === 0 && btcAuto.length === 0 && stockRows.length === 0) {
+			return getHoldingsSummary();
+		}
+		const { at } = fxToUsd();
+		const now = Date.now();
+		const fresh = (c: string): boolean => {
+			const f = at.get(c);
+			return f !== undefined && now - f < DAY_MS;
+		};
+		const ratesFresh = fiats.length === 0 || fiats.every(fresh);
+		const btcFresh = fresh('BTC');
+		if (
+			!force &&
+			ratesFresh &&
+			btcEmpty.length === 0 &&
+			(btcAuto.length === 0 || btcFresh) &&
+			stockRows.length === 0
+		) {
+			return getHoldingsSummary();
+		}
+		if (typeof fetch !== 'function') throw new Error('network unavailable');
+		const res = await fetch(RATES_URL, { signal: AbortSignal.timeout(10000) });
+		if (!res.ok) throw new Error(`rates HTTP ${res.status}`);
+		const body = (await res.json()) as { data?: { rates?: Record<string, string> } };
+		const rates = body?.data?.rates;
+		if (!rates || typeof rates !== 'object') throw new Error('bad rates payload');
+		const put = db.prepare(
+			'INSERT INTO fx_rates (currency, rate_to_usd, fetched_at) VALUES (?, ?, ?) ON CONFLICT (currency) DO UPDATE SET rate_to_usd = excluded.rate_to_usd, fetched_at = excluded.fetched_at'
+		);
+		db.transaction(() => {
+			for (const c of fiats) {
+				const perUsd = Number(rates[c]);
+				if (Number.isFinite(perUsd) && perUsd > 0) put.run(c, 1 / perUsd, now);
+			}
+		});
+		const btcPerUsd = Number(rates['BTC']);
+		const hasBtcRate = Number.isFinite(btcPerUsd) && btcPerUsd > 0;
+		if (hasBtcRate) {
+			put.run('BTC', 1 / (btcPerUsd as number), now);
+			const btcUsd = 1 / (btcPerUsd as number);
+			const upd = db.prepare('UPDATE holdings SET price = ?, price_auto = 1, updated_at = ?, price_updated_at = ? WHERE id = ?');
+			const targets = [...btcEmpty, ...btcAuto];
+			db.transaction(() => {
+				for (const r of targets) upd.run(btcUsd, now, now, r.id);
+			});
+		}
+		if (stockRows.length > 0) {
+			const upd = db.prepare('UPDATE holdings SET price = ?, price_auto = 1, updated_at = ?, price_updated_at = ? WHERE id = ?');
+			for (let i = 0; i < stockRows.length; i++) {
+				// Stagger hits: Yahoo 429s rapid sequential requests.
+				if (i > 0) await new Promise((r) => setTimeout(r, 500));
+				const t = stockRows[i]!.ticker;
+				const quote = isB3(t) ? await fetchFundamentusQuote(t) : await fetchQuote(yahooSymbol(t));
+				if (quote !== null) {
+					const at = Date.now();
+					upd.run(quote, at, at, stockRows[i]!.id);
+				}
+			}
+		}
+		return getHoldingsSummary();
 	}
 
 	// --- Tag counts -------------------------------------------------------
@@ -1227,6 +2079,17 @@ export function createJournal(db: SqlDb) {
 		createPrincipleComment,
 		updatePrincipleComment,
 		deletePrincipleComment,
+		listHoldings,
+		createHolding,
+		updateHolding,
+		deleteHolding,
+		listHoldingActions,
+		listTradeHistory,
+		recordHoldingAction,
+		getHoldingsSummary,
+		getCategoryGoals,
+		setHoldingsGoals,
+		refreshRates,
 		listTagColors,
 		listTagCounts,
 		setTagColor

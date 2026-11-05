@@ -4,6 +4,9 @@
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 	import Kbd from '$lib/components/Kbd.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
+	import { renderPlainLinks } from '$lib/note-links';
+	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
+	import NoteFinder from '$lib/components/NoteFinder.svelte';
 	import { dayLocale } from '$lib/dates';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
@@ -48,6 +51,7 @@
 	let draftVideo = $state('');
 	let adding = $state(false);
 	let draftField = $state<HTMLTextAreaElement | null>(null);
+	let editField = $state<HTMLTextAreaElement | null>(null);
 	let editing = $state<string | null>(null);
 	let editText = $state('');
 	let editVideo = $state('');
@@ -295,11 +299,14 @@
 					><GripVertical class="h-4 w-4" /></span>
 					<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400 dark:text-stone-500">{i + 1}</span>
 					<div class="min-w-0 flex-1">
+						{#if (p.linkedNotes?.length ?? 0) > 0}
+							<div class="mb-1"><NoteLinkPills links={p.linkedNotes ?? []} /></div>
+						{/if}
 						<button
 							type="button"
 							class="block w-full text-left text-[15px] text-stone-800 dark:text-stone-200"
-							onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(p); }}
-						>{p.content}</button>
+							onclick={(e) => { if ((e.target as HTMLElement).closest('a')) return; if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(p); }}
+						>{@html renderPlainLinks(p.content, p.linkedNotes)}</button>
 						<time
 							class="mt-0.5 block text-[11px] tabular-nums text-stone-400 dark:text-stone-500"
 							datetime={new Date(p.created_at).toISOString()}
@@ -372,16 +379,19 @@
 	>
 		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">New principle</h2>
-			<textarea
-				bind:this={draftField}
-				rows="3"
-				class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-				placeholder="State the principle… (trailing #tags work too)"
-				aria-label="Principle text"
-				value={draft}
-				oninput={(e) => (draft = e.currentTarget.value)}
-				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void add(); }}
-			></textarea>
+			<div class="relative">
+				<textarea
+					bind:this={draftField}
+					rows="3"
+					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+					placeholder="State the principle… (trailing #tags work too)"
+					aria-label="Principle text"
+					value={draft}
+					oninput={(e) => (draft = e.currentTarget.value)}
+					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void add(); }}
+				></textarea>
+				<NoteFinder textarea={draftField} />
+			</div>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="draft-video">YouTube URL (optional)</label>
 			<input
 				id="draft-video"
@@ -481,14 +491,18 @@
 							{#if editFull}<Minimize2 class="h-4 w-4" />{:else}<Maximize2 class="h-4 w-4" />{/if}
 						</button>
 					</div>
-					<textarea
-						rows="3"
-						class="mt-3 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600 {editFull ? 'min-h-0 flex-1' : 'max-h-[50dvh] min-h-24'}"
-						aria-label="Principle text"
-						value={editText}
-						oninput={(e) => (editText = e.currentTarget.value)}
-						onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
-					></textarea>
+					<div class={editFull ? 'relative flex min-h-0 flex-1 flex-col' : 'relative'}>
+						<textarea
+							bind:this={editField}
+							rows="3"
+							class="mt-3 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600 {editFull ? 'min-h-0 flex-1' : 'max-h-[50dvh] min-h-24'}"
+							aria-label="Principle text"
+							value={editText}
+							oninput={(e) => (editText = e.currentTarget.value)}
+							onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
+						></textarea>
+						<NoteFinder textarea={editField} excludeId={ep.id} />
+					</div>
 					<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-p-video">YouTube URL (optional)</label>
 					<input
 						id="edit-p-video"

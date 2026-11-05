@@ -11,6 +11,8 @@
 	import EntityTitle from '$lib/components/EntityTitle.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { sortComments } from '$lib/comments';
+	import { renderPlainLinks } from '$lib/note-links';
+	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
 	import type { Principle, PrincipleComment } from '$lib/types';
@@ -141,7 +143,10 @@
 		</header>
 
 		<article class="rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70 px-4 py-3">
-			<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{principle.content}</p>
+			{#if (principle.linkedNotes?.length ?? 0) > 0}
+				<div class="mb-1.5"><NoteLinkPills links={principle.linkedNotes ?? []} /></div>
+			{/if}
+			<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html renderPlainLinks(principle.content, principle.linkedNotes)}</p>
 			{#if (principle.tags ?? []).length > 0}
 				<div class="mt-2 flex flex-wrap gap-1">
 					{#each principle.tags ?? [] as tag (tag)}

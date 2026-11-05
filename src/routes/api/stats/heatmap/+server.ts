@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { getDb } from '$lib/server/db';
 
-/** Note counts per calendar day, all time.
+/** Note and trade counts per calendar day, all time.
  *
  *  `localtime` matches the `en-CA` day keys the client and Timeline use, because
  *  the app runs the server and the browser on the same machine. A deployment
@@ -16,6 +16,18 @@ export async function GET() {
 			 ORDER BY day`
 		)
 		.all() as { day: string; count: number }[];
+	// Opening rows are the starting balance, not an event.
+	const trades = db
+		.prepare(
+			`SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day,
+				SUM(CASE WHEN kind = 'buy' THEN 1 ELSE 0 END) AS buys,
+				SUM(CASE WHEN kind = 'sell' THEN 1 ELSE 0 END) AS sells
+			 FROM holding_actions
+			 WHERE kind IN ('buy', 'sell')
+			 GROUP BY day
+			 ORDER BY day`
+		)
+		.all() as { day: string; buys: number; sells: number }[];
 	const notes = (db.prepare('SELECT COUNT(*) AS c FROM notes').get() as { c: number }).c;
-	return json({ days, notes });
+	return json({ days, trades, notes });
 }

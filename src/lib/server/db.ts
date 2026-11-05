@@ -73,6 +73,17 @@ export const listPrincipleComments = bind('listPrincipleComments');
 export const createPrincipleComment = bind('createPrincipleComment');
 export const updatePrincipleComment = bind('updatePrincipleComment');
 export const deletePrincipleComment = bind('deletePrincipleComment');
+export const listHoldings = bind('listHoldings');
+export const createHolding = bind('createHolding');
+export const updateHolding = bind('updateHolding');
+export const deleteHolding = bind('deleteHolding');
+export const listHoldingActions = bind('listHoldingActions');
+export const listTradeHistory = bind('listTradeHistory');
+export const recordHoldingAction = bind('recordHoldingAction');
+export const getHoldingsSummary = bind('getHoldingsSummary');
+export const getCategoryGoals = bind('getCategoryGoals');
+export const setHoldingsGoals = bind('setHoldingsGoals');
+export const refreshRates = bind('refreshRates');
 export const listTagColors = bind('listTagColors');
 export const listTagCounts = bind('listTagCounts');
 export const setTagColor = bind('setTagColor');
@@ -91,5 +102,7 @@ export type {
 	TodoProgressItem,
 	TaskComment,
 	NoteComment,
-	Principle
+	Principle,
+	HoldingAction,
+	HoldingActionKind
 } from '$lib/platform/journal';

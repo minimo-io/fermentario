@@ -40,6 +40,9 @@ export interface RestoreCounts {
 	todoGroups: number;
 	todoItems: number;
 	principles: number;
+	holdings: number;
+	goals: number;
+	valueGoals: number;
 }
 
 function sqlString(value: string): string {
@@ -168,6 +171,7 @@ export function copyUploadIntoTarget(
 		if (hasTodo) statements.push('DELETE FROM todo_items', 'DELETE FROM todo_groups');
 		if (has('principles')) statements.push('DELETE FROM principles');
 		if (has('tag_colors')) statements.push('DELETE FROM tag_colors');
+		if (has('holdings')) statements.push('DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
 
 		statements.push(
 			`INSERT INTO notes (id, content, created_at, updated_at, featured, video)
@@ -246,6 +250,63 @@ export function copyUploadIntoTarget(
 				'INSERT INTO tag_colors (tag, color) SELECT tag, color FROM backup.tag_colors'
 			);
 		}
+		if (has('holdings')) {
+			statements.push(
+				`INSERT INTO holdings (id, ticker, amount, price, price_auto, currency, category, goal, bank, country, position, created_at, updated_at, price_updated_at)
+					SELECT id, ticker, amount, ${column('holdings', 'price', 'NULL')},
+						${column('holdings', 'price_auto', '0')}, ${column('holdings', 'currency', "'USD'")},
+						${column('holdings', 'category', "'fii'")}, ${column('holdings', 'goal', 'NULL')},
+						${column('holdings', 'bank', "''")}, ${column('holdings', 'country', "''")},
+						${column('holdings', 'position', '0')}, created_at, updated_at,
+						${column('holdings', 'price_updated_at', 'updated_at')}
+					FROM backup.holdings`
+			);
+		}
+		if (has('holdings') && has('holding_actions')) {
+			statements.push(
+				`INSERT INTO holding_actions (id, holding_id, kind, amount, price, currency, created_at)
+					SELECT id, holding_id, kind, amount,
+						${column('holding_actions', 'price', 'NULL')},
+						${column('holding_actions', 'currency', "'USD'")}, created_at
+					FROM backup.holding_actions`
+			);
+		} else if (has('holdings')) {
+			// Older backups have no ledger: the copied amount becomes the
+			// opening row, with no average cost. Cash still counts at face value.
+			statements.push(
+				`INSERT INTO holding_actions (id, holding_id, kind, amount, price, currency, created_at)
+					SELECT 'open-' || id, id, 'opening', amount,
+						CASE WHEN category = 'cash' THEN 1 ELSE NULL END, currency, created_at
+					FROM holdings`
+			);
+		}
+		if (has('holdings')) {
+			// Exports made before migration 8 carry a NULL opening price for
+			// cash; normalize it so the restored ledger matches a fresh one.
+			statements.push(
+				`UPDATE holding_actions SET price = 1
+				WHERE kind = 'opening' AND price IS NULL
+					AND holding_id IN (SELECT id FROM holdings WHERE category = 'cash')`
+			);
+		}
+		if (has('fx_rates')) {
+			statements.push(
+				'INSERT INTO fx_rates (currency, rate_to_usd, fetched_at) SELECT currency, rate_to_usd, fetched_at FROM backup.fx_rates'
+			);
+		}
+		if (has('category_goals')) {
+			statements.push(
+				'INSERT INTO category_goals (category, pct) SELECT category, pct FROM backup.category_goals'
+			);
+		}
+		if (has('category_value_goals')) {
+			statements.push(
+				`INSERT INTO category_value_goals (category, amount, currency)
+					SELECT category, ${column('category_value_goals', 'amount', '0')},
+						${column('category_value_goals', 'currency', "'BRL'")}
+					FROM backup.category_value_goals`
+			);
+		}
 
 		target.exec(statements.join(';\n'));
 		// Keep the invariant even when the backup was written by an older
@@ -288,7 +349,10 @@ export function copyUploadIntoTarget(
 		asks: count(target, 'ask_history'),
 		todoGroups: count(target, 'todo_groups'),
 		todoItems: count(target, 'todo_items'),
-		principles: count(target, 'principles')
+		principles: count(target, 'principles'),
+		holdings: count(target, 'holdings'),
+		goals: count(target, 'category_goals'),
+		valueGoals: count(target, 'category_value_goals')
 	};
 }
 

@@ -31,6 +31,9 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { search } from '$lib/search.svelte';
 	import { navigating } from '$app/state';
 	import SectionBar from '$lib/components/SectionBar.svelte';
+	import HoldingsCarousel from '$lib/components/HoldingsCarousel.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
 	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
 	import { SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
@@ -159,6 +162,8 @@ function langTag(p: Lang): string {
 		todoGroups: number;
 		todoItems: number;
 		principles: number;
+		holdings: number;
+		goals: number;
 	};
 
 	function closeRestore() {
@@ -260,6 +265,7 @@ function langTag(p: Lang): string {
 		loadNotes();
 		void loadFeatured();
 		void tagColors.load();
+		void loadHoldings();
 		refreshSummaryAnswer(true, null, false);
 		void loadAsks();
 		// Restore the unsaved composer text after SPA navigation or a reload.
@@ -354,6 +360,155 @@ function langTag(p: Lang): string {
 			const d = await (await loading.track(fetch('/api/asks'))).json();
 			asks = Array.isArray(d.asks) ? d.asks : [];
 		} catch {}
+	}
+
+	let holdings = $state<HoldingsSummary | null>(null);
+	let holdingsRefreshing = $state(false);
+	let confirmingHolding = $state<Holding | null>(null);
+	let holdingsAutoRefreshed = false;
+
+	async function loadHoldings() {
+		try {
+			const d = await (await fetch('/api/holdings')).json();
+			if (!Array.isArray(d.holdings)) return;
+			holdings = d as HoldingsSummary;
+			// Every non-cash quote comes from the market: ask on load, once
+			// per session. The server answers from cache until a quote is a
+			// day old, so this costs one request, not one network fetch.
+			if (
+				!holdingsAutoRefreshed &&
+				holdings.holdings.some((h) => h.category !== 'cash' && (h.priceAuto || h.price === null))
+			) {
+				holdingsAutoRefreshed = true;
+				void refreshHoldings(true);
+			}
+		} catch {
+			showToast('Failed to load holdings.');
+		}
+	}
+
+	async function createHolding(h: { ticker: string; amount: number; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }): Promise<boolean> {
+		try {
+			const res = await fetch('/api/holdings', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(h)
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to add holding.');
+			holdings = d.summary as HoldingsSummary;
+			// New tickers start with no quote; fill it without blocking the
+			// modal or showing a toast. The daily cache still applies.
+			void refreshHoldings(true);
+			return true;
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to add holding.');
+			return false;
+		}
+	}
+
+	async function updateHolding(
+		id: string,
+		patch: { ticker: string; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }
+	): Promise<boolean> {
+		try {
+			const res = await fetch(`/api/holdings/${id}`, {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(patch)
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to update holding.');
+			holdings = d.summary as HoldingsSummary;
+			// A ticker or category change clears the quote; fetch the new one
+			// quietly. Amount-only edits stay served from the cache.
+			void refreshHoldings(true);
+			return true;
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to update holding.');
+			return false;
+		}
+	}
+
+	async function loadHoldingActions(id: string): Promise<HoldingAction[] | null> {
+		try {
+			const res = await fetch(`/api/holdings/${id}/actions`);
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to load actions.');
+			return Array.isArray(d.actions) ? (d.actions as HoldingAction[]) : null;
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to load actions.');
+			return null;
+		}
+	}
+
+	async function recordHoldingAction(
+		id: string,
+		kind: 'buy' | 'sell',
+		amount: number
+	): Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }> {
+		try {
+			const res = await fetch(`/api/holdings/${id}/actions`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ kind, amount })
+			});
+			const d = await res.json();
+			if (!res.ok) return { ok: false, error: d?.error ?? 'Failed to record the action.' };
+			if (d.summary) holdings = d.summary as HoldingsSummary;
+			return { ok: true, actions: Array.isArray(d.actions) ? (d.actions as HoldingAction[]) : undefined };
+		} catch {
+			return { ok: false, error: 'Failed to record the action.' };
+		}
+	}
+
+	async function updateGoals(
+		pct: { btc: number; fii: number; cash: number },
+		values: { btc: number | null; fii: number | null; cash: number | null }
+	): Promise<boolean> {
+		try {
+			const res = await fetch('/api/holdings/goals', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ pct, values })
+			});
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to save goals.');
+			holdings = d.summary as HoldingsSummary;
+			return true;
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to save goals.');
+			return false;
+		}
+	}
+
+	async function deleteHolding(h: Holding) {
+		try {
+			const res = await fetch(`/api/holdings/${h.id}`, { method: 'DELETE' });
+			if (!res.ok) throw new Error('Failed to delete holding.');
+			holdings = ((await res.json()).summary ?? null) as HoldingsSummary | null;
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to delete holding.');
+		}
+	}
+
+	async function refreshHoldings(quiet = false, force = false) {
+		if (holdingsRefreshing) return;
+		holdingsRefreshing = true;
+		try {
+			const res = await fetch('/api/holdings', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(force ? { force: true } : {})
+			});
+			const d = await res.json();
+			if (d.summary) holdings = d.summary as HoldingsSummary;
+			if (d.error && !quiet) showToast(`Prices not refreshed — ${d.error}. Showing cached values.`);
+		} catch {
+			if (!quiet) showToast('Prices not refreshed — showing cached values.');
+		} finally {
+			holdingsRefreshing = false;
+		}
 	}
 
 	function refreshSummaryAnswer(force: boolean, keepAnswer: string | null, withLoading: boolean) {clearTimeout(summaryTimer);
@@ -615,7 +770,7 @@ function langTag(p: Lang): string {
 	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">
 		<header class="mb-5">
 			<div class="flex flex-wrap items-center gap-2">
-				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmap</a>
+				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmaps</a>
 				<a href="/tags" aria-disabled={tagsLoading} aria-busy={tagsLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {tagsLoading ? 'pointer-events-none opacity-40' : ''}">{#if tagsLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Tags class="h-3.5 w-3.5" />{/if} Tags</a>
 				<button
 					type="button"
@@ -645,6 +800,20 @@ function langTag(p: Lang): string {
 				</span>
 			</div>
 		</header>
+
+		<section class="mb-4" aria-label="Holdings">
+			<HoldingsCarousel
+				summary={holdings}
+				refreshing={holdingsRefreshing}
+				onCreate={createHolding}
+				onUpdate={updateHolding}
+				onDelete={(h) => (confirmingHolding = h)}
+				onLoadActions={loadHoldingActions}
+				onRecordAction={recordHoldingAction}
+				onRefresh={() => void refreshHoldings(false, true)}
+				onGoals={updateGoals}
+			/>
+		</section>
 
 		<div class="mb-4" role="tablist" aria-label="Views">
 			<SectionBar
@@ -722,6 +891,18 @@ function langTag(p: Lang): string {
 
 		{#if copyText !== null}
 			<CopyFallback text={copyText} onClose={() => (copyText = null)} />
+		{/if}
+
+		{#if confirmingHolding}
+			<ConfirmDialog
+				title="Delete this holding?"
+				message="{confirmingHolding.ticker} and its history leave the carousel. The notes stay."
+				confirmLabel="Delete holding"
+				cancelLabel="Cancel"
+				confirmTone="danger"
+				onConfirm={() => { const h = confirmingHolding; confirmingHolding = null; if (h) void deleteHolding(h); }}
+				onCancel={() => (confirmingHolding = null)}
+			/>
 		{/if}
 
 		{#if restorePhase}

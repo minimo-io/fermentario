@@ -46,7 +46,8 @@
 	import { tick } from 'svelte';
 	import { dayLocale } from '$lib/dates';
 	import { withTrailingHashtags } from '$lib/hashtags';
-	import { inlineMarkdown } from '$lib/markdown-inline';
+	import { renderNoteContent } from '$lib/note-links';
+	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
 	import { motionMs } from '$lib/motion';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
@@ -318,6 +319,9 @@
 						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
 						<div class="flex min-w-0 flex-1 items-start gap-3 max-sm:w-full">
 						<div class="min-w-0 flex-1">
+							{#if (n.linkedNotes?.length ?? 0) > 0}
+								<div class="mb-1.5"><NoteLinkPills links={n.linkedNotes ?? []} /></div>
+							{/if}
 							{#if n.id in collapsed || foldable[n.id]}
 								<div
 									bind:this={foldEls[n.id]}
@@ -330,15 +334,15 @@
 										bind:this={textEls[n.id]}
 										class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 block"
 										aria-expanded={n.id in collapsed ? 'false' : 'true'}
-										onclick={() => void toggleFolded(n.id)}
+										onclick={(e) => { if ((e.target as HTMLElement).closest('a')) return; void toggleFolded(n.id); }}
 									>
 										<span class="w-full {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : 'block'}">
-											{@html inlineMarkdown(n.content)}
+											{@html renderNoteContent(n.content, n.linkedNotes)}
 										</span>
 									</button>
 								</div>
 							{:else}
-								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html inlineMarkdown(n.content)}</p>
+								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html renderNoteContent(n.content, n.linkedNotes)}</p>
 							{/if}
 							{#if n.video}
 								<div class="mt-2"><VideoPill id={n.video} /></div>

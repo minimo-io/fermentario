@@ -6,6 +6,7 @@
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { youTubeWatchUrl } from '$lib/youtube';
+	import NoteFinder from '$lib/components/NoteFinder.svelte';
 	import type { Note } from '$lib/types';
 
 	type Props = {
@@ -22,6 +23,8 @@
 	let saving = $state(false);
 	let err = $state('');
 	let full = $state(false);
+	let editField = $state<HTMLTextAreaElement | null>(null);
+	let finder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
 	// svelte-ignore state_referenced_locally
 	let noteDate = $state(datetimeLocalValue(note.created_at));
 	const maxNoteDate = datetimeLocalValue(Date.now());
@@ -87,12 +90,17 @@
 					>&times;</button>
 				</div>
 			</div>
-			<textarea
-				class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600 {full ? 'min-h-0 flex-1 resize-none' : 'max-h-[50dvh] min-h-32 resize-y'}"
-				value={content}
-				oninput={(e) => onContent(e.currentTarget.value)}
-				placeholder="Note text"
-			></textarea>
+			<div class={full ? 'relative flex min-h-0 flex-1 flex-col' : 'relative'}>
+				<textarea
+					bind:this={editField}
+					class="mt-3 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600 {full ? 'min-h-0 flex-1 resize-none' : 'max-h-[50dvh] min-h-32 resize-y'}"
+					value={content}
+					oninput={(e) => onContent(e.currentTarget.value)}
+					onkeydown={(e) => { finder?.handleKey(e); }}
+					placeholder="Note text"
+				></textarea>
+				<NoteFinder bind:this={finder} textarea={editField} excludeId={note.id} />
+			</div>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-date">Date and time</label>
 			<input
 				id="edit-note-date"

@@ -1,3 +1,5 @@
+import type { LinkRef } from './platform/journal';
+
 export interface Note {
 	id: string;
 	content: string;
@@ -8,6 +10,118 @@ export interface Note {
 	featured?: boolean;
 	video?: string;
 	commentCount?: number;
+	linkedNotes?: LinkRef[];
+}
+
+export type HoldingCategory = 'btc' | 'fii' | 'cash';
+
+export type HoldingActionKind = 'opening' | 'buy' | 'sell';
+
+export interface HoldingAction {
+	id: string;
+	holding_id: string;
+	kind: HoldingActionKind;
+	amount: number;
+	/** Unit price at the time of the action; null when no quote was cached. */
+	price: number | null;
+	currency: string;
+	created_at: number;
+}
+
+export interface Holding {
+	id: string;
+	ticker: string;
+	amount: number;
+	price: number | null;
+	priceAuto: boolean;
+	currency: string;
+	category: HoldingCategory;
+	goal: number | null;
+	bank: string;
+	country: string;
+	position: number;
+	created_at: number;
+	updated_at: number;
+	/** Last write of `price` (quote refresh or hand edit); 0 when never set. */
+	price_updated_at: number;
+	/** Average cost per unit on the opening row; null until set. */
+	avgPrice: number | null;
+	valueUsd?: number;
+}
+
+/** Buys and sells per calendar day, for the investments heatmap. */
+export interface TradeDay {
+	day: string;
+	buys: number;
+	sells: number;
+}
+
+export interface TradeHistoryItem {
+	id: string;
+	holding_id: string;
+	ticker: string;
+	bank: string;
+	category: HoldingCategory;
+	kind: 'buy' | 'sell';
+	amount: number;
+	price: number | null;
+	currency: string;
+	created_at: number;
+}
+
+export interface TradeHistoryCursor {
+	created_at: number;
+	id: string;
+}
+
+export interface TradeHistoryPage {
+	items: TradeHistoryItem[];
+	count: number;
+	hasMore: boolean;
+	nextCursor: TradeHistoryCursor | null;
+}
+
+export interface CategoryShare {
+	category: HoldingCategory;
+	actual: number;
+	goal: number;
+}
+
+/** Absolute target, independent from the percent allocation goals. */
+export interface CategoryValueGoal {
+	amount: number;
+	currency: string;
+}
+
+export interface CategoryValueProgress {
+	category: HoldingCategory;
+	target: number;
+	currency: string;
+	/** Current category value in the target currency; null when no rate exists. */
+	actual: number | null;
+	/** Current category value in USD, the value the totals use. */
+	actualUsd: number;
+	/** target - actual; null when no rate exists. */
+	gap: number | null;
+	/** actual / target * 100; null when no rate exists. */
+	pct: number | null;
+}
+
+export interface HoldingsSummary {
+	holdings: Holding[];
+	totalUsd: number;
+	asOf: number | null;
+	/** True when a needed rate is missing or older than a day. */
+	stale: boolean;
+	goals: { btc: number; fii: number; cash: number } | null;
+	/** Independent absolute targets; null when none are set. */
+	valueGoals: { btc: CategoryValueGoal | null; fii: CategoryValueGoal | null; cash: CategoryValueGoal | null } | null;
+	/** Progress for each category that has an absolute target. */
+	valueProgress: CategoryValueProgress[];
+	actual: { btc: number; fii: number; cash: number };
+	/** Categories off their goal by more than 5 points. */
+	drift: CategoryShare[];
+	displayTotals: { USD: number; BRL: number | null; UYU: number | null };
 }
 
 export interface ChatCtx {
@@ -59,6 +173,7 @@ export interface Principle {
 	video: string;
 	tags: string[];
 	commentCount: number;
+	linkedNotes?: LinkRef[];
 }
 
 export interface PrincipleComment {

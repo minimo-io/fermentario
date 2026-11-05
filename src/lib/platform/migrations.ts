@@ -147,7 +147,133 @@ const commentPins: Migration = {
 	}
 };
 
-export const MIGRATIONS: Migration[] = [baseline, commentPins];
+/** Investing boxes: holdings with manual prices plus cached FX rates. */
+const holdings: Migration = {
+	version: 3,
+	name: 'holdings',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS holdings (
+				id         TEXT PRIMARY KEY,
+				ticker     TEXT NOT NULL,
+				amount     REAL NOT NULL DEFAULT 0,
+				price      REAL,
+				price_auto INTEGER NOT NULL DEFAULT 0,
+				currency   TEXT NOT NULL DEFAULT 'USD',
+				position   INTEGER NOT NULL DEFAULT 0,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS fx_rates (
+				currency    TEXT PRIMARY KEY,
+				rate_to_usd REAL NOT NULL,
+				fetched_at  INTEGER NOT NULL
+			);
+		`);
+	}
+};
+
+/** Holdings goals: per-holding target amounts plus allocation targets. */
+const holdingGoals: Migration = {
+	version: 4,
+	name: 'holding-goals',
+	up(db) {
+		addColumn(db, 'holdings', 'goal', 'REAL');
+		addColumn(db, 'holdings', 'category', "TEXT NOT NULL DEFAULT 'fii'");
+		db.exec(`UPDATE holdings SET category = 'btc' WHERE UPPER(ticker) = 'BTC'`);
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS category_goals (
+				category TEXT PRIMARY KEY,
+				pct      REAL NOT NULL
+			);
+		`);
+	}
+};
+
+/** Cash holdings carry their bank and account country. */
+const holdingBank: Migration = {
+	version: 5,
+	name: 'holding-bank',
+	up(db) {
+		addColumn(db, 'holdings', 'bank', "TEXT NOT NULL DEFAULT ''");
+		addColumn(db, 'holdings', 'country', "TEXT NOT NULL DEFAULT ''");
+	}
+};
+
+/** When the stored price last came from a quote or a hand edit. */
+const holdingPriceTime: Migration = {
+	version: 6,
+	name: 'holding-price-time',
+	up(db) {
+		addColumn(db, 'holdings', 'price_updated_at', 'INTEGER NOT NULL DEFAULT 0');
+		db.exec('UPDATE holdings SET price_updated_at = updated_at WHERE price IS NOT NULL');
+	}
+};
+
+/** Buy/sell ledger. The opening row preserves the quantity a holding had
+ *  before this table existed; later rows add to or subtract from it. */
+const holdingActions: Migration = {
+	version: 7,
+	name: 'holding-actions',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS holding_actions (
+				id         TEXT PRIMARY KEY,
+				holding_id TEXT NOT NULL REFERENCES holdings(id) ON DELETE CASCADE,
+				kind       TEXT NOT NULL,
+				amount     REAL NOT NULL,
+				price      REAL,
+				currency   TEXT NOT NULL DEFAULT 'USD',
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS holding_actions_holding
+				ON holding_actions(holding_id, created_at DESC);
+			INSERT INTO holding_actions (id, holding_id, kind, amount, price, currency, created_at)
+				SELECT 'open-' || id, id, 'opening', amount, NULL, currency, created_at FROM holdings;
+		`);
+	}
+};
+
+/** Cash counts at face value, including the backfilled opening rows. */
+const holdingActionCash: Migration = {
+	version: 8,
+	name: 'holding-action-cash',
+	up(db) {
+		db.exec(`
+			UPDATE holding_actions SET price = 1
+			WHERE kind = 'opening' AND price IS NULL
+				AND holding_id IN (SELECT id FROM holdings WHERE category = 'cash');
+		`);
+	}
+};
+
+/** Absolute value targets are independent from the percent allocation goals,
+ *  so they live in their own table and do not affect the sum-to-100 rule. */
+const categoryValueGoals: Migration = {
+	version: 9,
+	name: 'category-value-goals',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS category_value_goals (
+				category TEXT PRIMARY KEY,
+				amount   REAL NOT NULL,
+				currency TEXT NOT NULL
+			);
+		`);
+	}
+};
+
+export const MIGRATIONS: Migration[] = [
+	baseline,
+	commentPins,
+	holdings,
+	holdingGoals,
+	holdingBank,
+	holdingPriceTime,
+	holdingActions,
+	holdingActionCash,
+	categoryValueGoals
+];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 
 /** Read the recorded version. A database without the tracking table is 0. */
