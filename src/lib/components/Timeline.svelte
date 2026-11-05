@@ -135,6 +135,13 @@
 
 	function finishFold(id: string, e: TransitionEvent) {
 		if (e.target !== e.currentTarget || e.propertyName !== 'max-height') return;
+		// Keep the one-line cap while the note stays folded: clearing it here
+		// leaves one frame where the wrapper has no cap before the clamp
+		// paints, so a folded card flickers back to full height (WebKit).
+		if (id in collapsed) {
+			delete unclamped[id];
+			return;
+		}
 		delete maxHeights[id];
 		delete unclamped[id];
 		measureFoldable();

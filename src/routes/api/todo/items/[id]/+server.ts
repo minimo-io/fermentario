@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { getTodoItem, updateTodoItem, deleteTodoItem, setTodoItemTags } from '$lib/server/db';
 import { splitTrailingHashtags } from '$lib/hashtags';
 import { splitLeadingSubgroup } from '$lib/subgroups';
+import { extractYouTubeId } from '$lib/youtube';
 
 export async function GET({ params }) {
 	const item = getTodoItem(params.id);
@@ -12,7 +13,7 @@ export async function GET({ params }) {
 export async function PATCH({ params, request }) {
 	const body = await request.json();
 	if (!getTodoItem(params.id)) return json({ error: 'item not found' }, { status: 404 });
-	const patch: { content?: string; done?: boolean; inProgress?: boolean; subgroup?: string; group_id?: string } = {};
+	const patch: { content?: string; done?: boolean; inProgress?: boolean; subgroup?: string; video?: string; group_id?: string } = {};
 	// Editing text re-parses trailing hashtags, exactly like notes, and a
 	// leading (subgroup) moves the item (empty prefix clears it).
 	if (typeof body?.content === 'string') {
@@ -22,6 +23,16 @@ export async function PATCH({ params, request }) {
 		patch.content = group.content;
 		patch.subgroup = group.subgroup;
 		setTodoItemTags(params.id, tags);
+	}
+	if (typeof body?.video === 'string') {
+		const raw = body.video.trim();
+		if (raw) {
+			const id = extractYouTubeId(raw);
+			if (!id) return json({ error: 'not a YouTube URL' }, { status: 400 });
+			patch.video = id;
+		} else {
+			patch.video = '';
+		}
 	}
 	if (typeof body?.done === 'boolean') patch.done = body.done;
 	if (typeof body?.inProgress === 'boolean') patch.inProgress = body.inProgress;

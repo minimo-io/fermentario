@@ -247,7 +247,7 @@ function langTag(p: Lang): string {
 			// re-opened the hidden weekly card.
 			refreshSummaryAnswer(false, null, false);
 			showToast(
-				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
+				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.holdings ?? 0} holdings, ${counts?.goals ?? 0} goals, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
 				'success'
 			);
 			setTimeout(closeRestore, 2500);
@@ -584,7 +584,8 @@ function langTag(p: Lang): string {
 				// The card is still listed under the temp id, so it must be
 				// swapped, not patched by the server id.
 				pager.replace(tempId, saved);
-				if (!fitsLoadedPage) showToast('Note saved. Scroll down to find it.');
+				if (!fitsLoadedPage) showToast('Note saved. Scroll down to find it.', 'success');
+				else showToast('Note saved.', 'success');
 				clearDraft();
 				refreshSummaryAnswer(false, null, false);
 				setTimeout(() => {
@@ -645,7 +646,7 @@ function langTag(p: Lang): string {
 		const note = d.note as Note;
 		const wasLoaded = pager.notes.some((n) => n.id === note.id);
 		if (wasLoaded && !pager.replaceSorted(note)) {
-			showToast('Note saved. Scroll down to find it.');
+			showToast('Note saved. Scroll down to find it.', 'success');
 		}
 		featured = featured
 			.map((f) => (f.id === note.id ? note : f))

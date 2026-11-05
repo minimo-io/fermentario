@@ -148,8 +148,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 9) {
-		console.error('The legacy import did not register an active v9 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 10) {
+		console.error('The legacy import did not register an active v10 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -344,13 +344,21 @@ volatile.add(group.body.group.created_at);
 const item = await api(
 	'POST /api/todo/groups/[id]/items',
 	`/api/todo/groups/${groupId}/items`,
-	json({ content: 'Task that must survive a restore #trip' })
+	json({ content: 'Task that must survive a restore #trip', video: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })
 );
-must('POST /api/todo/groups/[id]/items', item, (r) => r.status === 201 && !!r.body.item, '201 with an item');
+must('POST /api/todo/groups/[id]/items', item, (r) => r.status === 201 && !!r.body.item && r.body.item.video === 'dQw4w9WgXcQ', '201 with an item and a video id');
 const itemId = item.body.item.id;
 volatile.add(itemId);
 volatile.add(item.body.item.created_at);
 volatile.add(item.body.item.updated_at);
+
+const itemVideo = await api(
+	'PATCH /api/todo/items/[id] video',
+	`/api/todo/items/${itemId}`,
+	json({ video: 'https://www.youtube.com/watch?v=9bZkp7q19f0' }, 'PATCH')
+);
+must('PATCH /api/todo/items/[id] video', itemVideo, (r) => r.status === 200 && r.body.item?.video === '9bZkp7q19f0', '200 with the new video id');
+volatile.add(itemVideo.body.item.updated_at);
 
 const taskComment = await api(
 	'POST /api/todo/items/[id]/comments',
@@ -989,9 +997,9 @@ must(
 	restoredItems,
 	(r) =>
 		r.body.items?.some(
-			(i) => i.id === itemId && i.content === 'Task that must survive a restore' && i.tags.includes('trip')
+			(i) => i.id === itemId && i.content === 'Task that must survive a restore' && i.tags.includes('trip') && i.video === '9bZkp7q19f0'
 		),
-	'the todo item and its tag'
+	'the todo item, its tag and its video'
 );
 
 const restoredTaskComments = await api(

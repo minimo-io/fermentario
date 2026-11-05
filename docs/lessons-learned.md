@@ -1918,3 +1918,65 @@
   after a submit (`releaseBar()`).
 - After saving from the fullscreen editor, close it with `closeWide(false)`.
   The default refocuses the bar, which brings the scrim back over the note.
+
+## Session: Grouping principles + single-line group row
+- Principles group from a leading `(name)` in the stored text, using the same
+  `splitLeadingSubgroup` as To-Do. No schema change: the prefix stays stored,
+  the list view strips it, and every other surface keeps the full line.
+- Drag order must stay inside one group. A cross-group drop saves an order
+  that neither list shows, because each group renders in stored order.
+  Compare subgroups in `endDrag` and move `↑/↓` only between peers.
+- The To-Do group pill row had `sm:flex-wrap`, which silently turned the
+  carousel off at 640 px and pushed groups onto a second line. A carousel
+  needs one direction only; drop the wrap, keep `overflow-x-auto`.
+- ASCII patterns do not cover user text. `/^[a-z]/i` does not match `í`:
+  case folding only maps ASCII to ASCII. Use Unicode categories with the `u`
+  flag (`\p{L}`, `\p{N}`, `\p{M}`) for names and labels. Also allow inner
+  spaces in `(group)` names: a single-token rule rejects real titles such as
+  `(Política social)`. Capture the parenthetical, then normalize (NFC, trim,
+  collapse spaces, lowercase) and validate the result.
+- `@lucide/svelte` ships a `bitcoin` icon, but it is a monochrome line glyph.
+  A brand mark needs the official artwork: orange `#f7931a` coin with the
+  white B. Inline the SVG as a snippet when only one component uses it.
+
+## Session: Groups first, task video, fold snap-back, publish toast
+- Groups-first lists need display-order numbers. A stored index (`n: i + 1`)
+  reads `2, 3, 1` once groups move above ungrouped items. Build the display
+  order (groups in first-appearance order, then ungrouped) and map ids to
+  `1…n`; stored order still drives group order and drag.
+- Optional task video repeats the note/principle field checklist: `SCHEMA` +
+  migration 10, both `TodoItem` types, the row mapper, `create`/`update`
+  signatures and SQL, both API routes with `extractYouTubeId` validation
+  before any write, the restore copy with a `''` fallback, the smoke schema
+  version and a video round-trip, plus the baseline update.
+- Fold cleanup must not clear the collapsed cap. Clearing `max-height` in the
+  same frame the `line-clamp` paints leaves one unclamped frame: the card
+  folds, then flashes back to full height. Keep the one-line `max-height`
+  while collapsed; clear it only on expansion. Same rule in `CommentItem`.
+- `showToast(text)` defaults to the error tone. Every success message —
+  including the existing `Note saved. Scroll down to find it.` paths — must
+  pass `'success'` explicitly, or a good result renders red.
+
+## Session: Forced holding refresh skipped fresh FII quotes
+- A `force` flag must widen the row selection, not only bypass the early
+  return. `refreshRates(true)` still built `stockRows` from
+  `price_updated_at < now - 24h`, so a FII quoted hours earlier was skipped;
+  fiat and BTC updated, the FII edit modal kept the old timestamp.
+- Quote staleness must read `price_updated_at`, not `updated_at`. Changing an
+  amount bumps `updated_at`, which made an old quote look fresh in the
+  summary.
+
+## Session: Cash card shows every other conversion
+- A cash card has only the summary totals, not the fx table. Derive each
+  other-currency line as `valueUsd * displayTotals.X / totalUsd`, skip the
+  account's own currency, and give each remaining rate its own line. Do not
+  pack two conversions into one truncated line: large balances lose the
+  second amount.
+
+## Session: One currency formatter
+- `Intl` with `style: 'currency'` does not give stable symbols: `es-UY`
+  renders UYU as `$`, the same glyph as USD. Own the symbol map and let the
+  locale format only the number: `$` + en-US, `R$` + pt-BR, `$U` + es-UY.
+- Local copies of `fmtMoney` drift. The cash card and the stats modal
+  disagreed on UYU. One `$lib/currency.ts` helper is the rule enforcer;
+  call sites pass only the value, currency and decimals.

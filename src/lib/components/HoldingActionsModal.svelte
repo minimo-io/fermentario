@@ -4,6 +4,7 @@
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { fmtCurrency } from '$lib/currency';
 	import type { Holding, HoldingAction } from '$lib/types';
 
 	// Buy/sell ledger for one holding. The form stays at the top; past
@@ -46,15 +47,7 @@
 	});
 
 	function fmtMoney(v: number, ccy: string): string {
-		try {
-			return new Intl.NumberFormat('en-US', {
-				style: 'currency',
-				currency: ccy,
-				maximumFractionDigits: 2
-			}).format(v);
-		} catch {
-			return `${v.toFixed(2)} ${ccy}`;
-		}
+		return fmtCurrency(v, ccy, 2);
 	}
 
 	function fmtAmount(v: number): string {

@@ -12,7 +12,10 @@ sizing. Consult this before changing any of them.
   672px for its 53-column grid, so its grid scrolls horizontally inside the
   container rather than widening the page.
 - **Composer** (fixed bottom bar): `mx-auto max-w-2xl px-6 pb-8`. Same width as
-  the page, so the bar and the content align with no gap. Focusing the bar
+  the page, so the bar and the content align with no gap. The bar is light
+  grey (`bg-stone-100/95`) in light mode, not white, so the floating surface
+  separates from the page; `FixedBottomBar` uses the same surface. Dark mode
+  keeps `stone-900/95`. Focusing the bar
   shows a visual-only scrim behind it (`fixed inset-0 z-10`, same glass as
   the loading state: `white/25` plus `backdrop-blur-md`, `stone-950/25` in
   dark). It fades with the shared backdrop timing, stays while any bar
@@ -36,22 +39,29 @@ sizing. Consult this before changing any of them.
   boxes. First card is the black USD total — whole dollars, no cents, never
   truncated — with the BRL and UYU equivalents in grey beneath it, plus
   as-of date, stale mark, refresh, Stats (holding-stats modal) and the goals
-  modal. Holdings follow sorted by monetary value, highest first,
-  position only breaking ties. A BTC slot is always visible:
+  modal. Cash holdings follow the totals card in their API order, then the
+  rest by monetary value, highest first, position only breaking ties. A BTC
+  slot is always visible:
   it shows the holding when one exists, otherwise a fixed placeholder that
   opens the add form prefilled with BTC. A chevron header slides the strip
   shut (state in `ferm:holdings-collapsed`); the chevron rotates and, with
   the title, forms one toggle button. The collapsed row shows USD, BRL and
-  UYU totals; only the USD total is bold.
+  UYU totals, with only the USD total bold, plus a small refresh button
+  immediately after the last total that mirrors the totals card.
   Each box shows ticker bold
-  top-left — with a category-health dot once goals exist: green when the
+  top-left — the official orange Bitcoin coin, not the `₿` glyph or a line
+  icon, sits left of a BTC ticker — with a category-health dot once goals
+  exist: green when the
   category is within 2 points of its goal, yellow within 5, red beyond; no
   goals means no dot, individual holdings have no goals of their own, and
   absolute value targets never change the dot — and
   the monetary value big; below it the share count
   (`146 shares`, `0,1 BTC` — never a currency, shares are not money),
   the share of the total in percent, and an approximation in the other
-  currency on the same row (`≈ R$ …` for USD holdings, `≈ $…` otherwise).
+  currency (`≈ R$ …` for USD holdings, `≈ $…` otherwise). Cash cards keep
+  the account-currency total and show one `≈` line for every other known
+  currency — BRL → USD and UYU, USD → BRL and UYU, UYU → USD and BRL —
+  skipping a line when that rate is missing.
   Tap a box edits ticker, 3-letter currency, category, bank, country and the
   average cost; the amount only appears when adding. A small grey `+` at the
   top-right corner opens the buy/sell modal instead of the edit form.
@@ -64,7 +74,10 @@ sizing. Consult this before changing any of them.
   take the Fundamentus quote. Refresh runs at most once a day per quote: home
   open asks quietly and the server answers from cache until a quote is a day
   old, while failures keep cached values with a stale mark. The
-  totals-card refresh button always forces (`{force: true}`). A changed
+  totals-card refresh button always forces (`{force: true}`) and refetches
+  every auto-priced holding, even a quote fetched minutes ago. Staleness
+  reads `price_updated_at`, never `updated_at`, so an amount edit cannot
+  make an old quote look fresh. A changed
   ticker or category drops the old quote and re-arms auto mode immediately,
   so a saved edit never freezes a price. The cache lives in `fx_rates`.
   Display cards share one height without a fixed value: the rail uses
@@ -128,6 +141,10 @@ sizing. Consult this before changing any of them.
   first-line alignment, on desktop every element shares the ⋮ button's vertical
   centre. Right-align by flex (`ml-auto`), never `position: absolute` — an
   absolute pill overlays the open thread's Add form.
+- **To-Do group row**: the new-group `+`, the in-progress filter and every
+  group pill share ONE line at every width. The row is a horizontal carousel
+  (`overflow-x-auto no-scrollbar snap-x`) and never wraps on desktop; extra
+  groups scroll sideways.
 - **Comment count pills**: zero comments uses `bg-stone-100 dark:bg-stone-800`
   with muted text. A count above zero uses one darker step,
   `bg-stone-200 dark:bg-stone-700`, with darker text. The difference is subtle
@@ -180,7 +197,10 @@ sizing. Consult this before changing any of them.
   Short notes stay plain, non-tappable text. Tags, video pill, featured
   star and amber border stay visible while folded. The fold animates over
   180 ms by measuring the full text height: the one-line clamp comes off before
-  expansion and returns only after contraction finishes. The clamp lives on an
+  expansion and returns only after contraction finishes. The collapsed
+  one-line `max-height` stays until expansion — clearing it in the same frame
+  as the clamp paints leaves one unclamped frame, so the card flashes back to
+  full height. The clamp lives on an
   inner span inside the text button, not on the button itself: WebKit does not
   reduce a button's layout height for `-webkit-line-clamp`. Reduced motion turns
   the height animation off. Folds persist in
@@ -264,11 +284,12 @@ Do not introduce a new spacing value without checking this table first.
   destructive confirmations.
 - **Success**: `emerald-600` text, `emerald-50` fills, for confirmations.
 - **Accent**: `amber-400/50` for the weekly recap and processing states.
-- **Video**: notes and principles can carry a YouTube video, marked with a
+- **Video**: notes, tasks and principles can carry a YouTube video, marked with a
   `red-600` pill (the brand red — the one deliberate exception to the palette).
-  The pill toggles the click-to-load embed below it. On a principle card the
+  The pill toggles the click-to-load embed below it. On a principle card and a
+  task card the
   pill sits at the right edge from `sm` up, matching the tags and comment pill;
-  on mobile it stays left.
+  on mobile it stays left (tasks indent it with the text).
 - **Dark mode**: Settings → General offers `light`, `dark` and `system`; `system`
   follows the OS live. The choice persists as `theme` in `fermentario.config` and
   becomes the `dark` class on `<html>` before first paint. Use Tailwind's native
@@ -299,6 +320,18 @@ Do not introduce a new spacing value without checking this table first.
   dark:text-stone-500` (for example, **Task #a1b2c3d4**). The full UUID stays in
   the `title` tooltip.
 - Month headings in the Done tasks list use the section-header style.
+
+## Currency
+
+- One formatter only: `fmtCurrency(value, currency, decimals = 0)` in
+  `src/lib/currency.ts`. Do not use `Intl` with `style: 'currency'` directly:
+  `es-UY` renders UYU as `$`, the same glyph as USD.
+- Symbols are fixed and precede the number: USD `$`, BRL `R$`, UYU `$U`.
+  Unknown currencies use their ISO code (`EUR …`).
+- The number uses the currency's locale: `$1,234.56`, `R$ 1.234,56`,
+  `$U 9.732,00`. Decimals are explicit: 0 for totals and goals, 2 for
+  holdings and trades.
+- `$` attaches to the number; `R$` and `$U` take one space.
 
 ## Component widths
 
@@ -360,7 +393,17 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   multi-word tag from an older note) stays out of the text. The timeline
   `EditNoteDialog` follows the same rule and carries the same date field.
 - **Principles** (`PrinciplesTab`): cards show the creation date under the
-  text. The Add button carries the same desktop shortcut as the To-Do Add
+  text. A leading `(name)` token groups a principle exactly like To-Do
+  subgroups: one collapsible pill per group (`▾ v2 (3)`), in first-appearance
+  order, then an `Ungrouped` section when ungrouped principles exist. Names
+  accept letters and
+  digits in any script (accents included), spaces, dots and dashes, up to 31
+  characters, normalized to lowercase. The split is view-only — the
+  prefix stays in the stored text, so the principle page, tag pages, search
+  and RAG keep the full line. Numbers follow the display order, not the
+  stored index. Drag and `↑/↓` reorder only
+  within a group; a cross-group drop cancels. The Add button carries the same
+  desktop shortcut as the To-Do Add
   button: `⌘⇧A` on Mac, `Ctrl+Shift+A` elsewhere. The hint is hidden on touch,
   and the handler ignores editable targets and open dialogs.
 - **Global search** (`GlobalSearch.svelte`) mounts once in the root layout, so
@@ -374,6 +417,9 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
 - **Toasts** come from `$lib/toast.svelte` and render once from the root layout
   (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
   never for progress or background work. Auto-clear: 4 s error, 8 s success.
+  Publishing a note confirms with a success toast (`Note saved.`); a backdated
+  note outside the loaded cursor adds the scroll hint. `showToast` defaults to
+  error, so success messages must pass the tone explicitly.
 - **Loading feedback**: a static pill in `app.html` covers hydration no Svelte
   code can see. `NavigationLoader` removes it on mount and takes over: the first
   tracked wait shows at once, later route changes and data waits keep the 120 ms

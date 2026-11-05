@@ -126,7 +126,7 @@
 			if (pager.hasTag(note)) {
 				const wasLoaded = pager.notes.some((n) => n.id === note.id);
 				if (wasLoaded && !pager.replaceSorted(note)) {
-					showToast('Note saved. Scroll down to find it.');
+					showToast('Note saved. Scroll down to find it.', 'success');
 				}
 				pinned = pinned
 					.map((x) => (x.id === note.id ? note : x))

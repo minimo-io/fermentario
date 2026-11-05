@@ -263,6 +263,15 @@ const categoryValueGoals: Migration = {
 	}
 };
 
+/** Tasks carry an optional YouTube video, like notes and principles. */
+const todoVideo: Migration = {
+	version: 10,
+	name: 'todo-video',
+	up(db) {
+		addColumn(db, 'todo_items', 'video', "TEXT NOT NULL DEFAULT ''");
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -272,7 +281,8 @@ export const MIGRATIONS: Migration[] = [
 	holdingPriceTime,
 	holdingActions,
 	holdingActionCash,
-	categoryValueGoals
+	categoryValueGoals,
+	todoVideo
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

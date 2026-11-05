@@ -62,6 +62,7 @@ export const SCHEMA = `
 		done_at    INTEGER NOT NULL DEFAULT 0,
 		in_progress INTEGER NOT NULL DEFAULT 0,
 		subgroup   TEXT NOT NULL DEFAULT '',
+		video      TEXT NOT NULL DEFAULT '',
 		position   INTEGER NOT NULL DEFAULT 0,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
@@ -183,6 +184,7 @@ export interface TodoItem {
 	updated_at: number;
 	commentCount: number;
 	subgroup: string;
+	video: string;
 	tags: string[];
 }
 
@@ -741,6 +743,7 @@ export function createJournal(db: SqlDb) {
 		done_at: number;
 		in_progress: number;
 		subgroup: string;
+		video: string;
 		position: number;
 		created_at: number;
 		updated_at: number;
@@ -759,6 +762,7 @@ export function createJournal(db: SqlDb) {
 		updated_at: r.updated_at,
 		commentCount: r.comment_count ?? 0,
 		subgroup: r.subgroup ?? '',
+		video: r.video ?? '',
 		tags
 	});
 
@@ -779,7 +783,7 @@ export function createJournal(db: SqlDb) {
 		return rowToTodoItem(r, tagsByItem([r]).get(r.id) ?? []);
 	}
 
-	function createTodoItem(groupId: string, content: string, createdAt: number, subgroup = ''): TodoItem | null {
+	function createTodoItem(groupId: string, content: string, createdAt: number, subgroup = '', video = ''): TodoItem | null {
 		const group = db.prepare('SELECT id FROM todo_groups WHERE id = ?').get(groupId) as unknown as { id: string } | undefined;
 		if (!group) return null;
 		const clean = content.trim();
@@ -787,15 +791,15 @@ export function createJournal(db: SqlDb) {
 		const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM todo_items WHERE group_id = ?').get(groupId) as { m: number };
 		const id = crypto.randomUUID();
 		db.prepare(
-			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, subgroup, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?)'
-		).run(id, groupId, clean, subgroup, max.m + 1, createdAt, createdAt);
-		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, subgroup, tags: [] };
+			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, subgroup, video, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)'
+		).run(id, groupId, clean, subgroup, video, max.m + 1, createdAt, createdAt);
+		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, subgroup, video, tags: [] };
 	}
 
 	/** Edit text and/or checked state. `updated_at` always moves past
 	 *  `created_at`. Checking stamps `done_at`; unchecking clears it.
 	 *  Returns null when the item does not exist. */
-	function updateTodoItem(id: string, patch: { content?: string; done?: boolean; inProgress?: boolean; subgroup?: string; group_id?: string }): TodoItem | null {
+	function updateTodoItem(id: string, patch: { content?: string; done?: boolean; inProgress?: boolean; subgroup?: string; video?: string; group_id?: string }): TodoItem | null {
 		const existing = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as unknown as TodoItemRow | undefined;
 		if (!existing) return null;
 		const content = patch.content !== undefined ? patch.content.trim() : existing.content;
@@ -822,7 +826,8 @@ export function createJournal(db: SqlDb) {
 					: 0
 				: (existing.in_progress ?? 0);
 		const subgroup = patch.subgroup !== undefined ? patch.subgroup : (existing.subgroup ?? '');
-		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, in_progress = ?, subgroup = ?, group_id = ?, position = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, inProgress, subgroup, groupId, position, now, id);
+		const video = patch.video !== undefined ? patch.video : (existing.video ?? '');
+		db.prepare('UPDATE todo_items SET content = ?, done = ?, done_at = ?, in_progress = ?, subgroup = ?, video = ?, group_id = ?, position = ?, updated_at = ? WHERE id = ?').run(content, done, doneAt, inProgress, subgroup, video, groupId, position, now, id);
 		return getTodoItem(id);
 	}
 
@@ -1666,7 +1671,7 @@ export function createJournal(db: SqlDb) {
 				(h) =>
 					h.ticker !== 'BTC' &&
 					h.category !== 'cash' &&
-					(h.price === null || (h.priceAuto && now - h.updated_at > DAY_MS))
+					(h.price === null || (h.priceAuto && now - h.price_updated_at > DAY_MS))
 			)
 		) {
 			stale = true;
@@ -1718,7 +1723,9 @@ export function createJournal(db: SqlDb) {
 
 	/** Refresh fiat rates and auto-prices (BTC plus stock/FII quotes). Skips
 	 *  the network when every needed rate is younger than a day, unless
-	 *  forced. Throws on network or parse failure; the route answers with
+	 *  forced. A forced refresh refetches every auto-priced holding, even a
+	 *  quote fetched minutes ago; the daily cache only applies to quiet
+	 *  loads. Throws on network or parse failure; the route answers with
 	 *  the cached summary instead. A single bad ticker never stops the rest. */
 	async function refreshRates(force = false): Promise<HoldingsSummary> {
 		const rows = db.prepare('SELECT DISTINCT UPPER(currency) AS c FROM holdings').all() as unknown as { c: string }[];
@@ -1738,7 +1745,10 @@ export function createJournal(db: SqlDb) {
 			.prepare(
 				"SELECT id, ticker FROM holdings WHERE UPPER(ticker) != 'BTC' AND category != 'cash' AND price_auto = 1 AND price IS NOT NULL AND price_updated_at < ?"
 			)
-			.all(Date.now() - DAY_MS) as unknown as { id: string; ticker: string }[];
+			// A forced refresh must select fresh auto quotes too. Applying
+			// `force` only to the early return left a FII quoted hours ago
+			// untouched, and its edit modal kept yesterday's timestamp.
+			.all(force ? Date.now() + 1 : Date.now() - DAY_MS) as unknown as { id: string; ticker: string }[];
 		const stockRows = [...stockEmpty, ...stockStale.filter((r) => !stockEmpty.some((e) => e.id === r.id))];
 		if (fiats.length === 0 && btcEmpty.length === 0 && btcAuto.length === 0 && stockRows.length === 0) {
 			return getHoldingsSummary();

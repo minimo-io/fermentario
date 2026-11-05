@@ -230,7 +230,7 @@
 			</div>
 		{/if}
 		<div bind:this={bar}
-			class="relative flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-white/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3"
+			class="relative flex items-end gap-2 rounded-[2rem] border border-stone-200/80 dark:border-stone-800/80 bg-stone-100/95 dark:bg-stone-900/95 py-2 pl-3 pr-2 shadow-xl shadow-stone-900/10 dark:shadow-black/40 sm:py-3 sm:pl-5 sm:pr-3"
 			onfocusin={() => (focused = true)}
 			onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) focused = false; }}
 		>

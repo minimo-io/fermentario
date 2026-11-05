@@ -159,6 +159,7 @@ export interface TodoItem {
 	inProgress?: boolean;
 	commentCount?: number;
 	subgroup: string;
+	video: string;
 	position: number;
 	created_at: number;
 	updated_at: number;

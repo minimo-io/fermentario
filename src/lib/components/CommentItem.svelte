@@ -104,6 +104,12 @@
 	function finishFold(e: TransitionEvent) {
 		if (e.target !== e.currentTarget || e.propertyName !== 'max-height') return;
 		animating = false;
+		// Same rule as the timeline: while the comment stays folded, keep the
+		// one-line cap so the card never flashes back to full height.
+		if (collapsed) {
+			unclamped = false;
+			return;
+		}
 		maxHeight = undefined;
 		unclamped = false;
 		measure();

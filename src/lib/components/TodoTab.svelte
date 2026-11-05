@@ -13,6 +13,8 @@
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 	import { withSubgroupPrefix } from '$lib/subgroups';
+	import VideoPill from '$lib/components/VideoPill.svelte';
+	import { youTubeWatchUrl } from '$lib/youtube';
 	import { loading } from '$lib/loading.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
@@ -28,11 +30,13 @@
 	let addingGroup = $state(false);
 	let groupField = $state<HTMLInputElement | null>(null);
 	let newItem = $state('');
+	let newItemVideo = $state('');
 	let renaming = $state<string | null>(null);
 	let renameText = $state('');
 	let renameField = $state<HTMLInputElement | null>(null);
 	let editing = $state<string | null>(null);
 	let editText = $state('');
+	let editVideo = $state('');
 	let editGroup = $state('');
 	let editField = $state<HTMLTextAreaElement | null>(null);
 	let doneOpen = $state(false);
@@ -72,6 +76,7 @@
 		if (isMac ? !e.metaKey || e.altKey : !e.ctrlKey || e.altKey) return;
 		e.preventDefault();
 		newItem = '';
+		newItemVideo = '';
 		addingItem = true;
 	}
 
@@ -250,11 +255,12 @@
 			const res = await loading.track(fetch(`/api/todo/groups/${activeGroup}/items`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: newItem })
+				body: JSON.stringify({ content: newItem, video: newItemVideo.trim() })
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add item.');
 			newItem = '';
+			newItemVideo = '';
 			addingItem = false;
 			items = [...items, d.item];
 		} catch (e) {
@@ -311,6 +317,7 @@
 		// included, so saving never silently drops either.
 		const base = withSubgroupPrefix(item.subgroup, item.content);
 		editText = item.tags.length ? `${base} ${item.tags.map((t) => `#${t}`).join(' ')}` : base;
+		editVideo = item.video ? youTubeWatchUrl(item.video) : '';
 		editGroup = item.group_id;
 	}
 
@@ -324,7 +331,7 @@
 			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(target ? { content: editText, group_id: target } : { content: editText })
+				body: JSON.stringify({ content: editText, video: editVideo.trim(), ...(target ? { group_id: target } : {}) })
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save item.');
@@ -697,11 +704,14 @@
 						<!-- Mobile, bare row: pill alone is right-aligned on its own line. -->
 						<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(item)}</div>
 					{/if}
+					{#if item.video}
+						<div class="mt-1.5 pl-12 text-left sm:pl-0 sm:text-right"><VideoPill id={item.video} /></div>
+					{/if}
 				</li>
 {/snippet}
 
 <div>
-	<div class="no-scrollbar -mx-1 mb-4 flex snap-x items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+	<div class="no-scrollbar -mx-1 mb-4 flex snap-x items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:px-0">
 		<button
 			type="button"
 			aria-label="New group"
@@ -1043,6 +1053,17 @@
 					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
 				></textarea>
 				<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Leading (subgroup) moves it inside the list; trailing #tags retag it.</p>
+				<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-task-video">YouTube URL (optional)</label>
+				<input
+					id="edit-task-video"
+					class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+					aria-label="YouTube URL"
+					value={editVideo}
+					oninput={(e) => (editVideo = e.currentTarget.value)}
+					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
+					placeholder="https://www.youtube.com/watch?v=…"
+					inputmode="url"
+				/>
 				{#if groups.length > 1}
 					<div class="mt-3">
 						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-group">Group</label>
@@ -1181,7 +1202,7 @@
 		<button
 			type="button"
 			class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
-			onclick={() => { newItem = ''; addingItem = true; }}
+			onclick={() => { newItem = ''; newItemVideo = ''; addingItem = true; }}
 			aria-keyshortcuts={isMac ? 'Meta+Shift+A' : 'Control+Shift+A'}
 		><Plus class="h-4 w-4" /> Add<Kbd keys={addShortcutKeys} tone="dark" /></button>
 	</FixedBottomBar>
@@ -1210,6 +1231,17 @@
 				oninput={(e) => { newItem = e.currentTarget.value; autosizeItem(); }}
 				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void addItem(); }}
 			></textarea>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="new-task-video">YouTube URL (optional)</label>
+			<input
+				id="new-task-video"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+				aria-label="YouTube URL"
+				value={newItemVideo}
+				oninput={(e) => (newItemVideo = e.currentTarget.value)}
+				onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void addItem(); }}
+				placeholder="https://www.youtube.com/watch?v=…"
+				inputmode="url"
+			/>
 			<div class="mt-4 flex justify-end gap-2">
 				<button
 					type="button"

@@ -8,6 +8,7 @@
 	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EntityTitle from '$lib/components/EntityTitle.svelte';
+	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { sortComments } from '$lib/comments';
@@ -178,6 +179,9 @@
 						<TagChip {tag} picker={false} />
 					{/each}
 				</div>
+			{/if}
+			{#if item.video}
+				<div class="mt-2"><VideoPill id={item.video} /></div>
 			{/if}
 		</article>
 

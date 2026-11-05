@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { fmtCurrency } from '$lib/currency';
 	import type { HoldingsSummary, HoldingCategory, Holding, CategoryValueProgress } from '$lib/types';
 	// Holding stats: totals by category with configured vs actual share,
 	// independent value targets, plus every asset underneath. Read-only;
@@ -46,24 +47,11 @@
 	const BAND_TEXT = { on: '', near: 'text-amber-600 dark:text-amber-400', off: 'text-rose-600 dark:text-rose-400' } as const;
 
 	function fmtUsd(v: number): string {
-		try {
-			return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
-		} catch {
-			return `$${v.toFixed(0)}`;
-		}
+		return fmtCurrency(v, 'USD', 0);
 	}
 
 	function fmtMoney(v: number, currency: string): string {
-		const locale = currency === 'BRL' ? 'pt-BR' : currency === 'UYU' ? 'es-UY' : 'en-US';
-		try {
-			return new Intl.NumberFormat(locale, {
-				style: 'currency',
-				currency,
-				maximumFractionDigits: 0
-			}).format(v);
-		} catch {
-			return `${currency} ${Math.round(v).toLocaleString('en-US')}`;
-		}
+		return fmtCurrency(v, currency, 0);
 	}
 
 	const valueByCategory = $derived(

@@ -4,6 +4,7 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import { slide } from 'svelte/transition';
 	import { motionMs } from '$lib/motion';
+	import { fmtCurrency } from '$lib/currency';
 	import HoldingModal, { blankHoldingDraft } from '$lib/components/HoldingModal.svelte';
 	import type { HoldingDraft } from '$lib/components/HoldingModal.svelte';
 	import HoldingActionsModal from '$lib/components/HoldingActionsModal.svelte';
@@ -126,19 +127,11 @@
 	}
 
 	function fmtMoney(v: number, ccy: string): string {
-		try {
-			return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy, maximumFractionDigits: 2 }).format(v);
-		} catch {
-			return `${ccy} ${v.toFixed(2)}`;
-		}
+		return fmtCurrency(v, ccy, 2);
 	}
 
 	function fmtUsdWhole(v: number): string {
-		try {
-			return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.round(v));
-		} catch {
-			return `$${Math.round(v).toLocaleString('en-US')}`;
-		}
+		return fmtCurrency(v, 'USD', 0);
 	}
 
 	function fmtAmount(v: number): string {
@@ -153,19 +146,11 @@
 	}
 
 	function fmtBRL(v: number): string {
-		try {
-			return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
-		} catch {
-			return `R$ ${Math.round(v).toLocaleString('en-US')}`;
-		}
+		return fmtCurrency(v, 'BRL', 0);
 	}
 
 	function fmtUYU(v: number): string {
-		try {
-			return new Intl.NumberFormat('es-UY', { style: 'currency', currency: 'UYU', maximumFractionDigits: 0 }).format(v);
-		} catch {
-			return `$U ${Math.round(v).toLocaleString('en-US')}`;
-		}
+		return fmtCurrency(v, 'UYU', 0);
 	}
 
 	function totalSizeClass(): string {
@@ -175,9 +160,41 @@
 		return 'text-2xl';
 	}
 
+	/** Every other conversion a cash card can show. The card knows only the
+	 *  summary totals, so the per-USD rate is `displayTotals.X / totalUsd`.
+	 *  Skip the account's own currency and any rate the summary lacks. */
+	function cashEstimates(h: Holding): { code: 'USD' | 'BRL' | 'UYU'; text: string }[] {
+		if (!summary || h.category !== 'cash') return [];
+		const valueUsd = h.valueUsd;
+		if (valueUsd === undefined) return [];
+		// A missing main-currency rate makes valueUsd a fallback 1:1 guess.
+		if (h.currency === 'BRL' && summary.displayTotals.BRL === null) return [];
+		if (h.currency === 'UYU' && summary.displayTotals.UYU === null) return [];
+		const total = summary.totalUsd;
+		const out: { code: 'USD' | 'BRL' | 'UYU'; text: string }[] = [];
+		if (h.currency !== 'USD') {
+			out.push({ code: 'USD', text: `≈ ${fmtMoney(valueUsd, 'USD')}` });
+		}
+		if (h.currency !== 'BRL' && summary.displayTotals.BRL !== null && total > 0) {
+			out.push({ code: 'BRL', text: `≈ ${fmtBRL(valueUsd * (summary.displayTotals.BRL / total))}` });
+		}
+		if (h.currency !== 'UYU' && summary.displayTotals.UYU !== null && total > 0) {
+			out.push({ code: 'UYU', text: `≈ ${fmtUYU(valueUsd * (summary.displayTotals.UYU / total))}` });
+		}
+		return out;
+	}
+
 </script>
 
 {#if summary}
+	{#snippet btcMark()}
+		<!-- Official Bitcoin mark: orange coin, white B. -->
+		<svg viewBox="0 0 64 64" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" focusable="false">
+			<path fill="#f7931a" d="m63.033,39.744c-4.274,17.143-21.637,27.576-38.782,23.301-17.138-4.274-27.571-21.638-23.295-38.78,4.272-17.145,21.635-27.579,38.775-23.305,17.144,4.274,27.576,21.64,23.302,38.784z"/>
+			<path fill="#fff" d="m46.103,27.444c0.637-4.258-2.605-6.547-7.038-8.074l1.438-5.768-3.511-0.875-1.4,5.616c-0.923-0.23-1.871-0.447-2.813-0.662l1.41-5.653-3.509-0.875-1.439,5.766c-0.764-0.174-1.514-0.346-2.242-0.527l0.004-0.018-4.842-1.209-0.934,3.75s2.605,0.597,2.55,0.634c1.422,0.355,1.679,1.296,1.636,2.042l-1.638,6.571c0.098,0.025,0.225,0.061,0.365,0.117-0.117-0.029-0.242-0.061-0.371-0.092l-2.296,9.205c-0.174,0.432-0.615,1.08-1.609,0.834,0.035,0.051-2.552-0.637-2.552-0.637l-1.743,4.019,4.569,1.139c0.85,0.213,1.683,0.436,2.503,0.646l-1.453,5.834,3.507,0.875,1.439-5.772c0.958,0.26,1.888,0.5,2.798,0.726l-1.434,5.745,3.511,0.875,1.453-5.823c5.987,1.133,10.489,0.676,12.384-4.739,1.527-4.36-0.076-6.875-3.226-8.515,2.294-0.529,4.022-2.038,4.483-5.155zm-8.022,11.249c-1.085,4.36-8.426,2.003-10.806,1.412l1.928-7.729c2.38,0.594,10.012,1.77,8.878,6.317zm1.086-11.312c-0.99,3.966-7.1,1.951-9.082,1.457l1.748-7.01c1.982,0.494,8.365,1.416,7.334,5.553z"/>
+		</svg>
+	{/snippet}
+
 	{#snippet holdingCard(h: Holding)}
 		<div role="listitem" class="flex w-40 shrink-0 snap-start">
 			<div class="relative flex flex-1 flex-col overflow-hidden rounded-2xl border p-3 {h.category === 'cash' ? 'border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/70 dark:bg-emerald-950/40' : 'border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70'}">
@@ -188,6 +205,7 @@
 					onclick={() => openEdit(h)}
 				>
 					<p class="flex items-center gap-1 pr-6 text-[11px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+						{#if h.category === 'btc'}{@render btcMark()}{/if}
 						<span class="truncate">{h.category === 'cash' ? h.bank || h.ticker : h.ticker}{h.category === 'cash' && h.country ? ` · ${h.country}` : ''}</span>
 						{#if summary.goals !== null}
 							{@const diff = Math.abs(summary.actual[h.category] - summary.goals[h.category])}
@@ -203,15 +221,21 @@
 					<p class="truncate text-sm tabular-nums text-stone-600 dark:text-stone-300">
 						{#if h.category !== 'cash'}{fmtAmount(h.amount)} {h.category === 'btc' ? 'BTC' : 'shares'}{:else}&nbsp;{/if}
 					</p>
-					<p class="truncate text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
-						{#if h.price !== null && h.currency !== 'USD'}
-							≈ {fmtMoney(h.valueUsd ?? 0, 'USD')}
-						{:else if h.price !== null && summary.totalUsd > 0 && summary.displayTotals.BRL !== null}
-							≈ {fmtBRL((h.valueUsd ?? 0) * (summary.displayTotals.BRL / summary.totalUsd))}
-						{:else}
-							&nbsp;
-						{/if}
-					</p>
+					{#if h.category === 'cash'}
+						{#each cashEstimates(h) as estimate (estimate.code)}
+							<p class="truncate text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{estimate.text}</p>
+						{/each}
+					{:else}
+						<p class="truncate text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+							{#if h.price !== null && h.currency !== 'USD'}
+								≈ {fmtMoney(h.valueUsd ?? 0, 'USD')}
+							{:else if h.price !== null && summary.totalUsd > 0 && summary.displayTotals.BRL !== null}
+								≈ {fmtBRL((h.valueUsd ?? 0) * (summary.displayTotals.BRL / summary.totalUsd))}
+							{:else}
+								&nbsp;
+							{/if}
+						</p>
+					{/if}
 					{#if summary.totalUsd > 0}
 						<p class="truncate text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{(((h.valueUsd ?? 0) / summary.totalUsd) * 100).toFixed(1)}% of total</p>
 					{/if}
@@ -255,6 +279,16 @@
 				</span>
 			{/if}
 		</button>
+		{#if collapsed}
+			<button
+				type="button"
+				class="grid h-6 w-6 shrink-0 place-items-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 disabled:opacity-50 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+				aria-label="Refresh prices"
+				title="Refresh prices"
+				disabled={refreshing}
+				onclick={onRefresh}
+			><RefreshCw class="h-3.5 w-3.5 {refreshing ? 'animate-spin' : ''}" /></button>
+		{/if}
 	</div>
 	{#if !collapsed}
 		<div
@@ -322,7 +356,7 @@
 						aria-label="Set BTC amount"
 						onclick={() => openAdd({ ticker: 'BTC', currency: 'USD', category: 'btc' })}
 					>
-						<p class="text-[11px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">₿ BTC</p>
+						<p class="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">{@render btcMark()} BTC</p>
 						<p class="mt-1 truncate text-xl font-semibold tabular-nums text-stone-400 dark:text-stone-500">—</p>
 						<p class="truncate text-sm text-stone-400 dark:text-stone-500">tap to set amount</p>
 					</button>

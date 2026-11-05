@@ -2,6 +2,7 @@
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import ArrowDownRight from '@lucide/svelte/icons/arrow-down-right';
 	import { showToast } from '$lib/toast.svelte';
+	import { fmtCurrency } from '$lib/currency';
 	import type { TradeHistoryCursor, TradeHistoryItem, TradeHistoryPage } from '$lib/types';
 
 	type Props = { initial: TradeHistoryPage; lang?: string };
@@ -58,15 +59,7 @@
 	}
 
 	function fmtMoney(v: number, ccy: string): string {
-		try {
-			return new Intl.NumberFormat('en-US', {
-				style: 'currency',
-				currency: ccy,
-				maximumFractionDigits: 2
-			}).format(v);
-		} catch {
-			return `${v.toFixed(2)} ${ccy}`;
-		}
+		return fmtCurrency(v, ccy, 2);
 	}
 
 	function fmtAmount(v: number): string {

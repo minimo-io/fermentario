@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { listTodoItems, createTodoItem, setTodoItemTags, setTodoItemOrder } from '$lib/server/db';
 import { splitTrailingHashtags } from '$lib/hashtags';
 import { splitLeadingSubgroup } from '$lib/subgroups';
+import { extractYouTubeId } from '$lib/youtube';
 
 export async function GET({ params }) {
 	return json({ items: listTodoItems(params.id) });
@@ -28,7 +29,13 @@ export async function POST({ params, request }) {
 	if (!content) return json({ error: 'empty item' }, { status: 400 });
 	const group = splitLeadingSubgroup(content);
 	if (!group.content) return json({ error: 'empty item' }, { status: 400 });
-	const item = createTodoItem(params.id, group.content, Number(body?.created_at) || Date.now(), group.subgroup);
+	let videoId = '';
+	if (typeof body?.video === 'string' && body.video.trim()) {
+		const id = extractYouTubeId(body.video);
+		if (!id) return json({ error: 'not a YouTube URL' }, { status: 400 });
+		videoId = id;
+	}
+	const item = createTodoItem(params.id, group.content, Number(body?.created_at) || Date.now(), group.subgroup, videoId);
 	if (!item) return json({ error: 'group not found' }, { status: 404 });
 	if (tags.length > 0) {
 		setTodoItemTags(item.id, tags);

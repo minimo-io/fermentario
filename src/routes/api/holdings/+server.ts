@@ -12,8 +12,10 @@ export async function POST({ request }) {
 	return json({ holding, summary: getHoldingsSummary() }, { status: 201 });
 }
 
-/** Refresh fiat rates and the BTC auto-price. Never fails the carousel:
- *  a network error answers with the cached summary plus the error. */
+/** Refresh fiat rates and auto-prices. A forced refresh covers every
+ *  auto-priced holding (BTC, stock/FII), even a quote fetched minutes ago;
+ *  quiet loads keep the daily cache. Never fails the carousel: a network
+ *  error answers with the cached summary plus the error. */
 export async function PUT({ request }) {
 	const body = await request.json().catch(() => ({}));
 	try {

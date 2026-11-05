@@ -201,11 +201,12 @@ export function copyUploadIntoTarget(
 				`INSERT INTO todo_groups (id, name, position, created_at)
 					SELECT id, name, ${column('todo_groups', 'position', '0')}, created_at
 					FROM backup.todo_groups`,
-				`INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, subgroup, position, created_at, updated_at)
+				`INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, subgroup, video, position, created_at, updated_at)
 					SELECT id, group_id, content, done,
 						${column('todo_items', 'done_at', '0')},
 						${column('todo_items', 'in_progress', '0')},
 						${column('todo_items', 'subgroup', "''")},
+						${column('todo_items', 'video', "''")},
 						${column('todo_items', 'position', '0')},
 						created_at, updated_at
 					FROM backup.todo_items`

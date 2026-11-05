@@ -12,13 +12,14 @@
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { youTubeWatchUrl } from '$lib/youtube';
+	import { splitLeadingSubgroup } from '$lib/subgroups';
 	import Plus from '@lucide/svelte/icons/plus';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
-	import { fade, fly } from 'svelte/transition';
+	import { fade, fly, slide } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { loading } from '$lib/loading.svelte';
 
@@ -61,6 +62,26 @@
 	// Comments live in one modal — the same standard in every list. The
 	// list itself lives on the principle's own page.
 	let commenting = $state<Principle | null>(null);
+
+	// A leading `(name)` token groups a principle, exactly like To-Do
+	// subgroups. The prefix stays in the stored text, so the split is a list
+	// view only: /principles/[id], tag pages, search and the RAG text keep
+	// the full line. Groups render first, then the ungrouped principles, and
+	// numbers follow that display order.
+	type PrincipleRow = { p: Principle; content: string; subgroup: string };
+	const rows = $derived.by<PrincipleRow[]>(() =>
+		principles.map((p) => ({ p, ...splitLeadingSubgroup(p.content) }))
+	);
+	const ungrouped = $derived(rows.filter((r) => !r.subgroup));
+	const groupNames = $derived([...new Set(rows.map((r) => r.subgroup).filter(Boolean))]);
+	const displayNum = $derived.by(() => {
+		const ordered = [
+			...groupNames.flatMap((sg) => rows.filter((r) => r.subgroup === sg)),
+			...ungrouped
+		];
+		return new Map(ordered.map((r, i) => [r.p.id, i + 1] as const));
+	});
+	let collapsedGroups = $state<Record<string, boolean>>({});
 
 	let dragId = $state<string | null>(null);
 	let overId = $state<string | null>(null);
@@ -186,8 +207,32 @@
 		el.style.touchAction = 'none';
 	}
 
+	function subgroupOf(id: string): string {
+		const p = principles.find((x) => x.id === id);
+		return p ? splitLeadingSubgroup(p.content).subgroup : '';
+	}
+
+	/** Arrow keys move a principle inside its own group: a cross-group swap
+	 *  would leave the visible lists unchanged because each group renders in
+	 *  stored order. */
+	function moveWithinGroup(id: string, dir: -1 | 1) {
+		const sg = subgroupOf(id);
+		const peers = rows.filter((r) => r.subgroup === sg);
+		const at = peers.findIndex((r) => r.p.id === id);
+		const target = peers[at + dir];
+		if (!target) return;
+		const ids = principles.map((p) => p.id);
+		const from = ids.indexOf(id);
+		const to = ids.indexOf(target.p.id);
+		if (from < 0 || to < 0) return;
+		ids.splice(to, 0, ...ids.splice(from, 1));
+		void persistOrder(ids);
+	}
+
 	function endDrag(commit: boolean) {
-		if (dragId && commit && overId && overId !== dragId) {
+		// A drop on another group cancels: moving across groups would save an
+		// order that neither list shows, because grouping comes from the text.
+		if (dragId && commit && overId && overId !== dragId && subgroupOf(dragId) === subgroupOf(overId)) {
 			const ids = principles.map((p) => p.id);
 			const from = ids.indexOf(dragId);
 			const to = ids.indexOf(overId);
@@ -266,94 +311,114 @@
 	><MessageCircle class="h-3 w-3" /> {(p.commentCount ?? 0)}</button>
 {/snippet}
 
+{#snippet principleRow(row: PrincipleRow)}
+	<li
+		data-principle={row.p.id}
+		class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 select-none {dragId === row.p.id ? 'opacity-40' : ''} {dragId && overId === row.p.id && dragId !== row.p.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
+		style={dragId ? 'touch-action: none' : ''}
+		onpointerdown={(e) => onDown(e, row.p.id)}
+		onpointermove={onMove}
+		onpointerup={() => endDrag(true)}
+		onpointercancel={() => endDrag(false)}
+	>
+		<div class="flex items-start gap-3 sm:items-center">
+			<span
+				role="button"
+				tabindex="0"
+				aria-label="Drag to reorder"
+				title="Drag to reorder"
+				class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 active:cursor-grabbing"
+				onpointerdown={(e) => onDown(e, row.p.id, true)}
+				onkeydown={(e) => {
+					if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+					e.preventDefault();
+					moveWithinGroup(row.p.id, e.key === 'ArrowUp' ? -1 : 1);
+				}}
+			><GripVertical class="h-4 w-4" /></span>
+			<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400 dark:text-stone-500">{displayNum.get(row.p.id) ?? ''}</span>
+			<div class="min-w-0 flex-1">
+				{#if (row.p.linkedNotes?.length ?? 0) > 0}
+					<div class="mb-1"><NoteLinkPills links={row.p.linkedNotes ?? []} /></div>
+				{/if}
+				<button
+					type="button"
+					class="block w-full text-left text-[15px] text-stone-800 dark:text-stone-200"
+					onclick={(e) => { if ((e.target as HTMLElement).closest('a')) return; if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(row.p); }}
+				>{@html renderPlainLinks(row.content, row.p.linkedNotes)}</button>
+				<time
+					class="mt-0.5 block text-[11px] tabular-nums text-stone-400 dark:text-stone-500"
+					datetime={new Date(row.p.created_at).toISOString()}
+					title={new Date(row.p.created_at).toLocaleString(dayLocale(lang), {
+						day: 'numeric',
+						month: 'short',
+						year: 'numeric',
+						hour: '2-digit',
+						minute: '2-digit'
+					})}
+				>{new Date(row.p.created_at).toLocaleDateString(dayLocale(lang), {
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric'
+				})}</time>
+			</div>
+			<!-- sm+: tags and the comment pill share the title line, right-aligned before the ⋮ -->
+			<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
+				{#each row.p.tags as t (t)}
+					<TagChip tag={t} />
+				{/each}
+				{@render commentPill(row.p)}
+			</div>
+			<button type="button" aria-label="Principle actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuPrinciple = row.p)}><EllipsisVertical class="h-4 w-4" /></button>
+		</div>
+		{#if row.p.tags.length > 0}
+			<!-- Mobile: tags keep their right-aligned row, pill rides at its end. -->
+			<div class="mt-1.5 flex flex-wrap items-center justify-end gap-1 sm:hidden">
+				{#each row.p.tags as t (t)}
+					<TagChip tag={t} />
+				{/each}
+				{@render commentPill(row.p)}
+			</div>
+		{:else}
+			<!-- Mobile, bare card: pill alone is right-aligned on its own line. -->
+			<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(row.p)}</div>
+		{/if}
+		{#if row.p.video}
+			<div class="mt-2 text-left sm:text-right"><VideoPill id={row.p.video} /></div>
+		{/if}
+	</li>
+{/snippet}
+
 <div>
-	<ol class="space-y-2">
-		{#each principles as p, i (p.id)}
-			<li
-				data-principle={p.id}
-				class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 select-none {dragId === p.id ? 'opacity-40' : ''} {dragId && overId === p.id && dragId !== p.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
-				style={dragId ? 'touch-action: none' : ''}
-				onpointerdown={(e) => onDown(e, p.id)}
-				onpointermove={onMove}
-				onpointerup={() => endDrag(true)}
-				onpointercancel={() => endDrag(false)}
-			>
-				<div class="flex items-start gap-3 sm:items-center">
-					<span
-						role="button"
-						tabindex="0"
-						aria-label="Drag to reorder"
-						title="Drag to reorder"
-						class="sm:mt-0 shrink-0 cursor-grab touch-none text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 active:cursor-grabbing"
-						onpointerdown={(e) => onDown(e, p.id, true)}
-						onkeydown={(e) => {
-							if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-							e.preventDefault();
-							const ids = principles.map((x) => x.id);
-							const from = ids.indexOf(p.id);
-							const to = from + (e.key === 'ArrowUp' ? -1 : 1);
-							if (from < 0 || to < 0 || to >= ids.length) return;
-							ids.splice(to, 0, ...ids.splice(from, 1));
-							void persistOrder(ids);
-						}}
-					><GripVertical class="h-4 w-4" /></span>
-					<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400 dark:text-stone-500">{i + 1}</span>
-					<div class="min-w-0 flex-1">
-						{#if (p.linkedNotes?.length ?? 0) > 0}
-							<div class="mb-1"><NoteLinkPills links={p.linkedNotes ?? []} /></div>
-						{/if}
-						<button
-							type="button"
-							class="block w-full text-left text-[15px] text-stone-800 dark:text-stone-200"
-							onclick={(e) => { if ((e.target as HTMLElement).closest('a')) return; if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(p); }}
-						>{@html renderPlainLinks(p.content, p.linkedNotes)}</button>
-						<time
-							class="mt-0.5 block text-[11px] tabular-nums text-stone-400 dark:text-stone-500"
-							datetime={new Date(p.created_at).toISOString()}
-							title={new Date(p.created_at).toLocaleString(dayLocale(lang), {
-								day: 'numeric',
-								month: 'short',
-								year: 'numeric',
-								hour: '2-digit',
-								minute: '2-digit'
-							})}
-						>{new Date(p.created_at).toLocaleDateString(dayLocale(lang), {
-							day: 'numeric',
-							month: 'short',
-							year: 'numeric'
-						})}</time>
-					</div>
-					<!-- sm+: tags and the comment pill share the title line, right-aligned before the ⋮ -->
-					<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
-						{#each p.tags as t (t)}
-							<TagChip tag={t} />
-						{/each}
-						{@render commentPill(p)}
-					</div>
-					<button type="button" aria-label="Principle actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuPrinciple = p)}><EllipsisVertical class="h-4 w-4" /></button>
-				</div>
-				{#if p.tags.length > 0}
-					<!-- Mobile: tags keep their right-aligned row, pill rides at its end. -->
-					<div class="mt-1.5 flex flex-wrap items-center justify-end gap-1 sm:hidden">
-						{#each p.tags as t (t)}
-							<TagChip tag={t} />
-						{/each}
-						{@render commentPill(p)}
-					</div>
-				{:else}
-					<!-- Mobile, bare card: pill alone is right-aligned on its own line. -->
-					<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(p)}</div>
-				{/if}
-				{#if p.video}
-					<div class="mt-2 text-left sm:text-right"><VideoPill id={p.video} /></div>
-				{/if}
-			</li>
-		{/each}
-	</ol>
+	{#each groupNames as sg, gi (sg)}
+		{@const groupRows = rows.filter((r) => r.subgroup === sg)}
+		<div class={gi > 0 ? 'mt-3' : ''}>
+			<button
+				type="button"
+				class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+				aria-expanded={!collapsedGroups[sg]}
+				onclick={() => (collapsedGroups[sg] = !collapsedGroups[sg])}
+			><span aria-hidden="true">{collapsedGroups[sg] ? '▸' : '▾'}</span> {sg} ({groupRows.length})</button>
+			{#if !collapsedGroups[sg]}
+				<ol class="mt-2 space-y-2" transition:slide={{ duration: motionMs(180) }}>
+					{#each groupRows as row (row.p.id)}{@render principleRow(row)}{/each}
+				</ol>
+			{/if}
+		</div>
+	{/each}
+	{#if ungrouped.length > 0}
+		<div class={groupNames.length > 0 ? 'mt-3' : ''}>
+			{#if groupNames.length > 0}
+				<p class="mb-2 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Ungrouped</p>
+			{/if}
+			<ol class="space-y-2">
+				{#each ungrouped as row (row.p.id)}{@render principleRow(row)}{/each}
+			</ol>
+		</div>
+	{/if}
 	{#if principles.length === 0}
 		<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400">No principles yet — add the first one below.</p>
 	{:else}
-		<p class="mt-2 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Press and hold a principle to drag it into a new position.</p>
+		<p class="mt-2 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Press and hold a principle to drag it within its group. Groups come from a leading (name) in the text.</p>
 	{/if}
 </div>
 
@@ -392,6 +457,7 @@
 				></textarea>
 				<NoteFinder textarea={draftField} />
 			</div>
+			<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">A leading (group) files it under that group; trailing #tags retag it.</p>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="draft-video">YouTube URL (optional)</label>
 			<input
 				id="draft-video"
