@@ -87,7 +87,7 @@
 	let categories = $state<string[]>([]);
 
 	const formField =
-		'w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600';
+		'min-w-0 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600';
 
 	const helpBody: Record<string, { title: string; body: string[] }> = {
 		packages: {
@@ -228,7 +228,7 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
+	class="fixed inset-0 z-50 grid place-items-center overflow-x-hidden bg-stone-900/40 dark:bg-black/60 backdrop-blur-md transition-[padding] duration-200 ease-out motion-reduce:transition-none {full ? 'p-0' : 'p-4'}"
 	role="dialog"
 	aria-modal="true"
 	aria-label={title}
@@ -238,10 +238,10 @@
 	transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 >
 	<div
-		class="w-full bg-white dark:bg-stone-900 p-5 shadow-xl [interpolate-size:allow-keywords] transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none {full ? 'flex h-dvh max-w-full flex-col rounded-none' : 'max-h-[calc(100dvh-2rem)] max-w-sm overflow-y-auto rounded-2xl'}"
+		class="w-full min-w-0 bg-white dark:bg-stone-900 p-5 shadow-xl [interpolate-size:allow-keywords] transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none {full ? 'flex h-dvh max-w-full flex-col rounded-none' : 'max-h-[calc(100dvh-2rem)] max-w-sm overflow-y-auto rounded-2xl'}"
 		transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}
 	>
-		<div class={full ? 'mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col' : ''}>
+		<div class={full ? 'mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col' : 'min-w-0'}>
 			<div class="mb-4 flex items-start justify-between gap-2">
 				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">{title}</h2>
 				<div class="-mr-1 -mt-1 flex shrink-0 items-center gap-0.5">
@@ -264,7 +264,7 @@
 				</div>
 			</div>
 			<form
-				class={full ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : ''}
+				class="min-w-0 {full ? 'flex min-h-0 flex-1 flex-col overflow-y-auto' : ''}"
 				onsubmit={(e) => { e.preventDefault(); void submit(); }}
 			>
 				<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="stock-name">Name</label>
@@ -278,7 +278,7 @@
 					placeholder={kind === 'consumable' ? 'Toothpaste' : 'Watch'}
 					maxlength="80"
 				/>
-				<div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+				<div class="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
 					<StockRegistryField
 						id="stock-brand"
 						label="Brand"
@@ -299,7 +299,7 @@
 					/>
 				</div>
 				{#if kind === 'consumable'}
-					<div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+					<div class="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
 						<div>
 							<div class="flex items-center gap-1.5">
 								<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="stock-qty">Packages</label>
@@ -332,7 +332,7 @@
 						</div>
 					</div>
 				{:else}
-					<div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+					<div class="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
 						<div>
 							<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="stock-bought">Bought</label>
 							<input
@@ -356,7 +356,7 @@
 							/>
 						</div>
 					</div>
-					<div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+					<div class="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
 						<div>
 							<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="stock-price">Price (optional)</label>
 							<input

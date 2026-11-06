@@ -20,7 +20,7 @@
 	let sel = $state(-1);
 
 	const fieldClass =
-		'w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600';
+		'min-w-0 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600';
 
 	const query = $derived(value.trim().toLowerCase());
 	const matches = $derived(
@@ -62,7 +62,7 @@
 	}
 </script>
 
-<div>
+<div class="min-w-0">
 	<div class="flex items-center gap-1.5">
 		<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for={id}>{label}</label>
 		{#if onHelp}
