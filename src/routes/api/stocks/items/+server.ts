@@ -22,6 +22,8 @@ function inputFrom(body: Record<string, unknown>): StockItemInput | null {
 		return {
 			kind,
 			name: String(body?.name ?? ''),
+			brand: String(body?.brand ?? ''),
+			category: String(body?.category ?? ''),
 			note: String(body?.note ?? ''),
 			quantity,
 			duration_days: duration
@@ -30,6 +32,8 @@ function inputFrom(body: Record<string, unknown>): StockItemInput | null {
 	return {
 		kind,
 		name: String(body?.name ?? ''),
+		brand: String(body?.brand ?? ''),
+		category: String(body?.category ?? ''),
 		note: String(body?.note ?? ''),
 		bought_at: num(body?.bought_at),
 		price: body?.price === undefined || body?.price === null || body?.price === '' ? null : Number(body?.price),

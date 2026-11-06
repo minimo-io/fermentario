@@ -540,6 +540,8 @@
 				"id": "<runtime>",
 				"kind": "consumable",
 				"name": "Toothpaste",
+				"brand": "Colgate",
+				"category": "Toothpaste",
 				"note": "Mint, sensitive",
 				"quantity": 2,
 				"duration_days": 45,
@@ -561,6 +563,8 @@
 				"id": "<runtime>",
 				"kind": "durable",
 				"name": "Watch",
+				"brand": "Casio",
+				"category": "Watch",
 				"note": "Steel bracelet",
 				"quantity": 0,
 				"duration_days": 0,
@@ -582,6 +586,8 @@
 				"id": "<runtime>",
 				"kind": "consumable",
 				"name": "Toothpaste",
+				"brand": "Colgate",
+				"category": "Toothpaste",
 				"note": "Mint, sensitive",
 				"quantity": 1,
 				"duration_days": 45,
@@ -608,6 +614,8 @@
 				"id": "<runtime>",
 				"kind": "consumable",
 				"name": "Floss",
+				"brand": "Colgate",
+				"category": "Toothpaste",
 				"note": "",
 				"quantity": 1,
 				"duration_days": 60,
@@ -620,6 +628,37 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>"
 			}
+		}
+	},
+	"GET /api/stocks/registries": {
+		"status": 200,
+		"body": {
+			"brands": [
+				"Casio",
+				"Colgate"
+			],
+			"categories": [
+				"Toothpaste",
+				"Watch"
+			]
+		}
+	},
+	"GET /api/stocks/goals default": {
+		"status": 200,
+		"body": {
+			"target_days": 365
+		}
+	},
+	"PUT /api/stocks/goals": {
+		"status": 200,
+		"body": {
+			"target_days": 180
+		}
+	},
+	"PUT /api/stocks/goals invalid": {
+		"status": 400,
+		"body": {
+			"error": "target_days must be a whole number of days, 1 to 3650"
 		}
 	},
 	"DELETE /api/stocks/items/[id]": {
@@ -2195,7 +2234,9 @@
 			"goals": 3,
 			"valueGoals": 1,
 			"stocks": 2,
-			"stockPhotos": 1
+			"stockPhotos": 1,
+			"stockBrands": 2,
+			"stockCategories": 2
 		}
 	},
 	"POST /api/import": {
@@ -2220,7 +2261,8 @@
 			"holdings": 2,
 			"goals": 3,
 			"valueGoals": 1,
-			"stocks": 2
+			"stocks": 2,
+			"stockGoal": 1
 		}
 	},
 	"GET /api/notes/[id] after restore": {
@@ -2514,6 +2556,8 @@
 					"id": "<runtime>",
 					"kind": "consumable",
 					"name": "Toothpaste",
+					"brand": "Colgate",
+					"category": "Toothpaste",
 					"note": "Mint, sensitive",
 					"quantity": 1,
 					"duration_days": 45,
@@ -2530,6 +2574,8 @@
 					"id": "<runtime>",
 					"kind": "durable",
 					"name": "Watch",
+					"brand": "Casio",
+					"category": "Watch",
 					"note": "Steel bracelet",
 					"quantity": 0,
 					"duration_days": 0,
@@ -2549,6 +2595,25 @@
 		"status": 200,
 		"contentType": "image/png",
 		"bytes": 70
+	},
+	"GET /api/stocks/goals after restore": {
+		"status": 200,
+		"body": {
+			"target_days": 180
+		}
+	},
+	"GET /api/stocks/registries after restore": {
+		"status": 200,
+		"body": {
+			"brands": [
+				"Casio",
+				"Colgate"
+			],
+			"categories": [
+				"Toothpaste",
+				"Watch"
+			]
+		}
 	},
 	"GET /api/notes/[id] link after restore": {
 		"status": 200,

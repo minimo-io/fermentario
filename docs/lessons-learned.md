@@ -2019,3 +2019,25 @@
   order with stocks/banks reshuffles on older code.
 - Svelte 5 `$effect` tracks reads inside async callbacks too — a timer that
   reads refresh state re-arms on every refresh. Timers belong in `onMount`.
+
+## Session: Stock coverage goal
+- Keep goal math next to the list, not in SQL. The tab already loads items
+  and the goal, so progress (`remaining / target`) and need-stock-first
+  sorting stay client-side; the server keeps its exhaustion order.
+- Debounce goal saves and revert on invalid input. A number field fires per
+  keystroke; saving each one races PUTs and a mid-typing `18` would persist
+  while the user meant `180`.
+
+## Session: Stock registries and field help
+- Registries need a normalized key, not a case-sensitive UNIQUE. Store the
+  display `name` and a NFC/lowercase `name_key`; `UNIQUE (kind, name_key)`
+  makes Colgate/colgate one brand while preserving the first spelling.
+- One `stock_registries` table with `kind` is enough for brands and
+  categories. The form field is generic; the server ensures the row when the
+  item saves, so there is no separate create request or race.
+- Info modals nested inside a modal need `z-[60]` and must stop `Escape` at
+  the help overlay, or the parent form closes too. The stock form must scroll
+  on mobile (`max-h-[calc(100dvh-2rem)] overflow-y-auto`), since the added
+  fields exceed a phone screen.
+- A goal field in the tab row is cramped on mobile: give it its own full-width
+  row with a 16 px input and an info button; on `sm` return it to the right.

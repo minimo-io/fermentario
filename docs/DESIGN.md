@@ -139,9 +139,20 @@ sizing. Consult this before changing any of them.
   section list. Desktop is one row (`justify-between`, left group scrolls);
   mobile stacks the fixed pair on its own right-aligned line.
 - **Stocks** (`StocksTab`): two tabs, **Consumables** and **Durables**, with
-  counts, persisted in `ferm:stocks-tab`. Consumables show packages and the
-  remaining estimate (`quantity × duration_days` from today, no auto-decrement,
-  empty is muted); the dot is rose ≤7 days, amber ≤30, emerald beyond.
+  counts, persisted in `ferm:stocks-tab`. Consumables track a coverage goal
+  (`stock_goals.target_days`, default 365, editable inline above the list,
+  saved debounced): each card shows `quantity × duration_days` against the
+  goal as a red progress bar, emerald once covered, with `Needs ~N more
+  packages` or `Covered · ~N days`; empty is red at 0% with no estimate.
+  Need-stock sorts first (empty top, then lowest remaining days).
+  The goal row is full width under the tabs on mobile (16 px input, `days`,
+  info button) and returns inline to the right on desktop.
+  Brand and Category are dynamic registries (`stock_registries`): the form
+  fields suggest existing names and offer Create for a new one; saving the
+  item reuses or creates the entry (case and Unicode normalized). Cards show
+  `Brand · Category` under the name. Small info buttons open `FieldHelp`
+  modals for packages, days per package, stock goal, brand and category.
+  The form stacks its field pairs on mobile and scrolls inside the modal.
   Durables show bought date, where, price through the currency rule (currency
   defaults to BRL, editable, BRL/USD/UYU quick picks) and Owned/Ended state.
   Cards carry a photo thumbnail or a package icon; tap edits, delete is

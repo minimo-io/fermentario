@@ -17,7 +17,7 @@ export async function PATCH({ params, request }) {
 		return json({ error: 'invalid body' }, { status: 400 });
 	}
 	const patch: Record<string, unknown> = {};
-	for (const k of ['name', 'note', 'quantity', 'duration_days', 'bought_at', 'bought_where', 'ended_at'] as const) {
+	for (const k of ['name', 'note', 'brand', 'category', 'quantity', 'duration_days', 'bought_at', 'bought_where', 'ended_at'] as const) {
 		if (body?.[k] !== undefined) patch[k] = body[k];
 	}
 	if (body?.price !== undefined) patch.price = body.price === null || body.price === '' ? null : body.price;

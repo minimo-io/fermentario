@@ -44,6 +44,7 @@ export interface RestoreCounts {
 	goals: number;
 	valueGoals: number;
 	stocks: number;
+	stockGoal: number;
 }
 
 function sqlString(value: string): string {
@@ -167,13 +168,18 @@ export function copyUploadIntoTarget(
 			'DELETE FROM notes',
 			'DELETE FROM notes_fts',
 			'DELETE FROM weekly_recaps',
-			'DELETE FROM ask_history'
+			'DELETE FROM ask_history',
+			// The target is already migrated to the latest schema, so the
+			// stock tables always exist. Clear them even when the backup is
+			// older than them; a replace must not leave rows behind.
+			'DELETE FROM stock_items',
+			'DELETE FROM stock_registries',
+			'DELETE FROM stock_goals'
 		];
 		if (hasTodo) statements.push('DELETE FROM todo_items', 'DELETE FROM todo_groups');
 		if (has('principles')) statements.push('DELETE FROM principles');
 		if (has('tag_colors')) statements.push('DELETE FROM tag_colors');
 		if (has('holdings')) statements.push('DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
-		if (has('stock_items')) statements.push('DELETE FROM stock_items');
 
 		statements.push(
 			`INSERT INTO notes (id, content, created_at, updated_at, featured, video)
@@ -310,10 +316,18 @@ export function copyUploadIntoTarget(
 					FROM backup.category_value_goals`
 			);
 		}
+		if (has('stock_registries')) {
+			statements.push(
+				`INSERT INTO stock_registries (id, kind, name, name_key, created_at)
+					SELECT id, kind, name, name_key, created_at FROM backup.stock_registries`
+			);
+		}
 		if (has('stock_items')) {
 			statements.push(
-				`INSERT INTO stock_items (id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
+				`INSERT INTO stock_items (id, kind, name, brand_id, category_id, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
 					SELECT id, ${column('stock_items', 'kind', "'consumable'")}, name,
+						${column('stock_items', 'brand_id', 'NULL')},
+						${column('stock_items', 'category_id', 'NULL')},
 						${column('stock_items', 'note', "''")},
 						${column('stock_items', 'quantity', '0')},
 						${column('stock_items', 'duration_days', '0')},
@@ -327,6 +341,11 @@ export function copyUploadIntoTarget(
 						${column('stock_items', 'has_photo', '0')},
 						created_at, updated_at
 					FROM backup.stock_items`
+			);
+		}
+		if (has('stock_goals')) {
+			statements.push(
+				'INSERT INTO stock_goals (id, target_days) SELECT 1, target_days FROM backup.stock_goals WHERE id = 1'
 			);
 		}
 
@@ -375,7 +394,8 @@ export function copyUploadIntoTarget(
 		holdings: count(target, 'holdings'),
 		goals: count(target, 'category_goals'),
 		valueGoals: count(target, 'category_value_goals'),
-		stocks: count(target, 'stock_items')
+		stocks: count(target, 'stock_items'),
+		stockGoal: count(target, 'stock_goals')
 	};
 }
 

@@ -94,6 +94,9 @@ export const updateStockItem = bind('updateStockItem');
 export const deleteStockItem = bind('deleteStockItem');
 export const setStockItemPhoto = bind('setStockItemPhoto');
 export const getStockItemPhoto = bind('getStockItemPhoto');
+export const getStockGoals = bind('getStockGoals');
+export const setStockGoals = bind('setStockGoals');
+export const listStockRegistries = bind('listStockRegistries');
 
 export { getDb, getJournal, NoActiveJournalError };
 

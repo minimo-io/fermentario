@@ -216,6 +216,8 @@ export interface StockItem {
 	id: string;
 	kind: StockKind;
 	name: string;
+	brand: string;
+	category: string;
 	note: string;
 	/** Consumables: packages in stock. Durables: unused. */
 	quantity: number;

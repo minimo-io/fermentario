@@ -148,8 +148,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 11) {
-		console.error('The legacy import did not register an active v11 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 13) {
+		console.error('The legacy import did not register an active v13 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -395,13 +395,19 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 const consumable = await api(
 	'POST /api/stocks/items consumable',
 	'/api/stocks/items',
-	json({ kind: 'consumable', name: 'Toothpaste', note: 'Mint, sensitive', quantity: 2, duration_days: 45, photo: TINY_PNG })
+	json({ kind: 'consumable', name: 'Toothpaste', brand: 'Colgate', category: 'Toothpaste', note: 'Mint, sensitive', quantity: 2, duration_days: 45, photo: TINY_PNG })
 );
 must(
 	'POST /api/stocks/items consumable',
 	consumable,
-	(r) => r.status === 201 && !!r.body.item && r.body.item.kind === 'consumable' && r.body.item.hasPhoto === true,
-	'201 with a consumable and its photo flag'
+	(r) =>
+		r.status === 201 &&
+		!!r.body.item &&
+		r.body.item.kind === 'consumable' &&
+		r.body.item.brand === 'Colgate' &&
+		r.body.item.category === 'Toothpaste' &&
+		r.body.item.hasPhoto === true,
+	'201 with a consumable, brand, category and photo flag'
 );
 const consumableId = consumable.body.item.id;
 volatile.add(consumableId);
@@ -411,13 +417,20 @@ volatile.add(consumable.body.item.updated_at);
 const durable = await api(
 	'POST /api/stocks/items durable',
 	'/api/stocks/items',
-	json({ kind: 'durable', name: 'Watch', note: 'Steel bracelet', price: 2500, currency: 'BRL', bought_where: 'Downtown shop' })
+	json({ kind: 'durable', name: 'Watch', brand: 'Casio', category: 'Watch', note: 'Steel bracelet', price: 2500, currency: 'BRL', bought_where: 'Downtown shop' })
 );
 must(
 	'POST /api/stocks/items durable',
 	durable,
-	(r) => r.status === 201 && !!r.body.item && r.body.item.kind === 'durable' && r.body.item.currency === 'BRL' && r.body.item.hasPhoto === false,
-	'201 with a durable in BRL and no photo'
+	(r) =>
+		r.status === 201 &&
+		!!r.body.item &&
+		r.body.item.kind === 'durable' &&
+		r.body.item.brand === 'Casio' &&
+		r.body.item.category === 'Watch' &&
+		r.body.item.currency === 'BRL' &&
+		r.body.item.hasPhoto === false,
+	'201 with a durable in BRL, brand and category'
 );
 const durableId = durable.body.item.id;
 volatile.add(durableId);
@@ -453,13 +466,65 @@ must(
 const disposable = await api(
 	'POST /api/stocks/items disposable',
 	'/api/stocks/items',
-	json({ kind: 'consumable', name: 'Floss', quantity: 1, duration_days: 60 })
+	json({ kind: 'consumable', name: 'Floss', brand: 'colgate', category: 'Toothpaste', quantity: 1, duration_days: 60 })
 );
-must('POST /api/stocks/items disposable', disposable, (r) => r.status === 201 && !!r.body.item, '201 with a disposable item');
+must(
+	'POST /api/stocks/items disposable',
+	disposable,
+	(r) => r.status === 201 && !!r.body.item && r.body.item.brand === 'Colgate' && r.body.item.category === 'Toothpaste',
+	'201 with the existing brand reused case-insensitively'
+);
+
+const stockRegistries = await api('GET /api/stocks/registries', '/api/stocks/registries');
+must(
+	'GET /api/stocks/registries',
+	stockRegistries,
+	(r) =>
+		r.status === 200 &&
+		r.body.brands?.length === 2 &&
+		r.body.brands.includes('Colgate') &&
+		r.body.brands.includes('Casio') &&
+		r.body.categories?.length === 2 &&
+		r.body.categories.includes('Toothpaste') &&
+		r.body.categories.includes('Watch'),
+	'200 with deduplicated brands and categories'
+);
 const disposableId = disposable.body.item.id;
 volatile.add(disposableId);
 volatile.add(disposable.body.item.created_at);
 volatile.add(disposable.body.item.updated_at);
+
+const stockGoalsDefault = await api('GET /api/stocks/goals default', '/api/stocks/goals');
+must(
+	'GET /api/stocks/goals default',
+	stockGoalsDefault,
+	(r) => r.status === 200 && r.body.target_days === 365,
+	'200 with the one-year default'
+);
+
+const stockGoalsSet = await api(
+	'PUT /api/stocks/goals',
+	'/api/stocks/goals',
+	json({ target_days: 180 }, 'PUT')
+);
+must(
+	'PUT /api/stocks/goals',
+	stockGoalsSet,
+	(r) => r.status === 200 && r.body.target_days === 180,
+	'200 with the new target'
+);
+
+const stockGoalsBad = await api(
+	'PUT /api/stocks/goals invalid',
+	'/api/stocks/goals',
+	json({ target_days: 0 }, 'PUT')
+);
+must(
+	'PUT /api/stocks/goals invalid',
+	stockGoalsBad,
+	(r) => r.status === 400,
+	'400 for a target outside 1 to 3650'
+);
 
 const deletedStock = await api(
 	'DELETE /api/stocks/items/[id]',
@@ -963,7 +1028,9 @@ try {
 		goals: count('category_goals'),
 		valueGoals: count('category_value_goals'),
 		stocks: count('stock_items'),
-		stockPhotos: d.prepare('SELECT COUNT(*) AS c FROM stock_items WHERE has_photo = 1').get().c
+		stockPhotos: d.prepare('SELECT COUNT(*) AS c FROM stock_items WHERE has_photo = 1').get().c,
+		stockBrands: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'brand'").get().c,
+		stockCategories: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'category'").get().c
 	};
 	d.close();
 } catch (e) {
@@ -1029,7 +1096,8 @@ must(
 		r.body.done?.holdings === 2 &&
 		r.body.done?.goals === 3 &&
 		r.body.done?.valueGoals === 1 &&
-		r.body.done?.stocks === 2,
+		r.body.done?.stocks === 2 &&
+		r.body.done?.stockGoal === 1,
 	'200 with a count for every restored section'
 );
 
@@ -1184,9 +1252,9 @@ must(
 	(r) =>
 		r.status === 200 &&
 		r.body.items?.length === 2 &&
-		r.body.items.some((i) => i.id === consumableId && i.kind === 'consumable' && i.name === 'Toothpaste' && i.quantity === 1 && i.duration_days === 45 && i.hasPhoto === true) &&
-		r.body.items.some((i) => i.id === durableId && i.kind === 'durable' && i.name === 'Watch' && i.price === 2500 && i.currency === 'BRL' && i.bought_where === 'Downtown shop'),
-	'the consumable with its photo flag and the durable with its price'
+		r.body.items.some((i) => i.id === consumableId && i.kind === 'consumable' && i.name === 'Toothpaste' && i.brand === 'Colgate' && i.category === 'Toothpaste' && i.quantity === 1 && i.duration_days === 45 && i.hasPhoto === true) &&
+		r.body.items.some((i) => i.id === durableId && i.kind === 'durable' && i.name === 'Watch' && i.brand === 'Casio' && i.category === 'Watch' && i.price === 2500 && i.currency === 'BRL' && i.bought_where === 'Downtown shop'),
+	'the consumable with its photo flag and the durable with its brand, category and price'
 );
 
 const restoredStockPhoto = await fetch(`${base}/api/stocks/items/${consumableId}/photo`);
@@ -1200,6 +1268,27 @@ must(
 	{ status: restoredStockPhoto.status, body: { contentType: restoredStockPhoto.headers.get('content-type'), bytes: restoredStockPhotoBytes.length } },
 	(r) => r.status === 200 && r.body.contentType === 'image/png' && r.body.bytes > 0,
 	'the photo bytes survive the export and import'
+);
+
+const restoredStockGoals = await api('GET /api/stocks/goals after restore', '/api/stocks/goals');
+must(
+	'GET /api/stocks/goals after restore',
+	restoredStockGoals,
+	(r) => r.status === 200 && r.body.target_days === 180,
+	'the 180-day goal survives the export and import'
+);
+
+const restoredRegistries = await api('GET /api/stocks/registries after restore', '/api/stocks/registries');
+must(
+	'GET /api/stocks/registries after restore',
+	restoredRegistries,
+	(r) =>
+		r.status === 200 &&
+		r.body.brands?.includes('Colgate') &&
+		r.body.brands?.includes('Casio') &&
+		r.body.categories?.includes('Toothpaste') &&
+		r.body.categories?.includes('Watch'),
+	'the brand and category registry survives the export and import'
 );
 
 const restoredLink = await api('GET /api/notes/[id] link after restore', `/api/notes/${linkSourceId}`);

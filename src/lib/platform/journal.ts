@@ -248,6 +248,8 @@ export interface StockItem {
 	id: string;
 	kind: StockKind;
 	name: string;
+	brand: string;
+	category: string;
 	note: string;
 	quantity: number;
 	duration_days: number;
@@ -264,6 +266,8 @@ export interface StockItem {
 export interface StockItemInput {
 	kind: StockKind;
 	name: string;
+	brand?: string | null;
+	category?: string | null;
 	note?: string;
 	quantity?: number;
 	duration_days?: number;
@@ -1517,6 +1521,8 @@ export function createJournal(db: SqlDb) {
 		id: string;
 		kind: string;
 		name: string;
+		brand_name: string | null;
+		category_name: string | null;
 		note: string;
 		quantity: number;
 		duration_days: number;
@@ -1538,6 +1544,8 @@ export function createJournal(db: SqlDb) {
 		id: r.id,
 		kind: cleanStockKind(r.kind),
 		name: r.name,
+		brand: r.brand_name ?? '',
+		category: r.category_name ?? '',
 		note: r.note ?? '',
 		quantity: Number(r.quantity ?? 0),
 		duration_days: Number(r.duration_days ?? 0),
@@ -1551,7 +1559,47 @@ export function createJournal(db: SqlDb) {
 		updated_at: r.updated_at
 	});
 
-	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'created_at' | 'updated_at'> | null {
+	/** Registry names are display text with a normalized unique key. */
+	function cleanRegistryName(raw: unknown): { name: string; key: string } | null {
+		const name = String(raw ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
+		if (!name) return null;
+		return { name, key: name.normalize('NFC').toLowerCase() };
+	}
+
+	function ensureStockRegistry(kind: 'brand' | 'category', raw: unknown): string | null {
+		const clean = cleanRegistryName(raw);
+		if (!clean) return null;
+		try {
+			const existing = db
+				.prepare('SELECT id FROM stock_registries WHERE kind = ? AND name_key = ?')
+				.get(kind, clean.key) as unknown as { id: string } | undefined;
+			if (existing) return existing.id;
+			const id = crypto.randomUUID();
+			db.prepare(
+				'INSERT INTO stock_registries (id, kind, name, name_key, created_at) VALUES (?, ?, ?, ?, ?)'
+			).run(id, kind, clean.name, clean.key, Date.now());
+			return id;
+		} catch {
+			return null;
+		}
+	}
+
+	function listStockRegistries(): { brands: string[]; categories: string[] } {
+		try {
+			const rows = db
+				.prepare('SELECT kind, name FROM stock_registries ORDER BY name COLLATE NOCASE ASC, name ASC')
+				.all() as unknown as { kind: string; name: string }[];
+			return {
+				brands: rows.filter((r) => r.kind === 'brand').map((r) => r.name),
+				categories: rows.filter((r) => r.kind === 'category').map((r) => r.name)
+			};
+		} catch {
+			// Table arrives with migration 13.
+			return { brands: [], categories: [] };
+		}
+	}
+
+	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'created_at' | 'updated_at' | 'brand' | 'category'> | null {
 		const kind = cleanStockKind(input.kind);
 		const name = String(input.name ?? '').trim().slice(0, 80);
 		if (!name) return null;
@@ -1606,12 +1654,14 @@ export function createJournal(db: SqlDb) {
 		try {
 			rows = db
 				.prepare(
-					`SELECT id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, has_photo, created_at, updated_at
-					 FROM stock_items`
+					`SELECT i.*, b.name AS brand_name, c.name AS category_name
+					 FROM stock_items i
+					 LEFT JOIN stock_registries b ON b.id = i.brand_id
+					 LEFT JOIN stock_registries c ON c.id = i.category_id`
 				)
 				.all() as unknown as StockItemRow[];
 		} catch {
-			// Table arrives with migration 11.
+			// Tables arrive with migrations 11 and 13.
 			return [];
 		}
 		return rows
@@ -1640,8 +1690,11 @@ export function createJournal(db: SqlDb) {
 		try {
 			r = db
 				.prepare(
-					`SELECT id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, has_photo, created_at, updated_at
-					 FROM stock_items WHERE id = ?`
+					`SELECT i.*, b.name AS brand_name, c.name AS category_name
+					 FROM stock_items i
+					 LEFT JOIN stock_registries b ON b.id = i.brand_id
+					 LEFT JOIN stock_registries c ON c.id = i.category_id
+					 WHERE i.id = ?`
 				)
 				.get(id) as unknown as StockItemRow | undefined;
 		} catch {
@@ -1655,14 +1708,18 @@ export function createJournal(db: SqlDb) {
 		if (!clean) return null;
 		const now = Date.now();
 		const id = crypto.randomUUID();
+		const brandId = input.brand ? ensureStockRegistry('brand', input.brand) : null;
+		const categoryId = input.category ? ensureStockRegistry('category', input.category) : null;
 		try {
 			db.prepare(
-				`INSERT INTO stock_items (id, kind, name, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', 0, ?, ?)`
+				`INSERT INTO stock_items (id, kind, name, brand_id, category_id, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', 0, ?, ?)`
 			).run(
 				id,
 				clean.kind,
 				clean.name,
+				brandId,
+				categoryId,
 				clean.note,
 				clean.quantity,
 				clean.duration_days,
@@ -1677,7 +1734,7 @@ export function createJournal(db: SqlDb) {
 		} catch {
 			return null;
 		}
-		return { ...clean, id, hasPhoto: false, created_at: now, updated_at: now };
+		return getStockItem(id);
 	}
 
 	function updateStockItem(id: string, input: Partial<StockItemInput>): StockItem | null {
@@ -1687,6 +1744,8 @@ export function createJournal(db: SqlDb) {
 		const merged: StockItemInput = {
 			kind: existing.kind,
 			name: input.name !== undefined ? input.name : existing.name,
+			brand: input.brand !== undefined ? input.brand : existing.brand,
+			category: input.category !== undefined ? input.category : existing.category,
 			note: input.note !== undefined ? input.note : existing.note,
 			quantity: input.quantity !== undefined ? input.quantity : existing.quantity,
 			duration_days: input.duration_days !== undefined ? input.duration_days : existing.duration_days,
@@ -1698,11 +1757,18 @@ export function createJournal(db: SqlDb) {
 		};
 		const clean = cleanStockInput(merged);
 		if (!clean) return null;
+		const current = db.prepare('SELECT brand_id, category_id FROM stock_items WHERE id = ?').get(id) as unknown as
+			| { brand_id: string | null; category_id: string | null }
+			| undefined;
+		const brandId =
+			input.brand !== undefined ? (input.brand ? ensureStockRegistry('brand', input.brand) : null) : (current?.brand_id ?? null);
+		const categoryId =
+			input.category !== undefined ? (input.category ? ensureStockRegistry('category', input.category) : null) : (current?.category_id ?? null);
 		const now = Math.max(Date.now(), existing.created_at + 1);
 		try {
 			db.prepare(
 				`UPDATE stock_items SET name = ?, note = ?, quantity = ?, duration_days = ?, bought_at = ?, price = ?,
-				 currency = ?, bought_where = ?, ended_at = ?, updated_at = ? WHERE id = ?`
+				 currency = ?, bought_where = ?, ended_at = ?, brand_id = ?, category_id = ?, updated_at = ? WHERE id = ?`
 			).run(
 				clean.name,
 				clean.note,
@@ -1713,6 +1779,8 @@ export function createJournal(db: SqlDb) {
 				clean.currency,
 				clean.bought_where,
 				clean.ended_at,
+				brandId,
+				categoryId,
 				now,
 				id
 			);
@@ -1764,6 +1832,34 @@ export function createJournal(db: SqlDb) {
 		const bytes = toBytes(r.photo);
 		if (bytes.length === 0) return null;
 		return { photo: bytes, mime: r.photo_mime || 'image/jpeg', updatedAt: r.updated_at };
+	}
+
+	// --- Stock goal -----------------------------------------------------
+
+	function getStockGoals(): { target_days: number } {
+		try {
+			const r = db.prepare('SELECT target_days FROM stock_goals WHERE id = 1').get() as unknown as
+				| { target_days: number }
+				| undefined;
+			const t = Math.trunc(Number(r?.target_days));
+			if (Number.isFinite(t) && t >= 1) return { target_days: Math.min(t, 3650) };
+		} catch {
+			// Table arrives with migration 12.
+		}
+		return { target_days: 365 };
+	}
+
+	function setStockGoals(targetDays: number): { target_days: number } | null {
+		const t = Math.trunc(Number(targetDays));
+		if (!Number.isFinite(t) || t < 1 || t > 3650) return null;
+		try {
+			db.prepare(
+				'INSERT INTO stock_goals (id, target_days) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET target_days = excluded.target_days'
+			).run(t);
+		} catch {
+			return null;
+		}
+		return getStockGoals();
 	}
 
 	function listHoldingActions(holdingId: string): HoldingAction[] | null {
@@ -2394,6 +2490,9 @@ export function createJournal(db: SqlDb) {
 		deleteStockItem,
 		setStockItemPhoto,
 		getStockItemPhoto,
+		getStockGoals,
+		setStockGoals,
+		listStockRegistries,
 		listTagColors,
 		listTagCounts,
 		setTagColor

@@ -302,6 +302,44 @@ const stockItems: Migration = {
 	}
 };
 
+/** One row with the consumable coverage target in days (default: one year),
+ *  so the list can flag what needs stock. */
+const stockGoals: Migration = {
+	version: 12,
+	name: 'stock-goals',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_goals (
+				id          INTEGER PRIMARY KEY CHECK (id = 1),
+				target_days INTEGER NOT NULL DEFAULT 365
+			);
+			INSERT OR IGNORE INTO stock_goals (id, target_days) VALUES (1, 365);
+		`);
+	}
+};
+
+/** Dynamic brand and category registry. One table for both kinds keeps the
+ *  form fields identical; `name_key` makes the lookup case-insensitive and
+ *  Unicode-normalized, while `name` keeps the display spelling. */
+const stockRegistries: Migration = {
+	version: 13,
+	name: 'stock-registries',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_registries (
+				id         TEXT PRIMARY KEY,
+				kind       TEXT NOT NULL,
+				name       TEXT NOT NULL,
+				name_key   TEXT NOT NULL,
+				created_at INTEGER NOT NULL,
+				UNIQUE (kind, name_key)
+			);
+		`);
+		addColumn(db, 'stock_items', 'brand_id', 'TEXT REFERENCES stock_registries(id) ON DELETE SET NULL');
+		addColumn(db, 'stock_items', 'category_id', 'TEXT REFERENCES stock_registries(id) ON DELETE SET NULL');
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -313,7 +351,9 @@ export const MIGRATIONS: Migration[] = [
 	holdingActionCash,
 	categoryValueGoals,
 	todoVideo,
-	stockItems
+	stockItems,
+	stockGoals,
+	stockRegistries
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 
