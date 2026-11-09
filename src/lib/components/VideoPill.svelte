@@ -1,13 +1,20 @@
 <script lang="ts">
 	import VideoEmbed from '$lib/components/VideoEmbed.svelte';
 
-	type Props = { id: string };
-	let { id }: Props = $props();
+	type Props = {
+		id: string;
+		/** Start with the embed block visible on detail pages. */
+		defaultOpen?: boolean;
+		/** Start the player when the block opens; false keeps the thumbnail. */
+		autoplay?: boolean;
+	};
+	let { id, defaultOpen = false, autoplay = true }: Props = $props();
 
 	// The pill marks items that carry a video; clicking toggles the full
 	// click-to-load embed below it. The glyph is the YouTube play button,
 	// inlined because lucide ships no brand icons.
-	let open = $state(false);
+	// svelte-ignore state_referenced_locally
+	let open = $state(defaultOpen);
 </script>
 
 <div class="mt-2">
@@ -23,6 +30,6 @@
 		YouTube
 	</button>
 	{#if open}
-		<div class="mt-2"><VideoEmbed {id} autoplay /></div>
+		<div class="mt-2"><VideoEmbed {id} {autoplay} /></div>
 	{/if}
 </div>

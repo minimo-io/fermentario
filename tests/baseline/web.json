@@ -542,15 +542,74 @@
 				"name": "Toothpaste",
 				"brand": "Colgate",
 				"category": "Toothpaste",
+				"group": "",
 				"note": "Mint, sensitive",
 				"quantity": 2,
-				"duration_days": 45,
+				"duration_days": 0,
+				"package_size": 100,
+				"package_unit": "g",
 				"bought_at": null,
+				"expires_at": null,
 				"price": null,
 				"currency": "BRL",
 				"bought_where": "",
 				"ended_at": null,
 				"hasPhoto": true,
+				"photos": [
+					{
+						"id": "<runtime>",
+						"created_at": "<runtime>"
+					},
+					{
+						"id": "<runtime>",
+						"created_at": "<runtime>"
+					}
+				],
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"PUT /api/stocks/categories": {
+		"status": 200,
+		"body": {
+			"category": "Toothpaste",
+			"group": "Food",
+			"goal": null
+		}
+	},
+	"GET /api/stocks/items/[id] after group": {
+		"status": 200,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "consumable",
+				"name": "Toothpaste",
+				"brand": "Colgate",
+				"category": "Toothpaste",
+				"group": "Food",
+				"note": "Mint, sensitive",
+				"quantity": 2,
+				"duration_days": 0,
+				"package_size": 100,
+				"package_unit": "g",
+				"bought_at": null,
+				"expires_at": null,
+				"price": null,
+				"currency": "BRL",
+				"bought_where": "",
+				"ended_at": null,
+				"hasPhoto": true,
+				"photos": [
+					{
+						"id": "<runtime>",
+						"created_at": "<runtime>"
+					},
+					{
+						"id": "<runtime>",
+						"created_at": "<runtime>"
+					}
+				],
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>"
 			}
@@ -565,15 +624,20 @@
 				"name": "Watch",
 				"brand": "Casio",
 				"category": "Watch",
+				"group": "",
 				"note": "Steel bracelet",
 				"quantity": 0,
 				"duration_days": 0,
+				"package_size": 0,
+				"package_unit": "g",
 				"bought_at": null,
+				"expires_at": null,
 				"price": 2500,
 				"currency": "BRL",
 				"bought_where": "Downtown shop",
 				"ended_at": null,
 				"hasPhoto": false,
+				"photos": [],
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>"
 			}
@@ -588,24 +652,100 @@
 				"name": "Toothpaste",
 				"brand": "Colgate",
 				"category": "Toothpaste",
+				"group": "Food",
 				"note": "Mint, sensitive",
 				"quantity": 1,
-				"duration_days": 45,
+				"duration_days": 0,
+				"package_size": 100,
+				"package_unit": "g",
 				"bought_at": null,
+				"expires_at": 1767225600000,
 				"price": null,
 				"currency": "BRL",
 				"bought_where": "",
 				"ended_at": null,
 				"hasPhoto": true,
+				"photos": [
+					{
+						"id": "<runtime>",
+						"created_at": "<runtime>"
+					}
+				],
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>"
 			}
 		}
 	},
-	"GET /api/stocks/items/[id]/photo": {
+	"GET /api/stocks/photos/[photoId]": {
 		"status": 200,
 		"contentType": "image/png",
 		"bytes": 70
+	},
+	"POST /api/stocks/items/[id]/consume": {
+		"status": 200,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "consumable",
+				"name": "Toothpaste",
+				"brand": "Colgate",
+				"category": "Toothpaste",
+				"group": "Food",
+				"note": "Mint, sensitive",
+				"quantity": 0.5,
+				"duration_days": 0,
+				"package_size": 100,
+				"package_unit": "g",
+				"bought_at": null,
+				"expires_at": 1767225600000,
+				"price": null,
+				"currency": "BRL",
+				"bought_where": "",
+				"ended_at": null,
+				"hasPhoto": true,
+				"photos": [
+					{
+						"id": "<runtime>",
+						"created_at": "<runtime>"
+					}
+				],
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			},
+			"action": {
+				"id": "<runtime>",
+				"item_id": "<runtime>",
+				"kind": "consume",
+				"amount": 50,
+				"unit": "g",
+				"packages": 0.5,
+				"note": "used half",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/stocks/items/[id]/consume wrong unit": {
+		"status": 400,
+		"body": {
+			"error": "consuming needs a consumable with a package size and a unit in its family"
+		}
+	},
+	"GET /api/stocks/items/[id]/actions": {
+		"status": 200,
+		"body": {
+			"actions": [
+				{
+					"id": "<runtime>",
+					"item_id": "<runtime>",
+					"kind": "consume",
+					"amount": 50,
+					"unit": "g",
+					"packages": 0.5,
+					"note": "used half",
+					"created_at": "<runtime>"
+				}
+			]
+		}
 	},
 	"POST /api/stocks/items disposable": {
 		"status": 201,
@@ -616,18 +756,57 @@
 				"name": "Floss",
 				"brand": "Colgate",
 				"category": "Toothpaste",
+				"group": "Food",
 				"note": "",
 				"quantity": 1,
-				"duration_days": 60,
+				"duration_days": 0,
+				"package_size": 50,
+				"package_unit": "g",
 				"bought_at": null,
+				"expires_at": null,
 				"price": null,
 				"currency": "BRL",
 				"bought_where": "",
 				"ended_at": null,
 				"hasPhoto": false,
+				"photos": [],
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>"
 			}
+		}
+	},
+	"POST /api/stocks/items nameless": {
+		"status": 201,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "consumable",
+				"name": "",
+				"brand": "",
+				"category": "Toothpaste",
+				"group": "Food",
+				"note": "",
+				"quantity": 3,
+				"duration_days": 0,
+				"package_size": 25,
+				"package_unit": "g",
+				"bought_at": null,
+				"expires_at": null,
+				"price": null,
+				"currency": "BRL",
+				"bought_where": "",
+				"ended_at": null,
+				"hasPhoto": false,
+				"photos": [],
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"DELETE /api/stocks/items/[id] nameless": {
+		"status": 200,
+		"body": {
+			"ok": true
 		}
 	},
 	"GET /api/stocks/registries": {
@@ -640,25 +819,136 @@
 			"categories": [
 				"Toothpaste",
 				"Watch"
+			],
+			"groups": [
+				"Food"
 			]
+		}
+	},
+	"PUT /api/stocks/categories durable group": {
+		"status": 200,
+		"body": {
+			"category": "Watch",
+			"group": "Accessories",
+			"goal": null
+		}
+	},
+	"GET /api/stocks/items/[id] durable after group": {
+		"status": 200,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "durable",
+				"name": "Watch",
+				"brand": "Casio",
+				"category": "Watch",
+				"group": "Accessories",
+				"note": "Steel bracelet",
+				"quantity": 0,
+				"duration_days": 0,
+				"package_size": 0,
+				"package_unit": "g",
+				"bought_at": null,
+				"expires_at": null,
+				"price": 2500,
+				"currency": "BRL",
+				"bought_where": "Downtown shop",
+				"ended_at": null,
+				"hasPhoto": false,
+				"photos": [],
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"DELETE /api/stocks/categories group": {
+		"status": 200,
+		"body": {
+			"group": "Accessories",
+			"cleared": 1
+		}
+	},
+	"GET /api/stocks/items/[id] durable after group delete": {
+		"status": 200,
+		"body": {
+			"item": {
+				"id": "<runtime>",
+				"kind": "durable",
+				"name": "Watch",
+				"brand": "Casio",
+				"category": "Watch",
+				"group": "",
+				"note": "Steel bracelet",
+				"quantity": 0,
+				"duration_days": 0,
+				"package_size": 0,
+				"package_unit": "g",
+				"bought_at": null,
+				"expires_at": null,
+				"price": 2500,
+				"currency": "BRL",
+				"bought_where": "Downtown shop",
+				"ended_at": null,
+				"hasPhoto": false,
+				"photos": [],
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
 		}
 	},
 	"GET /api/stocks/goals default": {
 		"status": 200,
 		"body": {
-			"target_days": 365
+			"goals": []
 		}
 	},
 	"PUT /api/stocks/goals": {
 		"status": 200,
 		"body": {
-			"target_days": 180
+			"goals": [
+				{
+					"category_id": "<runtime>",
+					"category": "Oil",
+					"group": "",
+					"people": 1,
+					"amount": 2,
+					"unit": "L",
+					"note": "",
+					"target": 2
+				},
+				{
+					"category_id": "<runtime>",
+					"category": "Rice",
+					"group": "",
+					"people": 1,
+					"amount": 0.5,
+					"unit": "kg",
+					"note": "",
+					"target": 0.5
+				},
+				{
+					"category_id": "<runtime>",
+					"category": "Toothpaste",
+					"group": "Food",
+					"people": 2,
+					"amount": 100,
+					"unit": "g",
+					"note": "Goal represents 1 year of stock",
+					"target": 200
+				}
+			]
+		}
+	},
+	"PUT /api/stocks/goals invalid unit": {
+		"status": 400,
+		"body": {
+			"error": "each goal needs a category, people ≥ 1, an amount > 0 and a unit of g, kg, ml or L"
 		}
 	},
 	"PUT /api/stocks/goals invalid": {
 		"status": 400,
 		"body": {
-			"error": "target_days must be a whole number of days, 1 to 3650"
+			"error": "each goal needs a category, people ≥ 1, an amount > 0 and a unit of g, kg, ml or L"
 		}
 	},
 	"DELETE /api/stocks/items/[id]": {
@@ -740,8 +1030,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": 0,
+				"previous_value": null,
+				"previous_value_at": 0,
 				"avgPrice": null,
-				"valueUsd": 0
+				"valueUsd": 0,
+				"changePct": null
 			},
 			"summary": {
 				"holdings": [
@@ -760,11 +1053,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 0,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -802,8 +1100,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": null,
+				"previous_value_at": 0,
 				"avgPrice": 9.5,
-				"valueUsd": 1000
+				"valueUsd": 1000,
+				"changePct": null
 			},
 			"summary": {
 				"holdings": [
@@ -822,8 +1123,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 9.5,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -840,11 +1144,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 1000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -883,8 +1192,11 @@
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
 					"price_updated_at": "<runtime>",
+					"previous_value": 1000,
+					"previous_value_at": "<runtime>",
 					"avgPrice": 9.5,
-					"valueUsd": 1000
+					"valueUsd": 1000,
+					"changePct": 0
 				},
 				{
 					"id": "<runtime>",
@@ -901,11 +1213,16 @@
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
 					"price_updated_at": 0,
+					"previous_value": 0,
+					"previous_value_at": "<runtime>",
 					"avgPrice": null,
-					"valueUsd": 0
+					"valueUsd": 0,
+					"changePct": null
 				}
 			],
 			"totalUsd": 1000,
+			"previousTotalUsd": null,
+			"totalChangePct": null,
 			"asOf": null,
 			"stale": true,
 			"goals": null,
@@ -948,7 +1265,7 @@
 				"holding_id": "<runtime>",
 				"kind": "buy",
 				"amount": 10,
-				"price": 10,
+				"price": 12.5,
 				"currency": "BRL",
 				"created_at": "<runtime>"
 			},
@@ -967,8 +1284,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": 1000,
+				"previous_value_at": "<runtime>",
 				"avgPrice": 9.5,
-				"valueUsd": 1100
+				"valueUsd": 1100,
+				"changePct": 10
 			},
 			"actions": [
 				{
@@ -976,7 +1296,7 @@
 					"holding_id": "<runtime>",
 					"kind": "buy",
 					"amount": 10,
-					"price": 10,
+					"price": 12.5,
 					"currency": "BRL",
 					"created_at": "<runtime>"
 				},
@@ -1007,8 +1327,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1100,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 9.5,
-						"valueUsd": 1100
+						"valueUsd": 1100,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1025,11 +1348,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 1100,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1047,6 +1375,12 @@
 					"UYU": null
 				}
 			}
+		}
+	},
+	"POST /api/holdings/[id]/actions bad price": {
+		"status": 400,
+		"body": {
+			"error": "kind must be buy or sell and amount must be greater than 0"
 		}
 	},
 	"POST /api/holdings/[id]/actions sell": {
@@ -1076,8 +1410,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": 1100,
+				"previous_value_at": "<runtime>",
 				"avgPrice": 9.5,
-				"valueUsd": 1050
+				"valueUsd": 1050,
+				"changePct": -4.545454545454546
 			},
 			"actions": [
 				{
@@ -1094,7 +1431,7 @@
 					"holding_id": "<runtime>",
 					"kind": "buy",
 					"amount": 10,
-					"price": 10,
+					"price": 12.5,
 					"currency": "BRL",
 					"created_at": "<runtime>"
 				},
@@ -1125,8 +1462,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1050,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 9.5,
-						"valueUsd": 1050
+						"valueUsd": 1050,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1143,11 +1483,135 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 1050,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
+				"asOf": null,
+				"stale": true,
+				"goals": null,
+				"valueGoals": null,
+				"valueProgress": [],
+				"actual": {
+					"btc": 0,
+					"fii": 100,
+					"cash": 0
+				},
+				"drift": [],
+				"displayTotals": {
+					"USD": 1050,
+					"BRL": null,
+					"UYU": null
+				}
+			}
+		}
+	},
+	"GET /api/holdings/[id]/history": {
+		"status": 200,
+		"body": {
+			"points": [
+				{
+					"day": "<runtime>",
+					"amount": 105,
+					"price": 10,
+					"value": 1050,
+					"currency": "BRL",
+					"value_usd": 1050,
+					"recorded_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/holdings/history": {
+		"status": 200,
+		"body": {
+			"points": [
+				{
+					"day": "<runtime>",
+					"value_usd": 1050,
+					"recorded_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"PATCH /api/holdings/[id] same value": {
+		"status": 200,
+		"body": {
+			"holding": {
+				"id": "<runtime>",
+				"ticker": "MXRF11",
+				"amount": 105,
+				"price": 10,
+				"priceAuto": false,
+				"currency": "BRL",
+				"category": "fii",
+				"goal": null,
+				"bank": "",
+				"country": "",
+				"position": 1,
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"price_updated_at": "<runtime>",
+				"previous_value": 1050,
+				"previous_value_at": "<runtime>",
+				"avgPrice": 9.5,
+				"valueUsd": 1050,
+				"changePct": 0
+			},
+			"summary": {
+				"holdings": [
+					{
+						"id": "<runtime>",
+						"ticker": "MXRF11",
+						"amount": 105,
+						"price": 10,
+						"priceAuto": false,
+						"currency": "BRL",
+						"category": "fii",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 1,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": "<runtime>",
+						"previous_value": 1050,
+						"previous_value_at": "<runtime>",
+						"avgPrice": 9.5,
+						"valueUsd": 1050,
+						"changePct": 0
+					},
+					{
+						"id": "<runtime>",
+						"ticker": "BTC",
+						"amount": 0.5,
+						"price": null,
+						"priceAuto": false,
+						"currency": "USD",
+						"category": "btc",
+						"goal": null,
+						"bank": "",
+						"country": "",
+						"position": 0,
+						"created_at": "<runtime>",
+						"updated_at": "<runtime>",
+						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
+						"avgPrice": null,
+						"valueUsd": 0,
+						"changePct": null
+					}
+				],
+				"totalUsd": 1050,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1207,7 +1671,7 @@
 					"holding_id": "<runtime>",
 					"kind": "buy",
 					"amount": 10,
-					"price": 10,
+					"price": 12.5,
 					"currency": "BRL",
 					"created_at": "<runtime>",
 					"ticker": "MXRF11",
@@ -1238,8 +1702,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": 1050,
+				"previous_value_at": "<runtime>",
 				"avgPrice": 9.5,
-				"valueUsd": 1010
+				"valueUsd": 1010,
+				"changePct": -3.8095238095238098
 			},
 			"summary": {
 				"holdings": [
@@ -1258,8 +1725,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1010,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 9.5,
-						"valueUsd": 1010
+						"valueUsd": 1010,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1276,11 +1746,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 1010,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1318,8 +1793,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": 0,
+				"previous_value": 1010,
+				"previous_value_at": "<runtime>",
 				"avgPrice": 9.5,
-				"valueUsd": 0
+				"valueUsd": 0,
+				"changePct": null
 			},
 			"summary": {
 				"holdings": [
@@ -1338,8 +1816,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					},
 					{
 						"id": "<runtime>",
@@ -1356,11 +1837,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 9.5,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 0,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1398,8 +1884,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": 0,
+				"previous_value_at": "<runtime>",
 				"avgPrice": 9.5,
-				"valueUsd": 2000
+				"valueUsd": 2000,
+				"changePct": null
 			},
 			"summary": {
 				"holdings": [
@@ -1418,8 +1907,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 9.5,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1436,11 +1928,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 2000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1478,8 +1975,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": 2000,
+				"previous_value_at": "<runtime>",
 				"avgPrice": 12,
-				"valueUsd": 2000
+				"valueUsd": 2000,
+				"changePct": 0
 			},
 			"summary": {
 				"holdings": [
@@ -1498,8 +1998,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1516,11 +2019,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": 0,
+						"previous_value": 0,
+						"previous_value_at": "<runtime>",
 						"avgPrice": null,
-						"valueUsd": 0
+						"valueUsd": 0,
+						"changePct": null
 					}
 				],
 				"totalUsd": 2000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1558,7 +2066,7 @@
 					"holding_id": "<runtime>",
 					"kind": "buy",
 					"amount": 10,
-					"price": 10,
+					"price": 12.5,
 					"currency": "BRL",
 					"created_at": "<runtime>"
 				},
@@ -1594,11 +2102,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 2000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1636,8 +2149,11 @@
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"price_updated_at": "<runtime>",
+				"previous_value": null,
+				"previous_value_at": 0,
 				"avgPrice": 1,
-				"valueUsd": 1000
+				"valueUsd": 1000,
+				"changePct": null
 			},
 			"summary": {
 				"holdings": [
@@ -1656,8 +2172,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1674,11 +2193,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 1,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 3000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": null,
@@ -1769,8 +2293,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1787,11 +2314,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 1,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 3000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": {
@@ -1858,8 +2390,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1876,11 +2411,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 1,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 3000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": {
@@ -1952,8 +2492,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -1970,11 +2513,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 1,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 3000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": {
@@ -2052,8 +2600,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -2070,11 +2621,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 1,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 3000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": {
@@ -2129,8 +2685,11 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 2000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 12,
-						"valueUsd": 2000
+						"valueUsd": 2000,
+						"changePct": 0
 					},
 					{
 						"id": "<runtime>",
@@ -2147,11 +2706,16 @@
 						"created_at": "<runtime>",
 						"updated_at": "<runtime>",
 						"price_updated_at": "<runtime>",
+						"previous_value": 1000,
+						"previous_value_at": "<runtime>",
 						"avgPrice": 1,
-						"valueUsd": 1000
+						"valueUsd": 1000,
+						"changePct": 0
 					}
 				],
 				"totalUsd": 3000,
+				"previousTotalUsd": null,
+				"totalChangePct": null,
 				"asOf": null,
 				"stale": true,
 				"goals": {
@@ -2231,12 +2795,15 @@
 			"tagColors": 1,
 			"holdings": 2,
 			"holdingActions": 4,
+			"holdingValueHistory": 2,
+			"portfolioValueHistory": 1,
 			"goals": 3,
 			"valueGoals": 1,
 			"stocks": 2,
 			"stockPhotos": 1,
+			"stockActions": 1,
 			"stockBrands": 2,
-			"stockCategories": 2
+			"stockCategories": 4
 		}
 	},
 	"POST /api/import": {
@@ -2262,7 +2829,10 @@
 			"goals": 3,
 			"valueGoals": 1,
 			"stocks": 2,
-			"stockGoal": 1
+			"stockGoal": 1,
+			"stockActions": 1,
+			"holdingValueHistory": 2,
+			"portfolioValueHistory": 1
 		}
 	},
 	"GET /api/notes/[id] after restore": {
@@ -2407,8 +2977,11 @@
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
 					"price_updated_at": "<runtime>",
+					"previous_value": 2000,
+					"previous_value_at": "<runtime>",
 					"avgPrice": 12,
-					"valueUsd": 2000
+					"valueUsd": 2000,
+					"changePct": 0
 				},
 				{
 					"id": "<runtime>",
@@ -2425,11 +2998,16 @@
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
 					"price_updated_at": "<runtime>",
+					"previous_value": 1000,
+					"previous_value_at": "<runtime>",
 					"avgPrice": 1,
-					"valueUsd": 1000
+					"valueUsd": 1000,
+					"changePct": 0
 				}
 			],
 			"totalUsd": 3000,
+			"previousTotalUsd": null,
+			"totalChangePct": null,
 			"asOf": null,
 			"stale": true,
 			"goals": {
@@ -2498,7 +3076,7 @@
 					"holding_id": "<runtime>",
 					"kind": "buy",
 					"amount": 10,
-					"price": 10,
+					"price": 12.5,
 					"currency": "BRL",
 					"created_at": "<runtime>"
 				},
@@ -2510,6 +3088,34 @@
 					"price": 12,
 					"currency": "BRL",
 					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/holdings/[id]/history after restore": {
+		"status": 200,
+		"body": {
+			"points": [
+				{
+					"day": "<runtime>",
+					"amount": 100,
+					"price": 20,
+					"value": 2000,
+					"currency": "BRL",
+					"value_usd": 2000,
+					"recorded_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"GET /api/holdings/history after restore": {
+		"status": 200,
+		"body": {
+			"points": [
+				{
+					"day": "<runtime>",
+					"value_usd": 3000,
+					"recorded_at": "<runtime>"
 				}
 			]
 		}
@@ -2535,7 +3141,7 @@
 					"holding_id": "<runtime>",
 					"kind": "buy",
 					"amount": 10,
-					"price": 10,
+					"price": 12.5,
 					"currency": "BRL",
 					"created_at": "<runtime>",
 					"ticker": "MXRF11",
@@ -2548,6 +3154,10 @@
 			"nextCursor": null
 		}
 	},
+	"GET /api/stocks/print?scope=all": {
+		"status": 200,
+		"contentType": "text/html; charset=utf-8"
+	},
 	"GET /api/stocks/items after restore": {
 		"status": 200,
 		"body": {
@@ -2558,15 +3168,25 @@
 					"name": "Toothpaste",
 					"brand": "Colgate",
 					"category": "Toothpaste",
+					"group": "Food",
 					"note": "Mint, sensitive",
-					"quantity": 1,
-					"duration_days": 45,
+					"quantity": 0.5,
+					"duration_days": 0,
+					"package_size": 100,
+					"package_unit": "g",
 					"bought_at": null,
+					"expires_at": 1767225600000,
 					"price": null,
 					"currency": "BRL",
 					"bought_where": "",
 					"ended_at": null,
 					"hasPhoto": true,
+					"photos": [
+						{
+							"id": "<runtime>",
+							"created_at": "<runtime>"
+						}
+					],
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>"
 				},
@@ -2576,22 +3196,27 @@
 					"name": "Watch",
 					"brand": "Casio",
 					"category": "Watch",
+					"group": "",
 					"note": "Steel bracelet",
 					"quantity": 0,
 					"duration_days": 0,
+					"package_size": 0,
+					"package_unit": "g",
 					"bought_at": null,
+					"expires_at": null,
 					"price": 2500,
 					"currency": "BRL",
 					"bought_where": "Downtown shop",
 					"ended_at": null,
 					"hasPhoto": false,
+					"photos": [],
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>"
 				}
 			]
 		}
 	},
-	"GET /api/stocks/items/[id]/photo after restore": {
+	"GET /api/stocks/photos/[photoId] after restore": {
 		"status": 200,
 		"contentType": "image/png",
 		"bytes": 70
@@ -2599,7 +3224,38 @@
 	"GET /api/stocks/goals after restore": {
 		"status": 200,
 		"body": {
-			"target_days": 180
+			"goals": [
+				{
+					"category_id": "<runtime>",
+					"category": "Oil",
+					"group": "",
+					"people": 1,
+					"amount": 2,
+					"unit": "L",
+					"note": "",
+					"target": 2
+				},
+				{
+					"category_id": "<runtime>",
+					"category": "Rice",
+					"group": "",
+					"people": 1,
+					"amount": 0.5,
+					"unit": "kg",
+					"note": "",
+					"target": 0.5
+				},
+				{
+					"category_id": "<runtime>",
+					"category": "Toothpaste",
+					"group": "Food",
+					"people": 2,
+					"amount": 100,
+					"unit": "g",
+					"note": "Goal represents 1 year of stock",
+					"target": 200
+				}
+			]
 		}
 	},
 	"GET /api/stocks/registries after restore": {
@@ -2610,8 +3266,30 @@
 				"Colgate"
 			],
 			"categories": [
+				"Oil",
+				"Rice",
 				"Toothpaste",
 				"Watch"
+			],
+			"groups": [
+				"Food"
+			]
+		}
+	},
+	"GET /api/stocks/items/[id]/actions after restore": {
+		"status": 200,
+		"body": {
+			"actions": [
+				{
+					"id": "<runtime>",
+					"item_id": "<runtime>",
+					"kind": "consume",
+					"amount": 50,
+					"unit": "g",
+					"packages": 0.5,
+					"note": "used half",
+					"created_at": "<runtime>"
+				}
 			]
 		}
 	},

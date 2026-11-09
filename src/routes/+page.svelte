@@ -479,13 +479,14 @@ function langTag(p: Lang): string {
 	async function recordHoldingAction(
 		id: string,
 		kind: 'buy' | 'sell',
-		amount: number
+		amount: number,
+		price: number | null
 	): Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }> {
 		try {
 			const res = await fetch(`/api/holdings/${id}/actions`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ kind, amount })
+				body: JSON.stringify({ kind, amount, price })
 			});
 			const d = await res.json();
 			if (!res.ok) return { ok: false, error: d?.error ?? 'Failed to record the action.' };

@@ -45,6 +45,9 @@ export interface RestoreCounts {
 	valueGoals: number;
 	stocks: number;
 	stockGoal: number;
+	stockActions: number;
+	holdingValueHistory: number;
+	portfolioValueHistory: number;
 }
 
 function sqlString(value: string): string {
@@ -172,6 +175,9 @@ export function copyUploadIntoTarget(
 			// The target is already migrated to the latest schema, so the
 			// stock tables always exist. Clear them even when the backup is
 			// older than them; a replace must not leave rows behind.
+			'DELETE FROM stock_item_photos',
+			'DELETE FROM stock_item_actions',
+			'DELETE FROM stock_category_goals',
 			'DELETE FROM stock_items',
 			'DELETE FROM stock_registries',
 			'DELETE FROM stock_goals'
@@ -179,7 +185,7 @@ export function copyUploadIntoTarget(
 		if (hasTodo) statements.push('DELETE FROM todo_items', 'DELETE FROM todo_groups');
 		if (has('principles')) statements.push('DELETE FROM principles');
 		if (has('tag_colors')) statements.push('DELETE FROM tag_colors');
-		if (has('holdings')) statements.push('DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
+		if (has('holdings')) statements.push('DELETE FROM holding_value_history', 'DELETE FROM portfolio_value_history', 'DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
 
 		statements.push(
 			`INSERT INTO notes (id, content, created_at, updated_at, featured, video)
@@ -261,13 +267,15 @@ export function copyUploadIntoTarget(
 		}
 		if (has('holdings')) {
 			statements.push(
-				`INSERT INTO holdings (id, ticker, amount, price, price_auto, currency, category, goal, bank, country, position, created_at, updated_at, price_updated_at)
+				`INSERT INTO holdings (id, ticker, amount, price, price_auto, currency, category, goal, bank, country, position, created_at, updated_at, price_updated_at, previous_value, previous_value_at)
 					SELECT id, ticker, amount, ${column('holdings', 'price', 'NULL')},
 						${column('holdings', 'price_auto', '0')}, ${column('holdings', 'currency', "'USD'")},
 						${column('holdings', 'category', "'fii'")}, ${column('holdings', 'goal', 'NULL')},
 						${column('holdings', 'bank', "''")}, ${column('holdings', 'country', "''")},
 						${column('holdings', 'position', '0')}, created_at, updated_at,
-						${column('holdings', 'price_updated_at', 'updated_at')}
+						${column('holdings', 'price_updated_at', 'updated_at')},
+						${column('holdings', 'previous_value', 'NULL')},
+						${column('holdings', 'previous_value_at', '0')}
 					FROM backup.holdings`
 			);
 		}
@@ -287,6 +295,26 @@ export function copyUploadIntoTarget(
 					SELECT 'open-' || id, id, 'opening', amount,
 						CASE WHEN category = 'cash' THEN 1 ELSE NULL END, currency, created_at
 					FROM holdings`
+			);
+		}
+		if (has('holding_value_history') && has('holdings')) {
+			statements.push(
+				`INSERT INTO holding_value_history (holding_id, day, amount, price, value, currency, value_usd, recorded_at)
+					SELECT holding_id, day,
+						${column('holding_value_history', 'amount', '0')},
+						${column('holding_value_history', 'price', 'NULL')},
+						${column('holding_value_history', 'value', '0')},
+						${column('holding_value_history', 'currency', "'USD'")},
+						${column('holding_value_history', 'value_usd', '0')},
+						recorded_at
+					FROM backup.holding_value_history`
+			);
+		}
+		if (has('portfolio_value_history')) {
+			statements.push(
+				`INSERT INTO portfolio_value_history (day, value_usd, recorded_at)
+					SELECT day, ${column('portfolio_value_history', 'value_usd', '0')}, recorded_at
+					FROM backup.portfolio_value_history`
 			);
 		}
 		if (has('holdings')) {
@@ -318,20 +346,24 @@ export function copyUploadIntoTarget(
 		}
 		if (has('stock_registries')) {
 			statements.push(
-				`INSERT INTO stock_registries (id, kind, name, name_key, created_at)
-					SELECT id, kind, name, name_key, created_at FROM backup.stock_registries`
+				`INSERT INTO stock_registries (id, kind, name, name_key, created_at, parent)
+					SELECT id, kind, name, name_key, created_at, ${column('stock_registries', 'parent', "''")}
+					FROM backup.stock_registries`
 			);
 		}
 		if (has('stock_items')) {
 			statements.push(
-				`INSERT INTO stock_items (id, kind, name, brand_id, category_id, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
+				`INSERT INTO stock_items (id, kind, name, brand_id, category_id, note, quantity, duration_days, package_size, package_unit, bought_at, expires_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
 					SELECT id, ${column('stock_items', 'kind', "'consumable'")}, name,
 						${column('stock_items', 'brand_id', 'NULL')},
 						${column('stock_items', 'category_id', 'NULL')},
 						${column('stock_items', 'note', "''")},
 						${column('stock_items', 'quantity', '0')},
 						${column('stock_items', 'duration_days', '0')},
+						${column('stock_items', 'package_size', '0')},
+						${column('stock_items', 'package_unit', "'g'")},
 						${column('stock_items', 'bought_at', 'NULL')},
+						${column('stock_items', 'expires_at', 'NULL')},
 						${column('stock_items', 'price', 'NULL')},
 						${column('stock_items', 'currency', "'BRL'")},
 						${column('stock_items', 'bought_where', "''")},
@@ -343,9 +375,47 @@ export function copyUploadIntoTarget(
 					FROM backup.stock_items`
 			);
 		}
+		if (has('stock_item_photos')) {
+			statements.push(
+				`INSERT INTO stock_item_photos (id, item_id, photo, mime, position, created_at)
+					SELECT id, item_id, photo, mime, position, created_at
+					FROM backup.stock_item_photos`
+			);
+		} else if (has('stock_items')) {
+			// A pre-gallery backup keeps its single photo on the item row.
+			// Lift it into the gallery so current images survive the restore.
+			statements.push(
+				`INSERT INTO stock_item_photos (id, item_id, photo, mime, position, created_at)
+					SELECT 'legacy-' || id, id, photo,
+						COALESCE(NULLIF(photo_mime, ''), 'image/jpeg'),
+						0, updated_at
+					FROM stock_items WHERE photo IS NOT NULL`
+			);
+		}
 		if (has('stock_goals')) {
 			statements.push(
 				'INSERT INTO stock_goals (id, target_days) SELECT 1, target_days FROM backup.stock_goals WHERE id = 1'
+			);
+		}
+		if (has('stock_category_goals')) {
+			statements.push(
+				`INSERT INTO stock_category_goals (category_id, people, amount, unit, note)
+					SELECT category_id, ${column('stock_category_goals', 'people', '1')},
+						${column('stock_category_goals', 'amount', '0')},
+						${column('stock_category_goals', 'unit', "'g'")},
+						${column('stock_category_goals', 'note', "''")}
+					FROM backup.stock_category_goals`
+			);
+		}
+		if (has('stock_item_actions')) {
+			statements.push(
+				`INSERT INTO stock_item_actions (id, item_id, kind, amount, unit, packages, note, created_at)
+					SELECT id, item_id, ${column('stock_item_actions', 'kind', "'consume'")},
+						amount, ${column('stock_item_actions', 'unit', "'g'")},
+						${column('stock_item_actions', 'packages', '0')},
+						${column('stock_item_actions', 'note', "''")},
+						created_at
+					FROM backup.stock_item_actions`
 			);
 		}
 
@@ -395,7 +465,10 @@ export function copyUploadIntoTarget(
 		goals: count(target, 'category_goals'),
 		valueGoals: count(target, 'category_value_goals'),
 		stocks: count(target, 'stock_items'),
-		stockGoal: count(target, 'stock_goals')
+		stockGoal: count(target, 'stock_goals'),
+		stockActions: count(target, 'stock_item_actions'),
+		holdingValueHistory: count(target, 'holding_value_history'),
+		portfolioValueHistory: count(target, 'portfolio_value_history')
 	};
 }
 

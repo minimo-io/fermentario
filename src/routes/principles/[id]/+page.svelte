@@ -155,7 +155,7 @@
 				</div>
 			{/if}
 			{#if principle.video}
-				<div class="mt-2"><VideoPill id={principle.video} /></div>
+				<div class="mt-2"><VideoPill id={principle.video} defaultOpen autoplay={false} /></div>
 			{/if}
 		</article>
 

@@ -340,6 +340,164 @@ const stockRegistries: Migration = {
 	}
 };
 
+/** Optional weight/volume per package. The package count and days per
+ *  package still drive the estimate; the size only derives grams/ml totals
+ *  and the restock quantity. */
+const stockPackageSize: Migration = {
+	version: 14,
+	name: 'stock-package-size',
+	up(db) {
+		addColumn(db, 'stock_items', 'package_size', 'REAL NOT NULL DEFAULT 0');
+		addColumn(db, 'stock_items', 'package_unit', "TEXT NOT NULL DEFAULT 'g'");
+	}
+};
+
+/** Multi-photo gallery. Existing single photos become the first gallery row;
+ *  the old `stock_items.photo` columns stay for older backups and the
+ *  compatibility image route. */
+const stockItemPhotos: Migration = {
+	version: 15,
+	name: 'stock-item-photos',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_item_photos (
+				id         TEXT PRIMARY KEY,
+				item_id    TEXT NOT NULL REFERENCES stock_items(id) ON DELETE CASCADE,
+				photo      BLOB NOT NULL,
+				mime       TEXT NOT NULL,
+				position   INTEGER NOT NULL DEFAULT 0,
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS stock_item_photos_item
+				ON stock_item_photos(item_id, position);
+		`);
+		db.exec(`
+			INSERT INTO stock_item_photos (id, item_id, photo, mime, position, created_at)
+			SELECT 'legacy-' || id, id, photo, COALESCE(NULLIF(photo_mime, ''), 'image/jpeg'), 0, updated_at
+			FROM stock_items
+			WHERE photo IS NOT NULL;
+		`);
+	}
+};
+
+/** Category amount goals. The amount is per person; the list shows
+ *  `people × amount` against the summed package sizes. The old one-row
+ *  days goal stays for old backups but is no longer used by the UI.
+ *  Version 17 widens the unit check so goals use the same units as products
+ *  (`g`, `kg`, `ml`, `L`) instead of only grams and litres. */
+const stockCategoryGoals: Migration = {
+	version: 16,
+	name: 'stock-category-goals',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_category_goals (
+				category_id TEXT PRIMARY KEY REFERENCES stock_registries(id) ON DELETE CASCADE,
+				people      INTEGER NOT NULL DEFAULT 1 CHECK (people >= 1),
+				amount      REAL NOT NULL CHECK (amount > 0),
+				unit        TEXT NOT NULL DEFAULT 'g' CHECK (unit IN ('g', 'L')),
+				note        TEXT NOT NULL DEFAULT ''
+			);
+		`);
+	}
+};
+
+/** Same units as products: grams, kilograms, millilitres or litres. The
+ *  table is rebuilt because a CHECK constraint cannot be altered in place. */
+const stockGoalUnits: Migration = {
+	version: 17,
+	name: 'stock-goal-units',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_category_goals_new (
+				category_id TEXT PRIMARY KEY REFERENCES stock_registries(id) ON DELETE CASCADE,
+				people      INTEGER NOT NULL DEFAULT 1 CHECK (people >= 1),
+				amount      REAL NOT NULL CHECK (amount > 0),
+				unit        TEXT NOT NULL DEFAULT 'g' CHECK (unit IN ('g', 'kg', 'ml', 'L')),
+				note        TEXT NOT NULL DEFAULT ''
+			);
+			INSERT OR IGNORE INTO stock_category_goals_new
+				SELECT category_id, people, amount, unit, note FROM stock_category_goals;
+			DROP TABLE stock_category_goals;
+			ALTER TABLE stock_category_goals_new RENAME TO stock_category_goals;
+		`);
+	}
+};
+
+/** Logged consumptions per item. `stock_item_actions` arrives with
+ *  migration 18; the table is rebuilt on every flag flip, so old backups
+ *  restore without history. */
+const stockItemActions: Migration = {
+	version: 18,
+	name: 'stock-item-actions',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS stock_item_actions (
+				id         TEXT PRIMARY KEY,
+				item_id    TEXT NOT NULL REFERENCES stock_items(id) ON DELETE CASCADE,
+				kind       TEXT NOT NULL DEFAULT 'consume' CHECK (kind IN ('consume')),
+				amount     REAL NOT NULL CHECK (amount > 0),
+				unit       TEXT NOT NULL DEFAULT 'g',
+				packages   REAL NOT NULL DEFAULT 0,
+				note       TEXT NOT NULL DEFAULT '',
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS stock_item_actions_item
+				ON stock_item_actions(item_id, created_at DESC, id DESC);
+		`);
+	}
+};
+
+/** Category parent groups (nodes hierarchy). `parent` is a plain label
+ *  (e.g. Food, Fun) on category rows; items inherit it by category. */
+const stockRegistryParents: Migration = {
+	version: 19,
+	name: 'stock-registry-parents',
+	up(db) {
+		addColumn(db, 'stock_registries', 'parent', "TEXT NOT NULL DEFAULT ''");
+	}
+};
+
+/** Optional expiration date for consumables. Existing rows stay NULL. */
+const stockExpiresAt: Migration = {
+	version: 20,
+	name: 'stock-expires-at',
+	up(db) {
+		addColumn(db, 'stock_items', 'expires_at', 'INTEGER');
+	}
+};
+
+/** Daily value snapshots: one row per holding per day and one portfolio
+ *  total per day. Later fetches upsert the same day, so each day keeps the
+ *  last value seen. `previous_value` on holdings powers the card delta. */
+const holdingValueHistory: Migration = {
+	version: 21,
+	name: 'holding-value-history',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS holding_value_history (
+				holding_id  TEXT NOT NULL REFERENCES holdings(id) ON DELETE CASCADE,
+				day         TEXT NOT NULL,
+				amount      REAL NOT NULL DEFAULT 0,
+				price       REAL,
+				value       REAL NOT NULL DEFAULT 0,
+				currency    TEXT NOT NULL DEFAULT 'USD',
+				value_usd   REAL NOT NULL DEFAULT 0,
+				recorded_at INTEGER NOT NULL,
+				PRIMARY KEY (holding_id, day)
+			);
+			CREATE INDEX IF NOT EXISTS holding_value_history_day
+				ON holding_value_history(day);
+			CREATE TABLE IF NOT EXISTS portfolio_value_history (
+				day         TEXT PRIMARY KEY,
+				value_usd   REAL NOT NULL DEFAULT 0,
+				recorded_at INTEGER NOT NULL
+			);
+		`);
+		addColumn(db, 'holdings', 'previous_value', 'REAL');
+		addColumn(db, 'holdings', 'previous_value_at', 'INTEGER NOT NULL DEFAULT 0');
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -353,7 +511,15 @@ export const MIGRATIONS: Migration[] = [
 	todoVideo,
 	stockItems,
 	stockGoals,
-	stockRegistries
+	stockRegistries,
+	stockPackageSize,
+	stockItemPhotos,
+	stockCategoryGoals,
+	stockGoalUnits,
+	stockItemActions,
+	stockRegistryParents,
+	stockExpiresAt,
+	holdingValueHistory
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

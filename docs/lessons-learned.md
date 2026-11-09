@@ -2041,3 +2041,212 @@
   fields exceed a phone screen.
 - A goal field in the tab row is cramped on mobile: give it its own full-width
   row with a 16 px input and an info button; on `sm` return it to the right.
+
+## Session: Durable age in calendar units
+- Calendar age must borrow days from the target month's predecessor, not
+  divide milliseconds by 30 days. `calendarSpan` gives "1 mes y 22 días"
+  where fixed 30-day math would say 52 days. Borrow days first, then months,
+  then years.
+- Localize the unit list and both ends: active items read "Hace …" (es),
+  "Owned …" (en), "Tem …" (pt); ended items read "Duró …" / "Lasted …" /
+  "Durou …". Same-day needs its own phrase, or the line reads "Hace 0 días".
+
+## Session: Package size, consumable price, principle video
+- Package size is display-only. Keep the estimate from packages × days per
+  package; derive total grams and grams/day. Never store a second amount that
+  can drift from the package count. Loose stock is one package of that size.
+- Consumable price is per package, not the total. Derive the stock value and
+  the restock cost. The price/currency columns already existed; the consumable
+  branch was the only place zeroing them.
+- `VideoPill.defaultOpen` is a one-time initial state; Svelte warns on
+  `$state(prop)`. Add the state_referenced_locally ignore. The principle page
+  opens the click-to-load block without autoplay; the pill still toggles it.
+
+## Session: Stock photo gallery and item view
+- Multiple photos need a child table, not repeated BLOBs on the item. The
+  legacy `stock_items.photo` is copied into `stock_item_photos` at migration
+  15 and stays for old backups and the compatibility URL; new writes only
+  touch the gallery.
+- The card is one button that opens the read-only view. Do not nest an edit
+  button inside it: the view owns Edit and Delete. The edit modal returns to
+  the updated view on close.
+- The editor sends only new data URLs plus removed photo ids. The server
+  validates every image before the item update, caps the gallery at eight,
+  and removes only ids belonging to that item.
+- A localized age is two parts, not one string: `durableAge` returns the
+  neutral status word (`Owned`, `Hace`, `Duró`) and the duration separately.
+  `durableAgeText` is gone; render the parts so only the time span gets the
+  colour. A zero-length duration (“Today”) stays neutral.
+- The stock density switcher is client-only state in `ferm:stocks-view`, like
+  the kind tab in `ferm:stocks-tab`. Compact and detailed cards share the same
+  item data and open the same view modal; do not add a second source of truth.
+
+## Session: Category amount goals for stocks
+- A days goal does not answer "what to buy". Replace it with an amount per
+  person per category (`stock_category_goals`, migration 16); the target is
+  `people × amount`. The old `stock_goals` row stays for old backups.
+- Progress sums package sizes, not days. Normalize units before adding:
+  `kg → g` for gram goals, `ml → L` for litre goals. Items with no size or the
+  other family are skipped and counted in the header, never silently zeroed.
+- Group headers own the goal UI (progress, need, people, note); cards keep
+  only days-left estimates. The item view shows the category goal, not a days
+  goal.
+- `setStockCategoryGoals` replaces the whole set in one transaction and
+  resolves categories through the registry, so new names are created and
+  duplicate spellings collapse to one goal.
+
+## Session: Remove days and price from consumables
+- A leftover model field is not a harmless default. Days-per-package and
+  price-per-package survived the category-goal change and still drove card
+  estimates and restock math. Remove them from the form, the API validation,
+  the cards and the item view in one pass.
+- `duration_days`, `price` and `currency` columns stay in the database for old
+  backups. The storage layer forces them to empty on consumable writes, so
+  old values clear on the next edit instead of drifting.
+- Package size is required for consumables: without it the item cannot add to
+  its category goal. The form rejects an empty size; items never save as
+  skipped-by-accident.
+
+## Session: Nameless consumables and discoverable goals
+- `crypto.randomUUID` is secure-context only. On plain LAN addresses it is
+  undefined and silently crashes any modal whose draft rows call it. Client
+  keys must go through `uniqueKey` (`src/lib/unique.ts`): randomUUID when
+  present, else random bytes, else clock + random.
+- A consumable with an empty name needs one display title everywhere: name,
+  then brand, then category, then "Consumable" (`stockDisplayTitle`). The
+  brand is omitted from the subtitle when it already serves as the title.
+  The server accepts the empty name; it still requires name, brand or
+  category to identify the item. Durables still require a name.
+- Goal entry points must be visible without knowing the toolbar: a labelled
+  "Category goals" button, a banner when the goal set is empty, and Set
+  goal / Edit on every category header.
+
+## Session: Coherent goal and product units
+- The goal editor offered only `g`/`L` while products allowed `g`, `kg`,
+  `ml`, `L`, so a 900 ml item never counted toward a gram goal. The unit
+  sets must match: migration 17 widens the goal CHECK to all four units.
+- A CHECK cannot be altered in SQLite; rebuild the table (create, copy,
+  drop, rename) inside the migration transaction.
+- Conversion stays family-only: mass never counts toward volume. Infer the
+  family from the category items and default new goal rows to `g` or `L`,
+  but never silently rewrite an existing goal (5,400 g stays until the user
+  changes it to ml or L).
+- The header must distinguish "no size" from "wrong family"; the two fixes
+  differ, so they need separate messages.
+
+## Session: Goals modal unit coercion
+- `row.unit === 'L' ? 'L' : 'g'` in the goals modal silently discarded
+  `ml` and `kg` before the API call. The API was fine; the client invented a
+  smaller unit set. Any unit column must be validated against the full set
+  shared with products, not reshaped to a subset.
+- When the user reports "nothing updates", check the client validation and
+  the network payload before touching the server. The server round-trip
+  (PUT then GET) isolated the bug to the modal in one request.
+
+## Session: Buy estimate in the category header
+- A progress bar answers "how far", the user also asks "what do I buy". The
+  estimate copies the newest counting item: `ceil(need / its package size)`.
+  Never invent a package size from the goal unit; a 900 ml bottle can only be
+  bought in 900 ml units.
+- Use `created_at` to pick the newest item. Display the item's native unit so
+  `4 × 900 ml` reads naturally even against an `L` goal.
+
+## Session: Logged consumption
+- Manual quantity edits destroy usage history. A `Consume` action logs one
+  `stock_item_actions` row and deducts the stock in the same transaction, so
+  history and stock total cannot drift.
+- The deduction must use the item's package size as the conversion anchor:
+  `amount / package size`, clamped at zero. Recording the requested amount
+  separately keeps partial quantities honest (`0.5` packages after using
+  half of one).
+- Restrict consume units to the item's family on the server. A gram item
+  accepting litres would silently misstate the stock.
+- Restore clears actions before items (foreign key) and copies them when the
+  backup has the table; older backups restore without history.
+
+## Session: One stock status card
+- Status belongs in one card, items below. Repeating a progress header above
+  every item list made the page a stack of boxes; one summary card with a
+  divided line per category reads as a dashboard.
+- Keep the banner logic honest: with a "No goal" row and **Set goal** in the
+  summary, a separate empty-goals banner is redundant. The empty state (no
+  items at all) still links to the goals modal.
+
+## Session: Per-category goal modal
+- A "Set goal" button on a category must not open the full goal list. Pass the
+  category into the modal, seed one row, and hide the category picker plus
+  add/remove. The global "Category goals" button keeps the full editor.
+- The goals endpoint replaces the whole set. A scoped save must merge the one
+  edited goal into the existing list before sending, or it deletes every
+  other category goal.
+
+## Session: Actual trade price in the holdings ledger
+- A ledger that always snapshots the market quote is not a ledger. The buy/sell
+  form now submits `price`, defaulted to the quote but editable; the server
+  falls back to the holding price only when the field is omitted.
+- The quote stays separate from the trade price: `holdings.price` remains the
+  market value source, `holding_actions.price` is the actual trade. Never
+  overwrite the quote with a transaction price.
+- Cash is face value: ignore a passed price and store 1.
+
+## Session: Daily value history for holdings
+- One snapshot per holding per day plus one portfolio total per day. The
+  upsert keeps the last value fetched for the day; do not insert per refresh.
+- Value depends on both quote and quantity, so snapshot after every price
+  write and every buy/sell. A refresh also snapshots when it returns from
+  cache, or a new day would have no point until a real network call.
+- `previous_value` is read from the last history row before the upsert. That
+  makes the card delta "since the last snapshot" without a second table.
+- The portfolio total is USD because the header and totals card use USD;
+  per-holding history keeps native currency and USD.
+
+## Session: Persistent holding trend icons
+- The trend must survive a refresh that leaves the value unchanged. Reading
+  the immediately previous snapshot and overwriting `previous_value` made a
+  second same-value refresh collapse the delta to 0 and hide the icon.
+- Keep the last **different** value as the baseline. If the new value equals
+  it, leave `previous_value` alone; if it differs, move the baseline to the
+  old value. First snapshot seeds the baseline with itself (0.0%).
+- Always render the indicator, including cash, with a neutral minus at 0.0%.
+  Never hide it by a percentage threshold.
+
+## Session: Category groups and collapsible stock status
+- Groups are labels on `stock_registries.parent`, assigned only in the item
+  form. Do not add a second groups editor: the form is the edit surface.
+  Suggestions come from the distinct parents.
+- The status collapse uses the same motion as Holdings: `slide` with
+  `motionMs(180)`, chevron rotation over 200 ms, and
+  `motion-reduce:transition-none`. The state persists in localStorage.
+- Group blocks are toggles in both the status card and the item lists; they
+  share `ferm:stocks-groups-collapsed` and the standard slide/chevron motion.
+
+## Session: One category modal
+- The hierarchy is Group → Category → Item. Group is a category property;
+  items only choose a category. Do not put a group field in the item form.
+- `StockCategoryModal` edits one category: read-only name, group, optional
+  goal. An empty amount deletes the goal but keeps the category and group.
+  Every category row has Edit, including categories with no goal.
+- `PUT /api/stocks/categories` updates `stock_registries.parent` and
+  upserts/deletes `stock_category_goals` in one transaction.
+- The full goals editor stays for the empty state only; the category rows use
+  the single category modal.
+
+## Session: Day-over-day deltas and group deletion
+- The holding trend is current day vs previous day, never same-day snapshot
+  vs same-day snapshot. Same-day fetches upsert today's row only. First day
+  seeds the baseline with today's value and shows 0.0%.
+- Never render `-0.0%`: round to one decimal and treat magnitudes below 0.05
+  as zero, with the neutral `Minus`.
+- Groups have no registry table. Deleting a suggestion clears
+  `stock_registries.parent` for every category using it; the categories and
+  items stay. The `StockRegistryField` optional `onDeleteOption` adds the `×`
+  only where a deletion callback is passed.
+
+## Session: Simple shopping list
+- The shopping scope must not reuse the detailed stock report. A supermarket
+  list needs one checkbox line per purchase: `N × size item · category`.
+  Remove stock/target, progress, people, notes, expiration and brand columns.
+- No package estimate falls back to the missing amount plus category. Empty
+  list prints "Nothing to buy."
+- Smoke asserts the shopping HTML has checkboxes and no stock-report headers;
+  `scope=all` stays the detailed report.

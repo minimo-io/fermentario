@@ -9,7 +9,12 @@ export async function GET({ params }) {
 
 export async function POST({ params, request }) {
 	const body = await request.json().catch(() => ({}));
-	const result = recordHoldingAction(params.id, String(body?.kind ?? ''), Number(body?.amount));
+	const result = recordHoldingAction(
+		params.id,
+		String(body?.kind ?? ''),
+		Number(body?.amount),
+		body?.price === undefined || body?.price === null || body?.price === '' ? null : Number(body?.price)
+	);
 	if (!result.ok) {
 		if (result.reason === 'not_found') return json({ error: 'holding not found' }, { status: 404 });
 		if (result.reason === 'insufficient') return json({ error: 'not enough to sell' }, { status: 400 });

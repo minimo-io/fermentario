@@ -8,6 +8,10 @@
 - State actions, constraints, scope, and expected results explicitly.
 - Cut filler, hedging, jargon, and repetition.
 - If precision and natural phrasing conflict, precision wins.
+- Collapse/expand toggles must share one motion: content uses Svelte `slide`
+  with `motionMs(180)`, and the chevron rotates over 200 ms with
+  `motion-reduce:transition-none`. Follow the Holdings/Stock status pattern.
+  Do not add a toggle without it. Text truncation folds are the only exception.
 
 ## Testing effort
 - For small changes — CSS, Tailwind classes, markup, copy, icons, docs — do not

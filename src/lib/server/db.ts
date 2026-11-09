@@ -83,6 +83,8 @@ export const recordHoldingAction = bind('recordHoldingAction');
 export const getHoldingsSummary = bind('getHoldingsSummary');
 export const getCategoryGoals = bind('getCategoryGoals');
 export const setHoldingsGoals = bind('setHoldingsGoals');
+export const listHoldingValueHistory = bind('listHoldingValueHistory');
+export const listPortfolioValueHistory = bind('listPortfolioValueHistory');
 export const refreshRates = bind('refreshRates');
 export const listTagColors = bind('listTagColors');
 export const listTagCounts = bind('listTagCounts');
@@ -94,9 +96,18 @@ export const updateStockItem = bind('updateStockItem');
 export const deleteStockItem = bind('deleteStockItem');
 export const setStockItemPhoto = bind('setStockItemPhoto');
 export const getStockItemPhoto = bind('getStockItemPhoto');
+export const addStockPhotos = bind('addStockPhotos');
+export const removeStockPhotos = bind('removeStockPhotos');
+export const getStockPhoto = bind('getStockPhoto');
+export const listStockActions = bind('listStockActions');
+export const recordStockConsume = bind('recordStockConsume');
 export const getStockGoals = bind('getStockGoals');
 export const setStockGoals = bind('setStockGoals');
+export const listStockCategoryGoals = bind('listStockCategoryGoals');
+export const setStockCategoryGoals = bind('setStockCategoryGoals');
 export const listStockRegistries = bind('listStockRegistries');
+export const setStockCategory = bind('setStockCategory');
+export const deleteStockGroup = bind('deleteStockGroup');
 
 export { getDb, getJournal, NoActiveJournalError };
 
@@ -115,7 +126,14 @@ export type {
 	Principle,
 	HoldingAction,
 	HoldingActionKind,
+	HoldingValuePoint,
+	PortfolioValuePoint,
 	StockItem,
 	StockKind,
-	StockItemInput
+	StockItemInput,
+	StockItemPhoto,
+	StockAction,
+	StockCategoryGoal,
+	StockCategoryGoalInput,
+	StockCategoryInput
 } from '$lib/platform/journal';

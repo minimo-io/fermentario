@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { getStockGoals, setStockGoals } from '$lib/server/db';
+import { listStockCategoryGoals, setStockCategoryGoals } from '$lib/server/db';
 
-/** The consumable coverage target in days (default: one year). */
+/** Per-category amount goals: grams or litres per person. */
 export async function GET() {
-	return json(getStockGoals());
+	return json({ goals: listStockCategoryGoals() });
 }
 
 export async function PUT({ request }) {
@@ -13,11 +13,27 @@ export async function PUT({ request }) {
 	} catch {
 		return json({ error: 'invalid body' }, { status: 400 });
 	}
-	const t = Math.trunc(Number((body as Record<string, unknown>)?.target_days));
-	if (!Number.isFinite(t) || t < 1 || t > 3650) {
-		return json({ error: 'target_days must be a whole number of days, 1 to 3650' }, { status: 400 });
+	const goals = (body as Record<string, unknown>)?.goals;
+	if (!Array.isArray(goals)) {
+		return json({ error: 'goals must be an array' }, { status: 400 });
 	}
-	const goals = setStockGoals(t);
-	if (!goals) return json({ error: 'could not save the stock goal' }, { status: 500 });
-	return json(goals);
+	const saved = setStockCategoryGoals(
+		goals.map((g: unknown) => {
+			const row = g as Record<string, unknown>;
+			return {
+				category: row?.category as string | null,
+				people: row?.people as number | null,
+				amount: row?.amount as number | null,
+				unit: row?.unit as string | null,
+				note: row?.note as string | null
+			};
+		})
+	);
+	if (!saved) {
+		return json(
+			{ error: 'each goal needs a category, people ≥ 1, an amount > 0 and a unit of g, kg, ml or L' },
+			{ status: 400 }
+		);
+	}
+	return json({ goals: saved });
 }

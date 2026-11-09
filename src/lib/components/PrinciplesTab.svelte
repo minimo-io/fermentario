@@ -14,6 +14,7 @@
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import { splitLeadingSubgroup } from '$lib/subgroups';
 	import Plus from '@lucide/svelte/icons/plus';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
@@ -397,7 +398,7 @@
 				class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 				aria-expanded={!collapsedGroups[sg]}
 				onclick={() => (collapsedGroups[sg] = !collapsedGroups[sg])}
-			><span aria-hidden="true">{collapsedGroups[sg] ? '▸' : '▾'}</span> {sg} ({groupRows.length})</button>
+			><ChevronDown class="h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none {collapsedGroups[sg] ? '-rotate-90' : ''}" /> {sg} ({groupRows.length})</button>
 			{#if !collapsedGroups[sg]}
 				<ol class="mt-2 space-y-2" transition:slide={{ duration: motionMs(180) }}>
 					{#each groupRows as row (row.p.id)}{@render principleRow(row)}{/each}

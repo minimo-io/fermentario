@@ -139,26 +139,83 @@ sizing. Consult this before changing any of them.
   section list. Desktop is one row (`justify-between`, left group scrolls);
   mobile stacks the fixed pair on its own right-aligned line.
 - **Stocks** (`StocksTab`): two tabs, **Consumables** and **Durables**, with
-  counts, persisted in `ferm:stocks-tab`. Consumables track a coverage goal
-  (`stock_goals.target_days`, default 365, editable inline above the list,
-  saved debounced): each card shows `quantity × duration_days` against the
-  goal as a red progress bar, emerald once covered, with `Needs ~N more
-  packages` or `Covered · ~N days`; empty is red at 0% with no estimate.
-  Need-stock sorts first (empty top, then lowest remaining days).
-  The goal row is full width under the tabs on mobile (16 px input, `days`,
-  info button) and returns inline to the right on desktop.
+  counts, persisted in `ferm:stocks-tab`. Consumables group by category. Each
+  category with a goal (`stock_category_goals`: `g`, `kg`, `ml` or `L`
+  **per person**, people count, note; target = `people × amount`) shows a
+  **Stock status** card at the top, one line per category: `have / target`,
+  red bar below 60%, amber from 60%, emerald once covered, `Need X more` or `Covered`, buy estimate,
+  people and note. The card collapses like Holdings: chevron rotates,
+  content slides at 180 ms, state persists in `ferm:stocks-status-collapsed`;
+  collapsed it reads `N need · N covered · N no goal`.
+  Categories without a goal show `No goal` with an **Edit** button;
+  every category row, with or without a goal, opens `StockCategoryModal`.
+  The empty state links to the full `StockGoalsModal`. Item rows follow the card directly under it, grouped by
+  parent group and category. The status card shows unmet goals always,
+  covered goals behind a **Covered (N)** toggle and goal-less categories
+  behind **Without goal (N)**, with a text filter for long category lists;
+  cards show name, brand · category and `packages × size = total`,
+  sorted by name; there is no days or price field on consumables. The
+  consumable name is optional: the display title falls back name → brand →
+  category → “Consumable”. Categories carry an optional parent group
+  (Food, Fun…) stored on the category row; the status card and item lists
+  group under it. `StockCategoryModal` is the only place to assign it:
+  category name read-only, **Group** with existing-name suggestions, and an
+  optional goal. Empty amount saves only the group and clears the goal.
+  Each group block is a
+  toggle with a chevron and `N` categories; collapsed state persists in
+  `ferm:stocks-groups-collapsed`. Stock adds `quantity × package_size` in the goal
+  unit (`kg → g`, `L → ml`); mass items never count toward volume goals and
+  vice versa. The category modal shows which units a category uses and defaults
+  a new goal to that family's base unit (`g` or `L`); the header names the
+  mismatch when the units differ. The old one-row days goal remains in the
+  database for old backups and is no longer shown.
+  Goal entry points: the empty-state link opens the full editor with a filter;
+  **Edit** on any category header opens `StockCategoryModal` for that
+  category, which saves group and goal in one request. The empty state also
+  links to the goals modal.
+  A package must carry a size (g/kg/ml/L); the form rejects an empty size so
+  the item always counts toward its goal. Goal text lives in the category
+  header. Item views show recent consumptions (`stock_item_actions`): the
+  **Consume** button logs how much was used in the item's unit family and
+  deducts the matching package fraction, clamped at zero and recorded in
+  one step. Consumables carry an optional expiration date (`Expires
+  (optional)` in the form); expired items sort first, then expiring soon,
+  and the status card flags `N expired` or `N expire within 30 days`.
+  **Print** and **Shopping** open `/api/stocks/print?scope=all|shopping`
+  in a new tab: plain HTML with a Print button and print CSS, no download.
+  `all` is the stock report. `shopping` is a simple checkbox list: group
+  headings, then `N × size item · category` per unmet goal, or the missing
+  amount when no package estimate exists. No stock/target, percentage,
+  people, note, expiration or brand columns in the shopping list.
   Brand and Category are dynamic registries (`stock_registries`): the form
   fields suggest existing names and offer Create for a new one; saving the
   item reuses or creates the entry (case and Unicode normalized). Cards show
   `Brand · Category` under the name. Small info buttons open `FieldHelp`
-  modals for packages, days per package, stock goal, brand and category.
+  modals for packages, package size, brand and category.
   The form stacks its field pairs on mobile and scrolls inside the modal.
   Durables show bought date, where, price through the currency rule (currency
-  defaults to BRL, editable, BRL/USD/UYU quick picks) and Owned/Ended state.
-  Cards carry a photo thumbnail or a package icon; tap edits, delete is
-  confirmed. One photo per item: downscaled client-side to 1280 px JPEG,
-  stored as a BLOB with its MIME, served at
-  `/api/stocks/items/<id>/photo?v=<updated_at>`. Lists never embed bytes.
+  defaults to BRL, editable, BRL/USD/UYU quick picks) and a localized age
+  from the purchase date: `Hace 1 año`, `Hace 22 días`, `Hace 1 mes y 22 días`
+  in Spanish; `Owned …` / `Tem …` in the other entries languages. Ended items
+  show the lifespan (`Duró …`) under the ended date. Calendar years, months
+  and days, never 30-day months. The status word (`Owned`, `Hace`, `Duró`)
+  stays neutral; only the time span carries the emerald or muted colour.
+  A density switcher next to the kind tabs toggles detailed and compact
+  cards (`LayoutGrid` / `LayoutList`, persisted as `ferm:stocks-view`).
+  Compact consumables keep the name and one package line; compact durables keep the name,
+  purchase/price line and the split-colour age. Both compact views open the
+  same item view. On `sm` and up a compact row is a single line (~48 px):
+  thumbnail, inline name and data, status right-aligned; the stacked card
+  stays mobile-only. Durables sit in a two-column grid from `sm`
+  up; mobile stays one card per line. Cards carry the first photo and a `+N`
+  badge (or the package icon); tapping a card opens a read-only item view
+  with the full photo gallery and data. **Edit** is a text button in that
+  view; Delete lives there too, with the usual confirmation. Up to eight
+  photos per item, each downscaled to 1280 px JPEG and stored as a BLOB in
+  `stock_item_photos` with its MIME; the first photo fills the card. Lists
+  never embed bytes; images load from `/api/stocks/photos/<photoId>`. The old
+  single-photo column is migrated into the gallery and the old item-photo URL
+  still serves the first image.
   Businesses is a real pill with a placeholder page until its own build.
 - **Task rows (To-Do)**: pills — status, tags, comment count — share one wrapped
   row under the title on mobile (< `sm`, `pl-12` indent); the comment pill is
@@ -266,13 +323,29 @@ sizing. Consult this before changing any of them.
   the recorded actions scrolling below it. Buys and deposits are green, sells
   and withdrawals are red. The opening row is the quantity the holding had
   when the ledger started, and its price is the average cost. Every later row
-  snapshots the market quote at record time; the card keeps showing the live
-  quote. A sell larger than the current total is rejected, and an amount edit
+  records the price paid or received; the field defaults to the market quote,
+  can be edited, and has a **Use market** shortcut. The card keeps showing the
+  live quote. A sell larger than the current total is rejected, and an amount edit
   through the API shifts the opening row so the ledger still sums to the
   total. Cash rows hide the stored face-value unit price: the deposit,
   withdrawal or opening balance shows one signed money value, never
   `R$ 1,00 / unit` or a repeated total. v1 records only: no backdating,
   editing or deleting past actions.
+- **Value history** keeps one point per holding per day plus one portfolio
+  total per day (`holding_value_history`, `portfolio_value_history`). Later
+  fetches upsert the same day, so the day holds the last value seen. The
+  buy/sell modal shows a 1-year line chart of the holding value in its native
+  currency; the totals card has a chart button for the portfolio total in USD.
+  Every card, cash included, carries a trend icon: green `TrendingUp`, red
+  `TrendingDown`, or a neutral `Minus` at `0.0%`. The delta compares the
+  current day with the **previous day**; same-day refreshes only update
+  today's row. The first day has no previous day and shows `0.0%`. The totals
+  card carries the same icon, comparing `totalUsd` with the previous day's
+  portfolio row.
+- **Category groups**: group names are category labels, not a separate
+  registry. The `StockCategoryModal` group dropdown lists existing names and
+  gives each one an `×`; deleting a group clears it from every category using
+  it after a confirmation, and the categories stay.
 - **Note card gestures**: tapping the note text only folds/unfolds —
   opening a note lives in the ⋮ menu ("Open note"; not offered by the ⋮
   menu on the note's own page). The hour stamp is a label, not a link. On
@@ -320,7 +393,9 @@ Do not introduce a new spacing value without checking this table first.
   The pill toggles the click-to-load embed below it. On a principle card and a
   task card the
   pill sits at the right edge from `sm` up, matching the tags and comment pill;
-  on mobile it stays left (tasks indent it with the text).
+  on mobile it stays left (tasks indent it with the text). On a principle's
+  own page the block starts open without autoplay; the pill still toggles it,
+  and the iframe stays click-to-load.
 - **Dark mode**: Settings → General offers `light`, `dark` and `system`; `system`
   follows the OS live. The choice persists as `theme` in `fermentario.config` and
   becomes the `dark` class on `<html>` before first paint. Use Tailwind's native

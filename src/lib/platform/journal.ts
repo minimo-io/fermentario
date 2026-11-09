@@ -244,21 +244,33 @@ export interface TodoDoneCursor {
 
 export type StockKind = 'consumable' | 'durable';
 
+export interface StockItemPhoto {
+	id: string;
+	created_at: number;
+}
+
 export interface StockItem {
 	id: string;
 	kind: StockKind;
 	name: string;
 	brand: string;
 	category: string;
+	/** Parent group of the item's category (Food, Fun…); empty when unset. */
+	group: string;
+	/** Consumables only, ms epoch; null when unset. */
+	expires_at: number | null;
 	note: string;
 	quantity: number;
 	duration_days: number;
+	package_size: number;
+	package_unit: string;
 	bought_at: number | null;
 	price: number | null;
 	currency: string;
 	bought_where: string;
 	ended_at: number | null;
 	hasPhoto: boolean;
+	photos: StockItemPhoto[];
 	created_at: number;
 	updated_at: number;
 }
@@ -271,11 +283,61 @@ export interface StockItemInput {
 	note?: string;
 	quantity?: number;
 	duration_days?: number;
+	package_size?: number;
+	package_unit?: string;
 	bought_at?: number | null;
+	expires_at?: number | null;
 	price?: number | null;
 	currency?: string;
 	bought_where?: string;
 	ended_at?: number | null;
+}
+
+/** One category edit: group label plus an optional goal. */
+export interface StockCategoryInput {
+	category: string;
+	group?: string | null;
+	goal?: {
+		people: number;
+		amount: number;
+		unit: string;
+		note: string;
+	} | null;
+}
+
+/** Amount goal for one consumable category. `amount` is per person; the
+ *  target is `people × amount` in `unit` (g, kg, ml or L). */
+export interface StockCategoryGoal {
+	category_id: string;
+	category: string;
+	/** Parent group label (Food, Fun…); empty when unset. */
+	group: string;
+	people: number;
+	amount: number;
+	unit: string;
+	note: string;
+	target: number;
+}
+
+export interface StockCategoryGoalInput {
+	category?: string | null;
+	people?: number | null;
+	amount?: number | null;
+	unit?: string | null;
+	note?: string | null;
+}
+
+/** One logged consumption of a consumable. Amounts stay in the unit the
+ *  user consumed in; `packages` is the deducted stock in package units. */
+export interface StockAction {
+	id: string;
+	item_id: string;
+	kind: string;
+	amount: number;
+	unit: string;
+	packages: number;
+	note: string;
+	created_at: number;
 }
 
 /** A resolved `[[id]]` link: notes and principles share the syntax, and the
@@ -332,10 +394,33 @@ export interface Holding {
 	updated_at: number;
 	/** Last write of `price` (quote refresh or hand edit); 0 when never set. */
 	price_updated_at: number;
+	/** Previous daily snapshot value; null until the second snapshot. */
+	previous_value: number | null;
+	previous_value_at: number;
 	/** Average cost per unit on the opening row; null until set. */
 	avgPrice: number | null;
 	/** Converted value in USD; present on list output. */
 	valueUsd?: number;
+	/** Current value versus the previous snapshot, in percent; null when unknown. */
+	changePct?: number | null;
+}
+
+/** One daily value point for a holding, in native currency and USD. */
+export interface HoldingValuePoint {
+	day: string;
+	amount: number;
+	price: number | null;
+	value: number;
+	currency: string;
+	value_usd: number;
+	recorded_at: number;
+}
+
+/** One daily portfolio total point, in USD. */
+export interface PortfolioValuePoint {
+	day: string;
+	value_usd: number;
+	recorded_at: number;
 }
 
 export type HoldingActionKind = 'opening' | 'buy' | 'sell';
@@ -414,6 +499,10 @@ export interface CategoryValueProgress {
 export interface HoldingsSummary {
 	holdings: Holding[];
 	totalUsd: number;
+	/** Previous day's portfolio total; null on the first day. */
+	previousTotalUsd: number | null;
+	/** Current total versus the previous day, in percent; null when unknown. */
+	totalChangePct: number | null;
 	/** Newest rate timestamp behind the total; null when no FX was needed. */
 	asOf: number | null;
 	/** True when a needed rate is missing or older than a day. */
@@ -1218,6 +1307,8 @@ export function createJournal(db: SqlDb) {
 		created_at: number;
 		updated_at: number;
 		price_updated_at: number;
+		previous_value: number | null;
+		previous_value_at: number;
 	};
 
 	const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1299,6 +1390,10 @@ export function createJournal(db: SqlDb) {
 
 	function rowToHolding(r: HoldingRow, toUsd: Map<string, number>, avgPrice: number | null = null): Holding {
 		const rate = toUsd.get(r.currency) ?? 1;
+		const value = r.amount * (r.price ?? 0);
+		const previous = r.previous_value;
+		const changePct =
+			r.price !== null && previous !== null && previous > 0 ? ((value - previous) / previous) * 100 : null;
 		return {
 			id: r.id,
 			ticker: r.ticker,
@@ -1314,8 +1409,11 @@ export function createJournal(db: SqlDb) {
 			created_at: r.created_at,
 			updated_at: r.updated_at,
 			price_updated_at: r.price_updated_at ?? 0,
+			previous_value: r.previous_value ?? null,
+			previous_value_at: r.previous_value_at ?? 0,
 			avgPrice,
-			valueUsd: r.amount * (r.price ?? 0) * rate
+			valueUsd: value * rate,
+			changePct
 		};
 	}
 
@@ -1358,6 +1456,104 @@ export function createJournal(db: SqlDb) {
 		return rows
 			.map((r) => rowToHolding(r, rates, avg.get(r.id) ?? null))
 			.sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0) || a.position - b.position);
+	}
+
+	// --- Holding value snapshots ----------------------------------------
+	// One row per holding per day, plus one portfolio total per day. Later
+	// fetches on the same day upsert that row, so the graph keeps the last
+	// value seen for the day. The previous row feeds the card delta.
+
+	function localDayKey(now = Date.now()): string {
+		const d = new Date(now);
+		const y = d.getFullYear();
+		const m = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${y}-${m}-${day}`;
+	}
+
+	function snapshotHoldingValue(holdingId: string, now = Date.now()): void {
+		try {
+			const row = db.prepare('SELECT * FROM holdings WHERE id = ?').get(holdingId) as unknown as HoldingRow | undefined;
+			if (!row) return;
+			const { rates } = fxToUsd();
+			const rate = rates.get(row.currency) ?? 1;
+			const value = row.amount * (row.price ?? 0);
+			const valueUsd = value * rate;
+			const day = localDayKey(now);
+			const previous = db
+				.prepare(
+					'SELECT value, recorded_at FROM holding_value_history WHERE holding_id = ? AND day < ? ORDER BY day DESC LIMIT 1'
+				)
+				.get(holdingId, day) as unknown as { value: number; recorded_at: number } | undefined;
+			db.transaction(() => {
+				// Always compare the current day with the previous day. Same-day
+				// refreshes only update today's row and never move the baseline.
+				const baseline = previous ? previous.value : value;
+				const baselineAt = previous ? previous.recorded_at : now;
+				db.prepare('UPDATE holdings SET previous_value = ?, previous_value_at = ? WHERE id = ?').run(
+					baseline,
+					baselineAt,
+					holdingId
+				);
+				db.prepare(
+					`INSERT INTO holding_value_history (holding_id, day, amount, price, value, currency, value_usd, recorded_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					 ON CONFLICT (holding_id, day) DO UPDATE SET
+						amount = excluded.amount, price = excluded.price, value = excluded.value,
+						currency = excluded.currency, value_usd = excluded.value_usd, recorded_at = excluded.recorded_at`
+				).run(holdingId, day, row.amount, row.price, value, row.currency, valueUsd, now);
+			});
+		} catch {
+			// Table arrives with migration 21; older journals skip snapshots.
+		}
+	}
+
+	function snapshotPortfolioValue(now = Date.now()): void {
+		try {
+			const total = listHoldings().reduce((sum, h) => sum + (h.valueUsd ?? 0), 0);
+			db.prepare(
+				`INSERT INTO portfolio_value_history (day, value_usd, recorded_at)
+				 VALUES (?, ?, ?)
+				 ON CONFLICT (day) DO UPDATE SET value_usd = excluded.value_usd, recorded_at = excluded.recorded_at`
+			).run(localDayKey(now), total, now);
+		} catch {
+			// Table arrives with migration 21; older journals skip snapshots.
+		}
+	}
+
+	function snapshotAllValues(now = Date.now()): void {
+		for (const h of listHoldings()) snapshotHoldingValue(h.id, now);
+		snapshotPortfolioValue(now);
+	}
+
+	function listHoldingValueHistory(holdingId: string, days = 365): HoldingValuePoint[] {
+		const safeDays = Math.min(3650, Math.max(1, Math.trunc(days)));
+		const from = localDayKey(Date.now() - safeDays * DAY_MS);
+		try {
+			return db
+				.prepare(
+					`SELECT day, amount, price, value, currency, value_usd, recorded_at
+					 FROM holding_value_history WHERE holding_id = ? AND day >= ?
+					 ORDER BY day ASC`
+				)
+				.all(holdingId, from) as unknown as HoldingValuePoint[];
+		} catch {
+			return [];
+		}
+	}
+
+	function listPortfolioValueHistory(days = 365): PortfolioValuePoint[] {
+		const safeDays = Math.min(3650, Math.max(1, Math.trunc(days)));
+		const from = localDayKey(Date.now() - safeDays * DAY_MS);
+		try {
+			return db
+				.prepare(
+					'SELECT day, value_usd, recorded_at FROM portfolio_value_history WHERE day >= ? ORDER BY day ASC'
+				)
+				.all(from) as unknown as PortfolioValuePoint[];
+		} catch {
+			return [];
+		}
 	}
 
 	function cleanTicker(v: unknown): string | null {
@@ -1420,8 +1616,10 @@ export function createJournal(db: SqlDb) {
 			).run(crypto.randomUUID(), id, 'opening', a, openingPrice, c, now);
 		});
 		const { rates } = fxToUsd();
+		snapshotHoldingValue(id, now);
+		snapshotPortfolioValue(now);
 		return rowToHolding(
-			{ id, ticker: t, amount: a, price: storedPrice, price_auto: 0, currency: c, category: cat, goal: g, bank: b, country: co, position: max.m + 1, created_at: now, updated_at: now, price_updated_at: storedPrice === null ? 0 : now },
+			{ id, ticker: t, amount: a, price: storedPrice, price_auto: 0, currency: c, category: cat, goal: g, bank: b, country: co, position: max.m + 1, created_at: now, updated_at: now, price_updated_at: storedPrice === null ? 0 : now, previous_value: null, previous_value_at: 0 },
 			rates,
 			openingPrice
 		);
@@ -1493,6 +1691,8 @@ export function createJournal(db: SqlDb) {
 			.prepare("SELECT price FROM holding_actions WHERE holding_id = ? AND kind = 'opening' LIMIT 1")
 			.get(id) as unknown as { price: number | null } | undefined;
 		const { rates } = fxToUsd();
+		snapshotHoldingValue(id, now);
+		snapshotPortfolioValue(now);
 		return rowToHolding(
 			{ ...current, ticker, amount, price, price_auto: priceAuto, currency, category, goal, bank, country, updated_at: now, price_updated_at: priceUpdatedAt },
 			rates,
@@ -1501,10 +1701,12 @@ export function createJournal(db: SqlDb) {
 	}
 
 	function deleteHolding(id: string): boolean {
-		return db.transaction(() => {
+		const deleted = db.transaction(() => {
 			db.prepare('DELETE FROM holding_actions WHERE holding_id = ?').run(id);
 			return db.prepare('DELETE FROM holdings WHERE id = ?').run(id).changes > 0;
 		});
+		if (deleted) snapshotPortfolioValue();
+		return deleted;
 	}
 
 	function readHoldingActions(holdingId: string): HoldingAction[] {
@@ -1523,14 +1725,18 @@ export function createJournal(db: SqlDb) {
 		name: string;
 		brand_name: string | null;
 		category_name: string | null;
+		category_parent: string | null;
 		note: string;
 		quantity: number;
 		duration_days: number;
+		package_size: number;
+		package_unit: string;
 		bought_at: number | null;
 		price: number | null;
 		currency: string;
 		bought_where: string;
 		ended_at: number | null;
+		expires_at: number | null;
 		has_photo: number;
 		created_at: number;
 		updated_at: number;
@@ -1540,21 +1746,26 @@ export function createJournal(db: SqlDb) {
 		return v === 'durable' ? 'durable' : 'consumable';
 	}
 
-	const rowToStockItem = (r: StockItemRow): StockItem => ({
+	const rowToStockItem = (r: StockItemRow, photos: StockItemPhoto[] = []): StockItem => ({
 		id: r.id,
 		kind: cleanStockKind(r.kind),
 		name: r.name,
 		brand: r.brand_name ?? '',
 		category: r.category_name ?? '',
+		group: r.category_parent ?? '',
 		note: r.note ?? '',
 		quantity: Number(r.quantity ?? 0),
 		duration_days: Number(r.duration_days ?? 0),
+		package_size: Number(r.package_size ?? 0),
+		package_unit: r.package_unit ?? 'g',
 		bought_at: r.bought_at ?? null,
+		expires_at: r.expires_at ?? null,
 		price: r.price ?? null,
 		currency: r.currency ?? 'BRL',
 		bought_where: r.bought_where ?? '',
 		ended_at: r.ended_at ?? null,
-		hasPhoto: r.has_photo === 1,
+		hasPhoto: photos.length > 0,
+		photos,
 		created_at: r.created_at,
 		updated_at: r.updated_at
 	});
@@ -1584,25 +1795,54 @@ export function createJournal(db: SqlDb) {
 		}
 	}
 
-	function listStockRegistries(): { brands: string[]; categories: string[] } {
+	function listStockRegistries(): { brands: string[]; categories: string[]; groups: string[] } {
 		try {
 			const rows = db
-				.prepare('SELECT kind, name FROM stock_registries ORDER BY name COLLATE NOCASE ASC, name ASC')
-				.all() as unknown as { kind: string; name: string }[];
+				.prepare('SELECT kind, name, parent FROM stock_registries ORDER BY name COLLATE NOCASE ASC, name ASC')
+				.all() as unknown as { kind: string; name: string; parent: string | null }[];
 			return {
 				brands: rows.filter((r) => r.kind === 'brand').map((r) => r.name),
-				categories: rows.filter((r) => r.kind === 'category').map((r) => r.name)
+				categories: rows.filter((r) => r.kind === 'category').map((r) => r.name),
+				groups: [
+					...new Set(
+						rows
+							.filter((r) => r.kind === 'category')
+							.map((r) => (r.parent ?? '').trim())
+							.filter(Boolean)
+					)
+				].sort((a, b) => a.localeCompare(b))
 			};
 		} catch {
 			// Table arrives with migration 13.
-			return { brands: [], categories: [] };
+			return { brands: [], categories: [], groups: [] };
 		}
 	}
 
-	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'created_at' | 'updated_at' | 'brand' | 'category'> | null {
+	// --- Category groups ------------------------------------------------
+	// Groups are labels on category rows; every item in the category inherits
+	// one. No separate table: `stock_registries.parent` is the source.
+
+	function deleteStockGroup(raw: unknown): { group: string; cleared: number } | null {
+		const group = String(raw ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
+		if (!group) return null;
+		try {
+			const result = db
+				.prepare("UPDATE stock_registries SET parent = '' WHERE kind = 'category' AND parent = ?")
+				.run(group);
+			return { group, cleared: result.changes };
+		} catch {
+			return null;
+		}
+	}
+
+	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'photos' | 'created_at' | 'updated_at' | 'brand' | 'category' | 'group'> | null {
 		const kind = cleanStockKind(input.kind);
 		const name = String(input.name ?? '').trim().slice(0, 80);
-		if (!name) return null;
+		// Consumables can go nameless (the category goal needs the size, not
+		// the name); durables still require one. Either way the item needs
+		// at least one of name, brand or category to be identifiable.
+		if (kind === 'durable' && !name) return null;
+		if (!name && !String(input.brand ?? '').trim() && !String(input.category ?? '').trim()) return null;
 		const note = String(input.note ?? '').trim().slice(0, 2000);
 		const num = (v: unknown): number => {
 			const n = Number(v);
@@ -1612,25 +1852,37 @@ export function createJournal(db: SqlDb) {
 			? String(input.currency ?? 'BRL').trim().toUpperCase()
 			: 'BRL';
 		const boughtWhere = String(input.bought_where ?? '').trim().slice(0, 80);
+		const priceRaw = input.price === undefined || input.price === null ? null : Number(input.price);
+		if (priceRaw !== null && (!Number.isFinite(priceRaw) || priceRaw < 0)) return null;
+		const packageSize =
+			input.package_size === undefined || input.package_size === null ? 0 : Number(input.package_size);
+		if (!Number.isFinite(packageSize) || packageSize < 0) return null;
+		const packageUnitRaw = String(input.package_unit ?? 'g').trim().toLowerCase();
+		const packageUnit = ['g', 'kg', 'ml', 'l'].includes(packageUnitRaw) ? packageUnitRaw : 'g';
 		if (kind === 'consumable') {
 			const quantity = num(input.quantity ?? NaN);
-			const duration = num(input.duration_days ?? NaN);
-			if (!Number.isFinite(quantity) || !Number.isFinite(duration)) return null;
+			if (!Number.isFinite(quantity)) return null;
+			const expiresAt = input.expires_at === undefined || input.expires_at === null ? null : Number(input.expires_at);
+			if (expiresAt !== null && (!Number.isFinite(expiresAt) || expiresAt <= 0)) return null;
+			// Consumables carry no days-per-package or price: progress comes
+			// from the package size alone. The old columns stay for old
+			// backups; new writes keep them empty.
 			return {
 				kind,
 				name,
 				note,
 				quantity,
-				duration_days: duration,
+				duration_days: 0,
+				package_size: packageSize,
+				package_unit: packageUnit,
 				bought_at: null,
+				expires_at: expiresAt,
 				price: null,
 				currency: 'BRL',
 				bought_where: '',
 				ended_at: null
 			};
 		}
-		const priceRaw = input.price === undefined || input.price === null ? null : Number(input.price);
-		if (priceRaw !== null && (!Number.isFinite(priceRaw) || priceRaw < 0)) return null;
 		const boughtAt = input.bought_at === undefined || input.bought_at === null ? null : Number(input.bought_at);
 		if (boughtAt !== null && (!Number.isFinite(boughtAt) || boughtAt <= 0)) return null;
 		const endedAt = input.ended_at === undefined || input.ended_at === null ? null : Number(input.ended_at);
@@ -1641,7 +1893,10 @@ export function createJournal(db: SqlDb) {
 			note,
 			quantity: 0,
 			duration_days: 0,
+			package_size: 0,
+			package_unit: 'g',
 			bought_at: boughtAt,
+			expires_at: null,
 			price: priceRaw,
 			currency,
 			bought_where: boughtWhere,
@@ -1649,12 +1904,44 @@ export function createJournal(db: SqlDb) {
 		};
 	}
 
+	function listStockPhotos(itemId: string): StockItemPhoto[] {
+		try {
+			return db
+				.prepare(
+					'SELECT id, created_at FROM stock_item_photos WHERE item_id = ? ORDER BY position ASC, created_at ASC, id ASC'
+				)
+				.all(itemId) as unknown as StockItemPhoto[];
+		} catch {
+			// Table arrives with migration 15.
+			return [];
+		}
+	}
+
+	function photosByItem(): Map<string, StockItemPhoto[]> {
+		const map = new Map<string, StockItemPhoto[]>();
+		try {
+			const rows = db
+				.prepare(
+					'SELECT id, item_id, created_at FROM stock_item_photos ORDER BY position ASC, created_at ASC, id ASC'
+				)
+				.all() as unknown as { id: string; item_id: string; created_at: number }[];
+			for (const r of rows) {
+				const list = map.get(r.item_id);
+				if (list) list.push({ id: r.id, created_at: r.created_at });
+				else map.set(r.item_id, [{ id: r.id, created_at: r.created_at }]);
+			}
+		} catch {
+			// Table arrives with migration 15.
+		}
+		return map;
+	}
+
 	function listStockItems(): StockItem[] {
 		let rows: StockItemRow[];
 		try {
 			rows = db
 				.prepare(
-					`SELECT i.*, b.name AS brand_name, c.name AS category_name
+					`SELECT i.*, b.name AS brand_name, c.name AS category_name, c.parent AS category_parent
 					 FROM stock_items i
 					 LEFT JOIN stock_registries b ON b.id = i.brand_id
 					 LEFT JOIN stock_registries c ON c.id = i.category_id`
@@ -1664,8 +1951,9 @@ export function createJournal(db: SqlDb) {
 			// Tables arrive with migrations 11 and 13.
 			return [];
 		}
+		const photos = photosByItem();
 		return rows
-			.map(rowToStockItem)
+			.map((r) => rowToStockItem(r, photos.get(r.id) ?? []))
 			.sort((a, b) => {
 				if (a.kind !== b.kind) return a.kind === 'consumable' ? -1 : 1;
 				if (a.kind === 'consumable') {
@@ -1690,7 +1978,7 @@ export function createJournal(db: SqlDb) {
 		try {
 			r = db
 				.prepare(
-					`SELECT i.*, b.name AS brand_name, c.name AS category_name
+					`SELECT i.*, b.name AS brand_name, c.name AS category_name, c.parent AS category_parent
 					 FROM stock_items i
 					 LEFT JOIN stock_registries b ON b.id = i.brand_id
 					 LEFT JOIN stock_registries c ON c.id = i.category_id
@@ -1700,7 +1988,56 @@ export function createJournal(db: SqlDb) {
 		} catch {
 			return null;
 		}
-		return r ? rowToStockItem(r) : null;
+		return r ? rowToStockItem(r, listStockPhotos(id)) : null;
+	}
+
+	/** One category edit: group label plus an optional goal. */
+	function setStockCategory(input: StockCategoryInput): {
+		category: string;
+		group: string;
+		goal: StockCategoryGoal | null;
+	} | null {
+		const category = String(input?.category ?? '').trim();
+		if (!category) return null;
+		const categoryId = ensureStockRegistry('category', category);
+		if (!categoryId) return null;
+		const group = String(input?.group ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
+		const goal = input?.goal ?? null;
+		let cleanGoal: { people: number; amount: number; unit: string; note: string } | null = null;
+		if (goal !== null) {
+			const people = Math.trunc(Number(goal.people));
+			const amount = Number(goal.amount);
+			if (!Number.isFinite(people) || people < 1 || people > 999) return null;
+			if (!Number.isFinite(amount) || amount <= 0 || amount > 1e12) return null;
+			const lower = String(goal.unit ?? 'g').trim().toLowerCase();
+			const unit = ['g', 'kg', 'ml', 'l'].includes(lower) ? (lower === 'l' ? 'L' : lower) : null;
+			if (!unit) return null;
+			cleanGoal = {
+				people,
+				amount,
+				unit,
+				note: String(goal.note ?? '').trim().slice(0, 2000)
+			};
+		}
+		try {
+			db.transaction(() => {
+				db.prepare('UPDATE stock_registries SET parent = ? WHERE id = ?').run(group, categoryId);
+				if (cleanGoal === null) {
+					db.prepare('DELETE FROM stock_category_goals WHERE category_id = ?').run(categoryId);
+				} else {
+					db.prepare(
+						`INSERT INTO stock_category_goals (category_id, people, amount, unit, note)
+						 VALUES (?, ?, ?, ?, ?)
+						 ON CONFLICT (category_id) DO UPDATE SET people = excluded.people,
+							amount = excluded.amount, unit = excluded.unit, note = excluded.note`
+					).run(categoryId, cleanGoal.people, cleanGoal.amount, cleanGoal.unit, cleanGoal.note);
+				}
+			});
+		} catch {
+			return null;
+		}
+		const savedGoal = listStockCategoryGoals().find((g) => g.category === category) ?? null;
+		return { category, group, goal: savedGoal };
 	}
 
 	function createStockItem(input: StockItemInput): StockItem | null {
@@ -1712,8 +2049,8 @@ export function createJournal(db: SqlDb) {
 		const categoryId = input.category ? ensureStockRegistry('category', input.category) : null;
 		try {
 			db.prepare(
-				`INSERT INTO stock_items (id, kind, name, brand_id, category_id, note, quantity, duration_days, bought_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', 0, ?, ?)`
+				`INSERT INTO stock_items (id, kind, name, brand_id, category_id, note, quantity, duration_days, package_size, package_unit, bought_at, expires_at, price, currency, bought_where, ended_at, photo, photo_mime, has_photo, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', 0, ?, ?)`
 			).run(
 				id,
 				clean.kind,
@@ -1723,7 +2060,10 @@ export function createJournal(db: SqlDb) {
 				clean.note,
 				clean.quantity,
 				clean.duration_days,
+				clean.package_size,
+				clean.package_unit,
 				clean.bought_at,
+				clean.expires_at,
 				clean.price,
 				clean.currency,
 				clean.bought_where,
@@ -1749,7 +2089,10 @@ export function createJournal(db: SqlDb) {
 			note: input.note !== undefined ? input.note : existing.note,
 			quantity: input.quantity !== undefined ? input.quantity : existing.quantity,
 			duration_days: input.duration_days !== undefined ? input.duration_days : existing.duration_days,
+			package_size: input.package_size !== undefined ? input.package_size : existing.package_size,
+			package_unit: input.package_unit !== undefined ? input.package_unit : existing.package_unit,
 			bought_at: input.bought_at !== undefined ? input.bought_at : existing.bought_at,
+			expires_at: input.expires_at !== undefined ? input.expires_at : existing.expires_at,
 			price: input.price !== undefined ? input.price : existing.price,
 			currency: input.currency !== undefined ? input.currency : existing.currency,
 			bought_where: input.bought_where !== undefined ? input.bought_where : existing.bought_where,
@@ -1767,14 +2110,17 @@ export function createJournal(db: SqlDb) {
 		const now = Math.max(Date.now(), existing.created_at + 1);
 		try {
 			db.prepare(
-				`UPDATE stock_items SET name = ?, note = ?, quantity = ?, duration_days = ?, bought_at = ?, price = ?,
+				`UPDATE stock_items SET name = ?, note = ?, quantity = ?, duration_days = ?, package_size = ?, package_unit = ?, bought_at = ?, expires_at = ?, price = ?,
 				 currency = ?, bought_where = ?, ended_at = ?, brand_id = ?, category_id = ?, updated_at = ? WHERE id = ?`
 			).run(
 				clean.name,
 				clean.note,
 				clean.quantity,
 				clean.duration_days,
+				clean.package_size,
+				clean.package_unit,
 				clean.bought_at,
+				clean.expires_at,
 				clean.price,
 				clean.currency,
 				clean.bought_where,
@@ -1819,6 +2165,57 @@ export function createJournal(db: SqlDb) {
 		return getStockItem(id);
 	}
 
+	function addStockPhotos(
+		itemId: string,
+		photos: { photo: Uint8Array; mime: string }[]
+	): StockItemPhoto[] {
+		if (photos.length === 0) return listStockPhotos(itemId);
+		const max = db
+			.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM stock_item_photos WHERE item_id = ?')
+			.get(itemId) as unknown as { m: number };
+		const insert = db.prepare(
+			'INSERT INTO stock_item_photos (id, item_id, photo, mime, position, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+		);
+		const now = Date.now();
+		db.transaction(() => {
+			photos.forEach((p, i) => {
+				insert.run(
+					crypto.randomUUID(),
+					itemId,
+					p.photo as unknown as string,
+					p.mime,
+					max.m + 1 + i,
+					now + i
+				);
+			});
+		});
+		return listStockPhotos(itemId);
+	}
+
+	function removeStockPhotos(itemId: string, ids: string[]): StockItemPhoto[] {
+		if (ids.length === 0) return listStockPhotos(itemId);
+		const del = db.prepare('DELETE FROM stock_item_photos WHERE id = ? AND item_id = ?');
+		db.transaction(() => {
+			for (const id of ids) del.run(id, itemId);
+		});
+		return listStockPhotos(itemId);
+	}
+
+	function getStockPhoto(photoId: string): { photo: Uint8Array; mime: string; createdAt: number } | null {
+		let r: { photo: unknown; mime: string; created_at: number } | undefined;
+		try {
+			r = db
+				.prepare('SELECT photo, mime, created_at FROM stock_item_photos WHERE id = ?')
+				.get(photoId) as unknown as { photo: unknown; mime: string; created_at: number } | undefined;
+		} catch {
+			return null;
+		}
+		if (!r || r.photo === null || r.photo === undefined) return null;
+		const bytes = toBytes(r.photo);
+		if (bytes.length === 0) return null;
+		return { photo: bytes, mime: r.mime || 'image/jpeg', createdAt: r.created_at };
+	}
+
 	function getStockItemPhoto(id: string): { photo: Uint8Array; mime: string; updatedAt: number } | null {
 		let r: { photo: unknown; photo_mime: string; updated_at: number } | undefined;
 		try {
@@ -1828,10 +2225,108 @@ export function createJournal(db: SqlDb) {
 		} catch {
 			return null;
 		}
-		if (!r || r.photo === null || r.photo === undefined) return null;
-		const bytes = toBytes(r.photo);
+		if (r && r.photo !== null && r.photo !== undefined) {
+			const bytes = toBytes(r.photo);
+			if (bytes.length > 0) return { photo: bytes, mime: r.photo_mime || 'image/jpeg', updatedAt: r.updated_at };
+		}
+		// New items keep their photos in the gallery; the old URL still works
+		// by returning the first one.
+		const first = db
+			.prepare(
+				'SELECT photo, mime, created_at FROM stock_item_photos WHERE item_id = ? ORDER BY position ASC, created_at ASC, id ASC LIMIT 1'
+			)
+			.get(id) as unknown as { photo: unknown; mime: string; created_at: number } | undefined;
+		if (!first || first.photo === null || first.photo === undefined) return null;
+		const bytes = toBytes(first.photo);
 		if (bytes.length === 0) return null;
-		return { photo: bytes, mime: r.photo_mime || 'image/jpeg', updatedAt: r.updated_at };
+		return { photo: bytes, mime: first.mime || 'image/jpeg', updatedAt: first.created_at };
+	}
+
+	// --- Stock activity -------------------------------------------------
+	// Consumptions are logged and the quantity is deducted in one step, so
+	// the history and the stock total never drift. The table arrives with
+	// migration 18.
+
+	function listStockActions(itemId: string, limit = 20): StockAction[] {
+		let rows: StockAction[];
+		try {
+			rows = db
+				.prepare(
+					`SELECT id, item_id, kind, amount, unit, packages, note, created_at
+					 FROM stock_item_actions
+					 WHERE item_id = ?
+					 ORDER BY created_at DESC, id DESC LIMIT ?`
+				)
+				.all(itemId, Math.min(100, Math.max(1, Math.trunc(limit)))) as unknown as StockAction[];
+		} catch {
+			return [];
+		}
+		if (!Array.isArray(rows)) return [];
+		for (const row of rows) {
+			row.amount = Number(row.amount);
+			row.packages = Number(row.packages);
+			row.note = row.note ?? '';
+		}
+		return rows;
+	}
+
+	/** Deduct a consumption. `unit` must belong to the same family as the
+	 *  item's package unit; anything else is rejected so the amount cannot
+	 *  be read as the wrong substance. */
+	function recordStockConsume(
+		itemId: string,
+		amount: number,
+		unit: string,
+		note: string
+	): { item: StockItem; action: StockAction } | null {
+		const existing = getStockItem(itemId);
+		if (!existing || existing.kind !== 'consumable') return null;
+		const qty = Number(amount);
+		if (!Number.isFinite(qty) || qty <= 0) return null;
+		if (existing.package_size <= 0) return null;
+		const family = (u: string) => {
+			const x = (u || '').toLowerCase();
+			if (x === 'g' || x === 'kg') return 'mass';
+			if (x === 'ml' || x === 'l') return 'volume';
+			return null;
+		};
+		const itemUnit = (existing.package_unit || 'g').toLowerCase();
+		const consumeUnit = (unit || '').toLowerCase();
+		if (!family(unit) || family(unit) !== family(itemUnit)) return null;
+		const toBase = (v: number, u: string) => (u === 'kg' || u === 'l' ? v * 1000 : v);
+		const amountBase = toBase(qty, consumeUnit);
+		const sizeBase = toBase(existing.package_size, itemUnit);
+		if (sizeBase <= 0) return null;
+		const wanted = amountBase / sizeBase;
+		const deducted = Math.min(existing.quantity, wanted);
+		// Normalize the stored unit spelling: litres are `L`, the rest stay
+		// lowercase, matching the package units.
+		const storedUnit = consumeUnit === 'l' ? 'L' : consumeUnit;
+		const now = Math.max(Date.now(), existing.created_at + 1);
+		const actionId = crypto.randomUUID();
+		let item: StockItem;
+		db.transaction(() => {
+			const next = Math.max(0, existing.quantity - deducted);
+			db.prepare('UPDATE stock_items SET quantity = ?, updated_at = ? WHERE id = ?').run(next, now, itemId);
+			db.prepare(
+				`INSERT INTO stock_item_actions (id, item_id, kind, amount, unit, packages, note, created_at)
+				 VALUES (?, ?, 'consume', ?, ?, ?, ?, ?)`
+			).run(actionId, itemId, qty, storedUnit, deducted, String(note ?? '').trim().slice(0, 500), now);
+		});
+		const saved = getStockItem(itemId);
+		if (!saved) return null;
+		item = saved;
+		const action: StockAction = {
+			id: actionId,
+			item_id: itemId,
+			kind: 'consume',
+			amount: qty,
+			unit: storedUnit,
+			packages: deducted,
+			note: String(note ?? '').trim().slice(0, 500),
+			created_at: now
+		};
+		return { item, action };
 	}
 
 	// --- Stock goal -----------------------------------------------------
@@ -1860,6 +2355,89 @@ export function createJournal(db: SqlDb) {
 			return null;
 		}
 		return getStockGoals();
+	}
+
+	// --- Stock category goals -------------------------------------------
+	// Amount per person per category. The table arrives with migration 16;
+	// older journals read back as an empty set.
+
+	function listStockCategoryGoals(): StockCategoryGoal[] {
+		try {
+			const rows = db
+				.prepare(
+					`SELECT g.category_id, r.name, COALESCE(r.parent, '') AS parent, g.people, g.amount, g.unit, g.note
+					 FROM stock_category_goals g
+					 JOIN stock_registries r ON r.id = g.category_id
+					 ORDER BY r.name COLLATE NOCASE ASC, r.name ASC`
+				)
+				.all() as unknown as {
+					category_id: string;
+					name: string;
+					parent: string;
+					people: number;
+					amount: number;
+					unit: string;
+					note: string;
+				}[];
+			return rows.map((r) => {
+				const people = Math.trunc(Number(r.people));
+				const amount = Number(r.amount);
+				const unit = ['g', 'kg', 'ml', 'L'].includes(r.unit) ? r.unit : 'g';
+				const safePeople = Number.isFinite(people) && people >= 1 ? people : 1;
+				const safeAmount = Number.isFinite(amount) && amount > 0 ? amount : 0;
+				return {
+					category_id: r.category_id,
+					category: r.name,
+					group: r.parent ?? '',
+					people: safePeople,
+					amount: safeAmount,
+					unit,
+					note: r.note ?? '',
+					target: safePeople * safeAmount
+				};
+			});
+		} catch {
+			// Table arrives with migration 16.
+			return [];
+		}
+	}
+
+	function setStockCategoryGoals(input: StockCategoryGoalInput[]): StockCategoryGoal[] | null {
+		if (!Array.isArray(input) || input.length > 200) return null;
+		const byId = new Map<string, { people: number; amount: number; unit: string; note: string }>();
+		for (const goal of input) {
+			const categoryId = ensureStockRegistry('category', goal?.category);
+			if (!categoryId) return null;
+			const people = Math.trunc(Number(goal?.people));
+			const amount = Number(goal?.amount);
+			if (!Number.isFinite(people) || people < 1 || people > 999) return null;
+			if (!Number.isFinite(amount) || amount <= 0 || amount > 1e12) return null;
+			const rawUnit = String(goal?.unit ?? 'g').trim();
+			const lower = rawUnit.toLowerCase();
+			const unit = ['g', 'kg', 'ml', 'l'].includes(lower) ? (lower === 'l' ? 'L' : lower) : null;
+			if (!unit) return null;
+			const note = String(goal?.note ?? '').trim().slice(0, 2000);
+			byId.set(categoryId, { people, amount, unit, note });
+		}
+		if (byId.size !== input.length) {
+			// Two rows for one category (case-insensitive) are one goal; the
+			// last row wins. byId already holds it, so the count differs.
+			// Keep the deduped set instead of failing the whole save.
+		}
+		try {
+			db.transaction(() => {
+				db.prepare('DELETE FROM stock_category_goals').run();
+				const insert = db.prepare(
+					'INSERT INTO stock_category_goals (category_id, people, amount, unit, note) VALUES (?, ?, ?, ?, ?)'
+				);
+				for (const [categoryId, g] of byId) {
+					insert.run(categoryId, g.people, g.amount, g.unit, g.note);
+				}
+			});
+		} catch {
+			return null;
+		}
+		return listStockCategoryGoals();
 	}
 
 	function listHoldingActions(holdingId: string): HoldingAction[] | null {
@@ -1905,21 +2483,26 @@ export function createJournal(db: SqlDb) {
 		| { ok: true; action: HoldingAction; holding: Holding; actions: HoldingAction[] }
 		| { ok: false; reason: 'not_found' | 'invalid' | 'insufficient' };
 
-	function recordHoldingAction(holdingId: string, kind: string, amount: number): RecordActionResult {
+	function recordHoldingAction(holdingId: string, kind: string, amount: number, price?: number | null): RecordActionResult {
 		if (kind !== 'buy' && kind !== 'sell') return { ok: false, reason: 'invalid' };
 		const qty = Number(amount);
 		if (!Number.isFinite(qty) || qty <= 0) return { ok: false, reason: 'invalid' };
-		return db.transaction((): RecordActionResult => {
+		const explicitPrice = price === undefined || price === null ? null : Number(price);
+		if (explicitPrice !== null && (!Number.isFinite(explicitPrice) || explicitPrice < 0)) {
+			return { ok: false, reason: 'invalid' };
+		}
+		const result = db.transaction((): RecordActionResult => {
 			const current = db.prepare('SELECT * FROM holdings WHERE id = ?').get(holdingId) as unknown as HoldingRow | undefined;
 			if (!current) return { ok: false, reason: 'not_found' };
 			if (kind === 'sell' && qty > current.amount + 1e-9) return { ok: false, reason: 'insufficient' };
 			const now = Date.now();
+			const tradePrice = current.category === 'cash' ? 1 : (explicitPrice ?? current.price);
 			const action: HoldingAction = {
 				id: crypto.randomUUID(),
 				holding_id: holdingId,
 				kind,
 				amount: qty,
-				price: current.price,
+				price: tradePrice,
 				currency: current.currency,
 				created_at: now
 			};
@@ -1941,6 +2524,11 @@ export function createJournal(db: SqlDb) {
 				actions: readHoldingActions(holdingId)
 			};
 		});
+		if (result.ok) {
+			snapshotHoldingValue(holdingId);
+			snapshotPortfolioValue();
+		}
+		return result;
 	}
 
 	function getCategoryGoals(): { btc: number; fii: number; cash: number } | null {
@@ -2060,6 +2648,19 @@ export function createJournal(db: SqlDb) {
 			stale = true;
 		}
 		const totalUsd = holdings.reduce((s, h) => s + (h.valueUsd ?? 0), 0);
+		let previousTotalUsd: number | null = null;
+		try {
+			const prev = db
+				.prepare('SELECT value_usd FROM portfolio_value_history WHERE day < ? ORDER BY day DESC LIMIT 1')
+				.get(localDayKey()) as unknown as { value_usd: number } | undefined;
+			if (prev && Number.isFinite(Number(prev.value_usd))) previousTotalUsd = Number(prev.value_usd);
+		} catch {
+			// Table arrives with migration 21.
+		}
+		const totalChangePct =
+			previousTotalUsd !== null && previousTotalUsd > 0
+				? ((totalUsd - previousTotalUsd) / previousTotalUsd) * 100
+				: null;
 		const displayTotals = {
 			USD: totalUsd,
 			BRL: rates.has('BRL') ? totalUsd / (rates.get('BRL') as number) : null,
@@ -2101,7 +2702,7 @@ export function createJournal(db: SqlDb) {
 				});
 			}
 		}
-		return { holdings, totalUsd, asOf, stale, goals, valueGoals, valueProgress, actual, drift, displayTotals };
+		return { holdings, totalUsd, previousTotalUsd, totalChangePct, asOf, stale, goals, valueGoals, valueProgress, actual, drift, displayTotals };
 	}
 
 	/** Refresh fiat rates and auto-prices (BTC plus stock/FII quotes). Skips
@@ -2134,6 +2735,7 @@ export function createJournal(db: SqlDb) {
 			.all(force ? Date.now() + 1 : Date.now() - DAY_MS) as unknown as { id: string; ticker: string }[];
 		const stockRows = [...stockEmpty, ...stockStale.filter((r) => !stockEmpty.some((e) => e.id === r.id))];
 		if (fiats.length === 0 && btcEmpty.length === 0 && btcAuto.length === 0 && stockRows.length === 0) {
+			snapshotAllValues();
 			return getHoldingsSummary();
 		}
 		const { at } = fxToUsd();
@@ -2151,6 +2753,7 @@ export function createJournal(db: SqlDb) {
 			(btcAuto.length === 0 || btcFresh) &&
 			stockRows.length === 0
 		) {
+			snapshotAllValues();
 			return getHoldingsSummary();
 		}
 		if (typeof fetch !== 'function') throw new Error('network unavailable');
@@ -2192,6 +2795,9 @@ export function createJournal(db: SqlDb) {
 				}
 			}
 		}
+		// One snapshot pass after every successful refresh. Upserts today's
+		// row, so the day keeps the last value fetched.
+		snapshotAllValues();
 		return getHoldingsSummary();
 	}
 
@@ -2482,6 +3088,8 @@ export function createJournal(db: SqlDb) {
 		getHoldingsSummary,
 		getCategoryGoals,
 		setHoldingsGoals,
+		listHoldingValueHistory,
+		listPortfolioValueHistory,
 		refreshRates,
 		listStockItems,
 		getStockItem,
@@ -2490,9 +3098,18 @@ export function createJournal(db: SqlDb) {
 		deleteStockItem,
 		setStockItemPhoto,
 		getStockItemPhoto,
+		addStockPhotos,
+		removeStockPhotos,
+		getStockPhoto,
+		listStockActions,
+		recordStockConsume,
 		getStockGoals,
 		setStockGoals,
+		listStockCategoryGoals,
+		setStockCategoryGoals,
 		listStockRegistries,
+		setStockCategory,
+		deleteStockGroup,
 		listTagColors,
 		listTagCounts,
 		setTagColor

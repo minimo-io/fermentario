@@ -13,8 +13,10 @@
 		placeholder: string;
 		onChange: (value: string) => void;
 		onHelp?: () => void;
+		/** Optional delete action for existing options (groups). */
+		onDeleteOption?: (name: string) => void;
 	};
-	let { id, label, value, options, placeholder, onChange, onHelp }: Props = $props();
+	let { id, label, value, options, placeholder, onChange, onHelp, onDeleteOption }: Props = $props();
 
 	let open = $state(false);
 	let sel = $state(-1);
@@ -101,19 +103,34 @@
 					<ul>
 						{#each choices as c, i (c.name + (c.create ? ':new' : ''))}
 							<li>
-								<button
-									type="button"
-									role="option"
-									aria-selected={i === sel}
-									class="flex w-full items-center px-3 py-2 text-left text-sm {i === sel ? 'bg-stone-100 dark:bg-stone-800' : ''}"
-									onmousedown={(e) => e.preventDefault()}
-									onclick={() => pick(c.name)}
-									onmousemove={() => (sel = i)}
-								>
-									<span class="min-w-0 flex-1 truncate text-stone-800 dark:text-stone-200">
-										{#if c.create}Create “{c.name}”{:else}{c.name}{/if}
-									</span>
-								</button>
+								<div class="flex items-center">
+									<button
+										type="button"
+										role="option"
+										aria-selected={i === sel}
+										class="flex min-w-0 flex-1 items-center px-3 py-2 text-left text-sm {i === sel ? 'bg-stone-100 dark:bg-stone-800' : ''}"
+										onmousedown={(e) => e.preventDefault()}
+										onclick={() => pick(c.name)}
+										onmousemove={() => (sel = i)}
+									>
+										<span class="min-w-0 flex-1 truncate text-stone-800 dark:text-stone-200">
+											{#if c.create}Create “{c.name}”{:else}{c.name}{/if}
+										</span>
+									</button>
+									{#if onDeleteOption && !c.create}
+										<button
+											type="button"
+											class="mr-2 grid h-6 w-6 shrink-0 place-items-center rounded-full text-stone-400 hover:bg-rose-50 hover:text-rose-600 dark:text-stone-500 dark:hover:bg-rose-950 dark:hover:text-rose-400"
+											aria-label="Delete group {c.name}"
+											title="Delete group {c.name}"
+											onmousedown={(e) => e.preventDefault()}
+											onclick={(e) => {
+												e.stopPropagation();
+												onDeleteOption(c.name);
+											}}
+										>&times;</button>
+									{/if}
+								</div>
 							</li>
 						{/each}
 					</ul>

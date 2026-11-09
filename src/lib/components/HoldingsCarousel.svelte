@@ -2,12 +2,17 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChartLine from '@lucide/svelte/icons/chart-line';
+	import TrendingUp from '@lucide/svelte/icons/trending-up';
+	import TrendingDown from '@lucide/svelte/icons/trending-down';
+	import Minus from '@lucide/svelte/icons/minus';
 	import { slide } from 'svelte/transition';
 	import { motionMs } from '$lib/motion';
 	import { fmtCurrency } from '$lib/currency';
 	import HoldingModal, { blankHoldingDraft } from '$lib/components/HoldingModal.svelte';
 	import type { HoldingDraft } from '$lib/components/HoldingModal.svelte';
 	import HoldingActionsModal from '$lib/components/HoldingActionsModal.svelte';
+	import HoldingsHistoryModal from '$lib/components/HoldingsHistoryModal.svelte';
 	import AllocationModal from '$lib/components/AllocationModal.svelte';
 	import GoalsModal from '$lib/components/GoalsModal.svelte';
 	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
@@ -23,7 +28,7 @@
 		onUpdate: (id: string, patch: { ticker: string; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }) => Promise<boolean>;
 		onDelete: (h: Holding) => void;
 		onLoadActions: (id: string) => Promise<HoldingAction[] | null>;
-		onRecordAction: (id: string, kind: 'buy' | 'sell', amount: number) => Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }>;
+		onRecordAction: (id: string, kind: 'buy' | 'sell', amount: number, price: number | null) => Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }>;
 		onRefresh: () => void;
 		onGoals: (
 			pct: { btc: number; fii: number; cash: number },
@@ -36,6 +41,7 @@
 	let acting = $state<Holding | null>(null);
 	let goalsOpen = $state(false);
 	let allocating = $state(false);
+	let historyOpen = $state(false);
 
 	const COLLAPSED_KEY = 'ferm:holdings-collapsed';
 	let collapsed = $state(false);
@@ -62,6 +68,10 @@
 	// ignores the value sort. Each group keeps the API order.
 	const cashHoldings = $derived(summary?.holdings.filter((h) => h.category === 'cash') ?? []);
 	const otherHoldings = $derived(summary?.holdings.filter((h) => h.category !== 'cash') ?? []);
+	const totalTrend = $derived.by(() => {
+		const t = summary?.totalChangePct ?? null;
+		return t === null || Math.abs(t) < 0.05 ? 0 : t;
+	});
 
 	function openAdd(preset?: Partial<HoldingDraft>) {
 		modal = { mode: 'add', initial: { ...blankHoldingDraft(), ...preset } };
@@ -196,6 +206,8 @@
 	{/snippet}
 
 	{#snippet holdingCard(h: Holding)}
+		{@const rawTrend = h.changePct ?? null}
+		{@const trend = rawTrend === null || Math.abs(rawTrend) < 0.05 ? 0 : rawTrend}
 		<div role="listitem" class="flex w-40 shrink-0 snap-start">
 			<div class="relative flex flex-1 flex-col overflow-hidden rounded-2xl border p-3 {h.category === 'cash' ? 'border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/70 dark:bg-emerald-950/40' : 'border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70'}">
 				<button
@@ -218,6 +230,16 @@
 					<p class="mt-1 truncate text-xl font-semibold tabular-nums text-stone-800 dark:text-stone-200">
 						{h.price === null ? '—' : fmtMoney(h.amount * h.price, h.currency)}
 					</p>
+					<span class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums {trend === 0 ? 'text-stone-400 dark:text-stone-500' : trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}" title={rawTrend === null ? 'No previous day yet' : 'Since the previous day'}>
+						{#if trend === 0}
+							<Minus class="h-3 w-3" />
+						{:else if trend > 0}
+							<TrendingUp class="h-3 w-3" />
+						{:else}
+							<TrendingDown class="h-3 w-3" />
+						{/if}
+						{trend === 0 ? '0.0%' : `${trend > 0 ? '+' : ''}${trend.toFixed(1)}%`}
+					</span>
 					<p class="truncate text-sm tabular-nums text-stone-600 dark:text-stone-300">
 						{#if h.category !== 'cash'}{fmtAmount(h.amount)} {h.category === 'btc' ? 'BTC' : 'shares'}{:else}&nbsp;{/if}
 					</p>
@@ -309,6 +331,16 @@
 				>
 					<p class="text-[11px] font-bold uppercase tracking-wider text-stone-400">Total USD</p>
 					<p class="mt-1 font-bold tabular-nums break-all leading-tight {totalSizeClass()}">{fmtUsdWhole(summary.totalUsd)}</p>
+					<span class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums {totalTrend === 0 ? 'text-stone-500' : totalTrend > 0 ? 'text-emerald-400' : 'text-rose-400'}" title={summary.previousTotalUsd === null ? 'No previous day yet' : 'Since the previous day'}>
+						{#if totalTrend === 0}
+							<Minus class="h-3 w-3" />
+						{:else if totalTrend > 0}
+							<TrendingUp class="h-3 w-3" />
+						{:else}
+							<TrendingDown class="h-3 w-3" />
+						{/if}
+						{totalTrend === 0 ? '0.0%' : `${totalTrend > 0 ? '+' : ''}${totalTrend.toFixed(1)}%`}
+					</span>
 					{#if summary.displayTotals.BRL !== null}
 						<p class="mt-0.5 truncate text-[11px] tabular-nums text-stone-400">{fmtBRL(summary.displayTotals.BRL)}</p>
 					{/if}
@@ -334,6 +366,13 @@
 						disabled={refreshing}
 						onclick={onRefresh}
 					><RefreshCw class="h-3.5 w-3.5 {refreshing ? 'animate-spin' : ''}" /></button>
+					<button
+						type="button"
+						class="grid h-6 w-6 place-items-center rounded-full text-stone-400 hover:bg-white/10 hover:text-stone-200"
+						aria-label="Portfolio value history"
+						title="Portfolio value history"
+						onclick={() => (historyOpen = true)}
+					><ChartLine class="h-3.5 w-3.5" /></button>
 					<button
 						type="button"
 						class="rounded-full px-2 py-1 text-[11px] font-medium text-stone-400 hover:bg-white/10 hover:text-stone-200"
@@ -413,4 +452,7 @@
 {/if}
 {#if goalsOpen && summary}
 	<GoalsModal summary={summary} onSave={onGoals} onClose={() => (goalsOpen = false)} />
+{/if}
+{#if historyOpen}
+	<HoldingsHistoryModal onClose={() => (historyOpen = false)} />
 {/if}

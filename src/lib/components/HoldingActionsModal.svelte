@@ -5,7 +5,8 @@
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { fmtCurrency } from '$lib/currency';
-	import type { Holding, HoldingAction } from '$lib/types';
+	import ValueChart from '$lib/components/ValueChart.svelte';
+	import type { Holding, HoldingAction, HoldingValuePoint } from '$lib/types';
 
 	// Buy/sell ledger for one holding. The form stays at the top; past
 	// actions scroll below it. Buys are green, sells are red, and the
@@ -16,7 +17,8 @@
 		onRecord: (
 			id: string,
 			kind: 'buy' | 'sell',
-			amount: number
+			amount: number,
+			price: number | null
 		) => Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }>;
 		onClose: () => void;
 	};
@@ -25,8 +27,11 @@
 	// svelte-ignore state_referenced_locally
 	let current = $state<Holding>(holding);
 	let actions = $state<HoldingAction[] | null>(null);
+	let history = $state<HoldingValuePoint[] | null>(null);
 	let kind = $state<'buy' | 'sell'>('buy');
 	let amount = $state('');
+	// svelte-ignore state_referenced_locally
+	let price = $state(holding.price !== null ? String(holding.price) : '');
 	let saving = $state(false);
 	let error = $state('');
 	let loadFailed = $state(false);
@@ -39,12 +44,22 @@
 	const noun = $derived(current.category === 'btc' ? 'BTC' : cash ? 'cash' : 'shares');
 
 	onMount(() => {
+		void loadHistory();
 		void (async () => {
 			const list = await onLoad(current.id);
 			if (list) actions = list;
 			else loadFailed = true;
 		})();
 	});
+
+	async function loadHistory() {
+		try {
+			const d = await (await fetch(`/api/holdings/${current.id}/history?days=365`)).json();
+			history = Array.isArray(d.points) ? d.points : [];
+		} catch {
+			history = [];
+		}
+	}
 
 	function fmtMoney(v: number, ccy: string): string {
 		return fmtCurrency(v, ccy, 2);
@@ -88,15 +103,22 @@
 			error = `You hold ${fmtAmount(current.amount)} ${noun}. You cannot sell more than that.`;
 			return;
 		}
+		const priceRaw = price.trim().replace(',', '.');
+		const tradePrice = cash ? 1 : priceRaw === '' ? current.price : Number(priceRaw);
+		if (!cash && (tradePrice === null || !Number.isFinite(tradePrice) || tradePrice < 0)) {
+			error = 'Enter a valid price per unit.';
+			return;
+		}
 		saving = true;
 		error = '';
-		const result = await onRecord(current.id, kind, qty);
+		const result = await onRecord(current.id, kind, qty, tradePrice);
 		saving = false;
 		if (!result.ok) {
 			error = result.error ?? 'Could not record the action.';
 			return;
 		}
 		if (result.actions) actions = result.actions;
+		void loadHistory();
 		current = {
 			...current,
 			amount:
@@ -201,11 +223,41 @@
 					disabled={saving}
 				>{saving ? 'Saving…' : kind === 'buy' ? (cash ? 'Deposit' : 'Buy') : cash ? 'Withdraw' : 'Sell'}</button>
 			</div>
-			{#if current.price !== null && current.category !== 'cash'}
-				<p class="mt-1.5 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
-					Recorded at the current market price, {fmtMoney(current.price, current.currency)} per {current.category === 'btc' ? 'BTC' : 'share'}.
-				</p>
-			{:else if cash}
+			{#if !cash}
+				<div class="mt-2">
+					<label class="block text-[11px] font-medium text-stone-500 dark:text-stone-400" for="action-price">
+						{kind === 'buy' ? 'Price paid' : 'Price received'} per {current.category === 'btc' ? 'BTC' : 'share'}
+					</label>
+					<div class="mt-1 flex items-center gap-2">
+						<input
+							id="action-price"
+							class="{formField} flex-1"
+							aria-label={kind === 'buy' ? 'Price paid' : 'Price received'}
+							placeholder="0.00"
+							value={price}
+							oninput={(e) => (price = e.currentTarget.value)}
+							inputmode="decimal"
+							autocomplete="off"
+						/>
+						{#if current.price !== null}
+							<button
+								type="button"
+								class="shrink-0 rounded-full border border-stone-200 px-3 py-1.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+								onclick={() => (price = String(current.price))}
+							>Use market</button>
+						{/if}
+					</div>
+					{#if current.price !== null}
+						<p class="mt-1 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
+							Market: {fmtMoney(current.price, current.currency)} per {current.category === 'btc' ? 'BTC' : 'share'}. Edit the field to record what you actually paid.
+						</p>
+					{:else}
+						<p class="mt-1 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
+							No market price cached. Enter the price you {kind === 'buy' ? 'paid' : 'received'}.
+						</p>
+					{/if}
+				</div>
+			{:else}
 				<p class="mt-1.5 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
 					Cash counts at face value.
 				</p>
@@ -216,6 +268,15 @@
 		</form>
 
 		<div class="mt-3 min-h-0 flex-1 overflow-y-auto border-t border-stone-200 dark:border-stone-800">
+			<div class="py-3">
+				<h3 class="mb-1 text-[11px] font-medium text-stone-500 dark:text-stone-400">Value · 1 year</h3>
+				{#if history === null}
+					<p class="py-4 text-center text-xs text-stone-400 dark:text-stone-500">Loading graph…</p>
+				{:else}
+					<ValueChart points={history.map((p) => ({ day: p.day, value: p.value }))} currency={current.currency} />
+				{/if}
+			</div>
+			<div class="border-t border-stone-200 dark:border-stone-800">
 			{#if actions === null}
 				<p class="py-4 text-center text-xs text-stone-400 dark:text-stone-500">Loading…</p>
 			{:else if loadFailed}
@@ -265,6 +326,7 @@
 					{/each}
 				</ul>
 			{/if}
+			</div>
 		</div>
 	</div>
 </div>
