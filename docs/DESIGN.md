@@ -71,7 +71,9 @@ sizing. Consult this before changing any of them.
   holdings name their bank and country; the ticker
   is derived from the bank and the price stays 1. Fiat converts through cached
   `fx_rates`, BTC-ticker rows take the fetched BTC price, and B3/FII tickers
-  take the Fundamentus quote. Refresh runs at most once a day per quote: home
+  take the Google Finance quote, with Fundamentus as fallback. Google updates
+  intraday; Fundamentus only reports the regular-session close. Refresh runs
+  at most once a day per quote: home
   open asks quietly and the server answers from cache until a quote is a day
   old, while failures keep cached values with a stale mark. The
   totals-card refresh button always forces (`{force: true}`) and refetches
@@ -95,8 +97,11 @@ sizing. Consult this before changing any of them.
   The add form renders in the slot that opened it (BTC placeholder or `+`
   box), tracked by one flag, never in both.
 - **Prices roadmap**: BTC auto-prices (Coinbase spot); B3 quotes come from
-  Fundamentus (`Cotação` row, comma decimals normalized); every other ticker
-  uses the Yahoo chart, and fiat converts for the USD total. A full exchange
+  Google Finance first (embedded `["TICKER","BVMF"]…[price,change,pct],null,
+  previousClose` block, updated intraday) with the Fundamentus `Cotação` row
+  as fallback (comma decimals normalized, regular-session close only); every
+  other ticker uses the Yahoo chart, and fiat converts for the USD total. A
+  full exchange
   API and a scheduled refresh are future work; the schema (`price`,
   `price_auto`, `currency`, `fx_rates`) already carries them, so no migration
   was needed when quotes landed. The UI never sends a price: the API keeps

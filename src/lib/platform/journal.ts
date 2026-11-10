@@ -1329,6 +1329,40 @@ export function createJournal(db: SqlDb) {
 		return !t.includes('.') && /^[A-Z]{4}\d{1,2}[A-Z0-9]?$/.test(t);
 	}
 
+	/** Latest quote for a B3 ticker from Google Finance. The page embeds the
+	 *  main quote as `["TICKER","BVMF"],"Name",0,"BRL",[price,change,pct,…],
+	 *  null,previousClose,…`. Google updates intraday, unlike Fundamentus,
+	 *  which returns the regular-session close. Null on any failure. */
+	async function fetchGoogleB3Quote(
+		ticker: string
+	): Promise<{ price: number; previousClose: number | null } | null> {
+		const t = ticker.toUpperCase();
+		try {
+			const res = await fetch(
+				`https://www.google.com/finance/quote/${encodeURIComponent(t)}:BVMF?hl=en`,
+				{ signal: AbortSignal.timeout(10000), headers: { 'user-agent': YAHOO_UA } }
+			);
+			if (!res.ok) return null;
+			const html = await res.text();
+			const m = new RegExp(
+				`\\["${t}","BVMF"\\],"(?:[^"\\\\]|\\\\.)*",\\d+,"BRL",\\[([^\\]]+)\\],null,([-\\d.eE+]+)`
+			).exec(html);
+			if (!m) return null;
+			const [price, , pct] = m[1].split(',').map(Number);
+			if (!Number.isFinite(price) || price <= 0) return null;
+			let previousClose = Number(m[2]);
+			if (!Number.isFinite(previousClose) || previousClose <= 0) {
+				previousClose = Number.isFinite(pct) && pct !== -100 ? price / (1 + pct / 100) : NaN;
+			}
+			return {
+				price,
+				previousClose: Number.isFinite(previousClose) && previousClose > 0 ? previousClose : null
+			};
+		} catch {
+			return null;
+		}
+	}
+
 	/** Latest quote for a B3 ticker from Fundamentus (`Cotação` row).
 	 *  Null on any failure — unknown ticker, layout change, non-numeric. */
 	async function fetchFundamentusQuote(ticker: string): Promise<number | null> {
@@ -2826,7 +2860,9 @@ export function createJournal(db: SqlDb) {
 				// Stagger hits: Yahoo 429s rapid sequential requests.
 				if (i > 0) await new Promise((r) => setTimeout(r, 500));
 				const t = stockRows[i]!.ticker;
-				const quote = isB3(t) ? await fetchFundamentusQuote(t) : await fetchQuote(yahooSymbol(t));
+				const quote = isB3(t)
+					? ((await fetchGoogleB3Quote(t))?.price ?? (await fetchFundamentusQuote(t)))
+					: await fetchQuote(yahooSymbol(t));
 				if (quote !== null) {
 					const at = Date.now();
 					upd.run(quote, at, at, stockRows[i]!.id);

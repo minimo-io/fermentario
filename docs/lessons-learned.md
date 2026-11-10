@@ -2272,3 +2272,14 @@
   that value and goes to `/`; without `from` it keeps `history.back()` for tags
   and other entry points. Validate `from` in the loader, and fall back to In
   progress when the remembered group no longer exists.
+
+## Session: Intraday B3 quotes
+- Fundamentus only returns the regular-session close (`Data últ cot` can stay
+  on the previous day through the next morning). Snapshotting that value twice
+  produces a truthful but useless `0.0%` for FIIs while BTC moves.
+- Use Google Finance for B3 first. Its page embeds the main quote as
+  `["TICKER","BVMF"],"Name",0,"BRL",[price,change,pct,…],null,previousClose,…`
+  and updates intraday. Keep Fundamentus as the fallback; never remove it.
+- Do not change the snapshot logic for this. Refresh today's row with the
+  fresh price; the previous day's row stays the baseline. GGRC11 really can
+  be flat, so `0.0%` is valid when Google reports no move.
