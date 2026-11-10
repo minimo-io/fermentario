@@ -2803,7 +2803,8 @@
 			"stockPhotos": 1,
 			"stockActions": 1,
 			"stockBrands": 2,
-			"stockCategories": 4
+			"stockCategories": 4,
+			"shoppingExtras": 1
 		}
 	},
 	"POST /api/import": {
@@ -2832,7 +2833,8 @@
 			"stockGoal": 1,
 			"stockActions": 1,
 			"holdingValueHistory": 2,
-			"portfolioValueHistory": 1
+			"portfolioValueHistory": 1,
+			"shoppingExtras": 1
 		}
 	},
 	"GET /api/notes/[id] after restore": {

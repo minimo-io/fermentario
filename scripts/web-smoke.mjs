@@ -148,8 +148,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 21) {
-		console.error('The legacy import did not register an active v21 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 22) {
+		console.error('The legacy import did not register an active v22 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -1257,6 +1257,49 @@ must(
 const color = await api('PUT /api/tags/[tag]', '/api/tags/garden', json({ color: 'violet' }, 'PUT'));
 must('PUT /api/tags/[tag]', color, (r) => r.status === 200 && r.body.color === 'violet', '200 with violet');
 
+const extraForm = (fields) =>
+	new URLSearchParams(fields);
+const addBatteries = await fetch(`${base}/api/stocks/print?scope=shopping`, {
+	method: 'POST',
+	headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+	body: extraForm({ intent: 'add', text: 'Batteries' }),
+	redirect: 'manual'
+});
+must('POST /api/stocks/print extra', { status: addBatteries.status }, (r) => r.status === 303, '303 after adding an extra');
+
+const shoppingWithExtra = await (await fetch(`${base}/api/stocks/print?scope=shopping`)).text();
+must(
+	'GET /api/stocks/print shopping extra',
+	{ body: shoppingWithExtra },
+	(r) => r.body.includes('Batteries') && r.body.includes('Extras'),
+	'the shopping list shows the manual extra'
+);
+const extraId = /name="id" value="([^"]+)"/.exec(shoppingWithExtra)?.[1];
+must('shopping extra id', { id: extraId }, (r) => typeof r.id === 'string' && r.id.length > 0, 'the remove form carries the extra id');
+
+const removeBatteries = await fetch(`${base}/api/stocks/print?scope=shopping`, {
+	method: 'POST',
+	headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+	body: extraForm({ intent: 'remove', id: extraId }),
+	redirect: 'manual'
+});
+must('POST /api/stocks/print remove extra', { status: removeBatteries.status }, (r) => r.status === 303, '303 after removing an extra');
+const shoppingWithoutExtra = await (await fetch(`${base}/api/stocks/print?scope=shopping`)).text();
+must(
+	'GET /api/stocks/print shopping extra removed',
+	{ body: shoppingWithoutExtra },
+	(r) => !r.body.includes('Batteries'),
+	'the removed extra leaves no trace'
+);
+
+const addBirthday = await fetch(`${base}/api/stocks/print?scope=shopping`, {
+	method: 'POST',
+	headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+	body: extraForm({ intent: 'add', text: 'Birthday card' }),
+	redirect: 'manual'
+});
+must('POST /api/stocks/print restore extra', { status: addBirthday.status }, (r) => r.status === 303, '303 after adding the restore extra');
+
 // --- Export / import round trip -------------------------------------------
 const exported = await fetch(`${base}/api/export`);
 const bytes = Buffer.from(await exported.arrayBuffer());
@@ -1294,7 +1337,8 @@ try {
 		stockPhotos: d.prepare('SELECT COUNT(*) AS c FROM stock_item_photos').get().c,
 		stockActions: count('stock_item_actions'),
 		stockBrands: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'brand'").get().c,
-		stockCategories: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'category'").get().c
+		stockCategories: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'category'").get().c,
+		shoppingExtras: count('shopping_extras')
 	};
 	d.close();
 } catch (e) {
@@ -1362,6 +1406,7 @@ must(
 		r.body.done?.valueGoals === 1 &&
 		r.body.done?.holdingValueHistory >= 1 &&
 		r.body.done?.portfolioValueHistory >= 1 &&
+		r.body.done?.shoppingExtras === 1 &&
 		r.body.done?.stocks === 2 &&
 		r.body.done?.stockGoal === 1,
 	'200 with a count for every restored section'
@@ -1536,6 +1581,14 @@ must(
 	'200 with inline printable HTML'
 );
 
+const stockPrintAllText = await stockPrintAll.text();
+must(
+	'GET /api/stocks/print?scope=all shopping extra',
+	{ body: stockPrintAllText },
+	(r) => !r.body.includes('Birthday card'),
+	'the detailed stock report does not include shopping extras'
+);
+
 const stockPrintShopping = await fetch(`${base}/api/stocks/print?scope=shopping`);
 const stockPrintShoppingText = await stockPrintShopping.text();
 must(
@@ -1545,6 +1598,7 @@ must(
 		r.status === 200 &&
 		r.text.includes('<input type="checkbox"') &&
 		r.text.includes('Shopping list') &&
+		r.text.includes('Birthday card') &&
 		!r.text.includes('Stock / target') &&
 		!r.text.includes('Progress') &&
 		!r.text.includes('Expires') &&

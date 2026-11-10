@@ -2250,3 +2250,25 @@
   list prints "Nothing to buy."
 - Smoke asserts the shopping HTML has checkboxes and no stock-report headers;
   `scope=all` stays the detailed report.
+
+## Session: Shopping extras and task edit reuse
+- Manual shopping extras are current-only rows in `shopping_extras`. Deleting
+  a row leaves no history; restore clears and copies the current rows. The
+  shopping POST uses a normal form and 303 redirect so it works without
+  JavaScript, and the CSP needs `form-action 'self'`.
+- Smoke form POSTs need `origin: base` in the headers, or SvelteKit answers
+  403 before the route runs.
+- The task editor is one component, `TaskEditModal`, shared by `TodoTab` and
+  `/todo/[id]`. The row's `⋮` menu opens it; a click on the task title
+  navigates to the detail page instead. Do not keep a second copy of the edit
+  markup in either surface.
+
+## Session: To-Do back navigation
+- `TodoTab` defaulted to In progress on every mount, so Back from `/todo/[id]`
+  always lost the group the task came from. Remember the subview in
+  `sessionStorage` (`fermentario.todoView` = `progress` or `group:<id>`) and
+  restore it after `loadGroups`.
+- Task links carry `?from=progress|group:<id>`. The detail Back button writes
+  that value and goes to `/`; without `from` it keeps `history.back()` for tags
+  and other entry points. Validate `from` in the loader, and fall back to In
+  progress when the remembered group no longer exists.

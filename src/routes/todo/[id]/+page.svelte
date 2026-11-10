@@ -8,6 +8,7 @@
 	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EntityTitle from '$lib/components/EntityTitle.svelte';
+	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import { contentWidthClass } from '$lib/display';
@@ -26,6 +27,7 @@
 	let addingComment = $state(false);
 	let editingComment = $state<TaskComment | null>(null);
 	let confirmingDone = $state(false);
+	let editing = $state(false);
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
 
@@ -54,6 +56,20 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function goBack() {
+		// Coming from a known To-Do subview: return there deterministically.
+		// Otherwise keep the real history (tags, heatmap, direct link).
+		if (data.fromView) {
+			try {
+				sessionStorage.setItem('fermentario.todoView', data.fromView);
+			} catch {}
+			void goto('/');
+			return;
+		}
+		if (window.history.length > 1) window.history.back();
+		else goto('/');
 	}
 
 	async function toggle() {
@@ -146,7 +162,7 @@
 			<button
 				type="button"
 				class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200"
-				onclick={() => { if (window.history.length > 1) window.history.back(); else goto('/'); }}
+				onclick={goBack}
 			>
 				<ArrowLeft class="h-3.5 w-3.5" /> Back
 			</button>
@@ -172,6 +188,12 @@
 						created {fmt(item.created_at)}{#if item.done && item.done_at} · done {fmt(item.done_at)}{/if}
 					</p>
 				</div>
+				<button
+					type="button"
+					class="inline-flex shrink-0 items-center rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+					aria-haspopup="dialog"
+					onclick={() => (editing = true)}
+				>Edit</button>
 			</div>
 			{#if item.tags.length > 0}
 				<div class="mt-2 flex flex-wrap gap-1">
@@ -217,6 +239,16 @@
 		</section>
 	</div>
 </main>
+
+{#if editing}
+	<TaskEditModal
+		{item}
+		groups={data.groups ?? []}
+		onSaved={(saved) => { item = saved; editing = false; }}
+		onClose={() => (editing = false)}
+		onError={showToast}
+	/>
+{/if}
 
 {#if addingComment}
 	<CommentModal

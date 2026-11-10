@@ -1,4 +1,10 @@
-import { listStockItems, listStockCategoryGoals } from '$lib/server/db';
+import {
+	listStockItems,
+	listStockCategoryGoals,
+	listShoppingExtras,
+	addShoppingExtra,
+	removeShoppingExtra
+} from '$lib/server/db';
 import { fmtQty, stockDisplayTitle, stockGoalAmount, stockUnit } from '$lib/stock';
 import { esc, htmlShell } from '$lib/stock-print';
 import type { StockItem } from '$lib/types';
@@ -9,18 +15,31 @@ export async function GET({ url }) {
 	const scope = url.searchParams.get('scope') === 'shopping' ? 'shopping' : 'all';
 	const items = listStockItems().filter((i) => i.kind === 'consumable');
 	const goals = listStockCategoryGoals();
+	const extras = listShoppingExtras();
 	const html =
 		scope === 'shopping'
-			? htmlShell(scope, 'Shopping list', () => shoppingBody(items, goals))
+			? htmlShell(scope, 'Shopping list', () => shoppingBody(items, goals, extras))
 			: htmlShell(scope, 'Stock', () => printBody(items, goals));
 	return new Response(html, {
 		status: 200,
 		headers: {
 			'content-type': 'text/html; charset=utf-8',
-			'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'",
+			'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
 			'x-content-type-options': 'nosniff',
 			'cache-control': 'no-store'
 		}
+	});
+}
+
+/** Add or remove a manual extra, then return to the shopping list. */
+export async function POST({ request }) {
+	const form = await request.formData();
+	const intent = String(form.get('intent') ?? '');
+	if (intent === 'add') addShoppingExtra(form.get('text'));
+	else if (intent === 'remove') removeShoppingExtra(String(form.get('id') ?? ''));
+	return new Response(null, {
+		status: 303,
+		headers: { location: '/api/stocks/print?scope=shopping', 'cache-control': 'no-store' }
 	});
 }
 
@@ -117,7 +136,11 @@ function printBody(items: StockItem[], goals: ReturnType<typeof listStockCategor
 		.join('');
 }
 
-function shoppingBody(items: StockItem[], goals: ReturnType<typeof listStockCategoryGoals>): string {
+function shoppingBody(
+	items: StockItem[],
+	goals: ReturnType<typeof listStockCategoryGoals>,
+	extras: { id: string; text: string }[]
+): string {
 	const byCategory = new Map<string, StockItem[]>();
 	for (const item of items) {
 		const key = item.category || 'No category';
@@ -149,15 +172,44 @@ function shoppingBody(items: StockItem[], goals: ReturnType<typeof listStockCate
 	const ordered = [...blocks.entries()]
 		.sort(([a], [b]) => (a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)))
 		.map(([, block]) => block);
-	if (ordered.length === 0) return '<p class="muted">Nothing to buy.</p>';
-	return ordered
-		.map(
-			(block) => `<section class="block">
+	const list =
+		ordered.length === 0
+			? '<p class="muted">Nothing to buy.</p>'
+			: ordered
+					.map(
+						(block) => `<section class="block">
 				<h2>${esc(block.label)}</h2>
 				<ul class="shop">${block.lines.join('')}</ul>
 			</section>`
+					)
+					.join('');
+	return list + extrasSection(extras);
+}
+
+function extrasSection(extras: { id: string; text: string }[]): string {
+	const form = `<form method="POST" action="/api/stocks/print?scope=shopping" class="add-extra no-print">
+		<input type="hidden" name="intent" value="add" />
+		<input type="text" name="text" maxlength="120" placeholder="Add an extra" aria-label="Add an extra" required />
+		<button type="submit">Add</button>
+	</form>`;
+	if (extras.length === 0) return form;
+	const lines = extras
+		.map(
+			(e) => `<li class="extra">
+				<label><input type="checkbox" /> <span>${esc(e.text)}</span></label>
+				<form method="POST" action="/api/stocks/print?scope=shopping" class="no-print">
+					<input type="hidden" name="intent" value="remove" />
+					<input type="hidden" name="id" value="${esc(e.id)}" />
+					<button type="submit" aria-label="Remove ${esc(e.text)}" title="Remove">×</button>
+				</form>
+			</li>`
 		)
 		.join('');
+	return `<section class="block extras">
+		<h2>Extras</h2>
+		<ul class="shop">${lines}</ul>
+		${form}
+	</section>`;
 }
 
 function shoppingEstimate(

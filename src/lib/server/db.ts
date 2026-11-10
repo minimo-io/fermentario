@@ -108,6 +108,9 @@ export const setStockCategoryGoals = bind('setStockCategoryGoals');
 export const listStockRegistries = bind('listStockRegistries');
 export const setStockCategory = bind('setStockCategory');
 export const deleteStockGroup = bind('deleteStockGroup');
+export const listShoppingExtras = bind('listShoppingExtras');
+export const addShoppingExtra = bind('addShoppingExtra');
+export const removeShoppingExtra = bind('removeShoppingExtra');
 
 export { getDb, getJournal, NoActiveJournalError };
 

@@ -186,7 +186,10 @@ sizing. Consult this before changing any of them.
   `all` is the stock report. `shopping` is a simple checkbox list: group
   headings, then `N × size item · category` per unmet goal, or the missing
   amount when no package estimate exists. No stock/target, percentage,
-  people, note, expiration or brand columns in the shopping list.
+  people, note, expiration or brand columns in the shopping list. Manual
+  **Extras** sit below the grouped lines: a text field adds a line, and its
+  `×` deletes the row permanently. Extras have no history and never appear
+  in `scope=all`; the add form and delete buttons hide in print.
   Brand and Category are dynamic registries (`stock_registries`): the form
   fields suggest existing names and offer Create for a new one; saving the
   item reuses or creates the entry (case and Unicode normalized). Cards show
@@ -228,7 +231,14 @@ sizing. Consult this before changing any of them.
   desktop. The title line is `items-start sm:items-center`: mobile keeps
   first-line alignment, on desktop every element shares the ⋮ button's vertical
   centre. Right-align by flex (`ml-auto`), never `position: absolute` — an
-  absolute pill overlays the open thread's Add form.
+  absolute pill overlays the open thread's Add form. Clicking a task title
+  opens `/todo/[id]`; it never opens the editor. Edit lives in the row `⋮`
+  menu and as a text button on the task page, and both use the same
+  `TaskEditModal` (text, video URL, and the group selector when more than one
+  group exists). To-Do remembers In progress or the selected group in
+  `sessionStorage` (`fermentario.todoView`); task links carry `?from=` and the
+  detail Back button returns to that subview instead of resetting to In
+  progress.
 - **To-Do group row**: the new-group `+`, the in-progress filter and every
   group pill share ONE line at every width. The row is a horizontal carousel
   (`overflow-x-auto no-scrollbar snap-x`) and never wraps on desktop; extra

@@ -1835,6 +1835,44 @@ export function createJournal(db: SqlDb) {
 		}
 	}
 
+	function listShoppingExtras(): { id: string; text: string }[] {
+		try {
+			return db
+				.prepare('SELECT id, text FROM shopping_extras ORDER BY position ASC, created_at ASC, id ASC')
+				.all() as unknown as { id: string; text: string }[];
+		} catch {
+			return [];
+		}
+	}
+
+	function addShoppingExtra(raw: unknown): { id: string; text: string } | null {
+		const text = String(raw ?? '').trim().replace(/\s+/g, ' ').slice(0, 120);
+		if (!text) return null;
+		try {
+			const max = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM shopping_extras').get() as {
+				m: number;
+			};
+			const id = crypto.randomUUID();
+			db.prepare('INSERT INTO shopping_extras (id, text, position, created_at) VALUES (?, ?, ?, ?)').run(
+				id,
+				text,
+				max.m + 1,
+				Date.now()
+			);
+			return { id, text };
+		} catch {
+			return null;
+		}
+	}
+
+	function removeShoppingExtra(id: string): boolean {
+		try {
+			return db.prepare('DELETE FROM shopping_extras WHERE id = ?').run(id).changes > 0;
+		} catch {
+			return false;
+		}
+	}
+
 	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'photos' | 'created_at' | 'updated_at' | 'brand' | 'category' | 'group'> | null {
 		const kind = cleanStockKind(input.kind);
 		const name = String(input.name ?? '').trim().slice(0, 80);
@@ -3110,6 +3148,9 @@ export function createJournal(db: SqlDb) {
 		listStockRegistries,
 		setStockCategory,
 		deleteStockGroup,
+		listShoppingExtras,
+		addShoppingExtra,
+		removeShoppingExtra,
 		listTagColors,
 		listTagCounts,
 		setTagColor

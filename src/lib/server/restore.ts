@@ -48,6 +48,7 @@ export interface RestoreCounts {
 	stockActions: number;
 	holdingValueHistory: number;
 	portfolioValueHistory: number;
+	shoppingExtras: number;
 }
 
 function sqlString(value: string): string {
@@ -172,6 +173,7 @@ export function copyUploadIntoTarget(
 			'DELETE FROM notes_fts',
 			'DELETE FROM weekly_recaps',
 			'DELETE FROM ask_history',
+			'DELETE FROM shopping_extras',
 			// The target is already migrated to the latest schema, so the
 			// stock tables always exist. Clear them even when the backup is
 			// older than them; a replace must not leave rows behind.
@@ -344,6 +346,11 @@ export function copyUploadIntoTarget(
 					FROM backup.category_value_goals`
 			);
 		}
+		if (has('shopping_extras')) {
+			statements.push(
+				'INSERT INTO shopping_extras (id, text, position, created_at) SELECT id, text, position, created_at FROM backup.shopping_extras'
+			);
+		}
 		if (has('stock_registries')) {
 			statements.push(
 				`INSERT INTO stock_registries (id, kind, name, name_key, created_at, parent)
@@ -468,7 +475,8 @@ export function copyUploadIntoTarget(
 		stockGoal: count(target, 'stock_goals'),
 		stockActions: count(target, 'stock_item_actions'),
 		holdingValueHistory: count(target, 'holding_value_history'),
-		portfolioValueHistory: count(target, 'portfolio_value_history')
+		portfolioValueHistory: count(target, 'portfolio_value_history'),
+		shoppingExtras: count(target, 'shopping_extras')
 	};
 }
 

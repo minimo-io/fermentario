@@ -5,6 +5,7 @@
 	import type { TodoGroup, TodoItem, TodoProgressItem } from '$lib/types';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
+	import TaskEditModal from '$lib/components/TaskEditModal.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import Kbd from '$lib/components/Kbd.svelte';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -13,9 +14,7 @@
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
-	import { withSubgroupPrefix } from '$lib/subgroups';
 	import VideoPill from '$lib/components/VideoPill.svelte';
-	import { youTubeWatchUrl } from '$lib/youtube';
 	import { loading } from '$lib/loading.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
@@ -23,6 +22,30 @@
 	let { onError, lang = 'en', widthClass = 'max-w-2xl' }: Props = $props();
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
+
+	// To-Do keeps its own subview across detail-page navigation: In progress or
+	// one specific group. The root page restores the section; this restores the
+	// list you were actually reading.
+	const TODO_VIEW_KEY = 'fermentario.todoView';
+
+	function storedView(): string {
+		try {
+			return sessionStorage.getItem(TODO_VIEW_KEY) ?? '';
+		} catch {
+			return '';
+		}
+	}
+
+	function rememberView(value: string) {
+		try {
+			sessionStorage.setItem(TODO_VIEW_KEY, value);
+		} catch {}
+	}
+
+	function taskHref(id: string): string {
+		const from = progressView ? 'progress' : activeGroup ? `group:${activeGroup}` : 'progress';
+		return `/todo/${id}?from=${encodeURIComponent(from)}`;
+	}
 
 	let groups = $state<TodoGroup[]>([]);
 	let activeGroup = $state<string | null>(null);
@@ -35,11 +58,7 @@
 	let renaming = $state<string | null>(null);
 	let renameText = $state('');
 	let renameField = $state<HTMLInputElement | null>(null);
-	let editing = $state<string | null>(null);
-	let editText = $state('');
-	let editVideo = $state('');
-	let editGroup = $state('');
-	let editField = $state<HTMLTextAreaElement | null>(null);
+	let editing = $state<TodoItem | null>(null);
 	let doneOpen = $state(false);
 	let confirmingGroup = $state<TodoGroup | null>(null);
 	let confirmingItem = $state<TodoItem | null>(null);
@@ -162,8 +181,34 @@
 		try {
 			const d = await (await loading.track(fetch('/api/todo/groups'))).json();
 			groups = Array.isArray(d.groups) ? d.groups : [];
-			const want = select ?? activeGroup;
-			activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
+			const stored = select ? '' : storedView();
+			if (select && groups.some((g) => g.id === select)) {
+				// A group just created: open it and remember it.
+				progressView = false;
+				activeGroup = select;
+				rememberView(`group:${select}`);
+			} else if (stored === 'progress') {
+				progressView = true;
+				const want = activeGroup;
+				activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
+			} else if (stored.startsWith('group:')) {
+				const id = stored.slice(6);
+				if (groups.some((g) => g.id === id)) {
+					progressView = false;
+					activeGroup = id;
+				} else {
+					// The remembered group is gone; In progress is the safe fallback.
+					progressView = true;
+					const want = activeGroup;
+					activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
+					rememberView('progress');
+				}
+			} else {
+				// No remembered subview: follow the active group, or the default
+				// In progress view.
+				const want = activeGroup;
+				activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
+			}
 			if (activeGroup) await loadItems(activeGroup);
 			else items = [];
 			await loadProgress();
@@ -183,12 +228,14 @@
 
 	function openProgress() {
 		progressView = true;
+		rememberView('progress');
 		void loadProgress();
 	}
 
 	function openGroup(id: string) {
 		progressView = false;
 		activeGroup = id;
+		rememberView(`group:${id}`);
 		void loadItems(id);
 	}
 
@@ -313,41 +360,22 @@
 	}
 
 	function openEdit(item: TodoItem) {
-		editing = item.id;
-		// The modal edits the full line: subgroup prefix and trailing hashtags
-		// included, so saving never silently drops either.
-		const base = withSubgroupPrefix(item.subgroup, item.content);
-		editText = item.tags.length ? `${base} ${item.tags.map((t) => `#${t}`).join(' ')}` : base;
-		editVideo = item.video ? youTubeWatchUrl(item.video) : '';
-		editGroup = item.group_id;
+		editing = item;
 	}
 
-	async function saveEdit(item: TodoItem) {
-		if (!editText.trim()) {
-			editing = null;
-			return;
-		}
-		const target = editGroup && editGroup !== item.group_id ? editGroup : null;
-		try {
-			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
-				method: 'PATCH',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: editText, video: editVideo.trim(), ...(target ? { group_id: target } : {}) })
-			}));
-			const d = await res.json();
-			if (!res.ok) throw new Error(d?.error ?? 'Failed to save item.');
-			editing = null;
-			if (target) {
-				// It left the visible list; refresh both views so it shows up in
-				// its new place.
-				items = items.filter((x) => x.id !== item.id);
-				if (activeGroup) await loadItems(activeGroup);
-				void loadProgress();
-			} else {
-				items = items.map((x) => (x.id === item.id ? d.item : x));
-			}
-		} catch (e) {
-			onError((e as Error)?.message ?? 'Failed to save item.');
+	async function editSaved(saved: TodoItem, moved: boolean) {
+		const previous = editing;
+		editing = null;
+		if (!previous) return;
+		if (moved) {
+			// It left the visible list; refresh both views so it shows up in
+			// its new place.
+			items = items.filter((x) => x.id !== saved.id);
+			if (activeGroup) await loadItems(activeGroup);
+			void loadProgress();
+		} else {
+			items = items.map((x) => (x.id === saved.id ? saved : x));
+			progressItems = progressItems.map((x) => (x.id === saved.id ? { ...x, ...saved } : x));
 		}
 	}
 
@@ -597,29 +625,11 @@
 	});
 
 	$effect(() => {
-		if (editing && editField) {
-			editField.focus();
-			autosizeEdit();
-		}
-	});
-
-	$effect(() => {
 		void newItem;
 		if (addingItem && itemField) {
 			itemField.focus();
 			autosizeItem();
 		}
-	});
-
-	function autosizeEdit() {
-		if (!editField) return;
-		editField.style.height = 'auto';
-		editField.style.height = `${editField.scrollHeight}px`;
-	}
-
-	$effect(() => {
-		void editText;
-		if (editing && editField) autosizeEdit();
 	});
 </script>
 
@@ -672,10 +682,7 @@
 							class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 							onclick={() => requestDone(item)}
 						><span class="text-[11px] leading-none">✓</span></button>
-						{#if editing === item.id}
-							<span class="min-w-0 flex-1 text-[15px] text-stone-400 dark:text-stone-500">Editing…</span>
-						{:else}
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800 dark:text-stone-200" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(item); }}>{item.content}</button>
+						<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800 dark:text-stone-200" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) void goto(taskHref(item.id)); }}>{item.content}</button>
 							<!-- sm+: pills share the title line, right-aligned before the ⋮ -->
 							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 								{#if item.inProgress}
@@ -687,7 +694,6 @@
 								{@render commentPill(item)}
 							</div>
 							<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
-						{/if}
 					</div>
 					{#if item.inProgress || item.tags.length > 0}
 						<!-- Mobile: status, tags and the comment count share one row; the
@@ -779,7 +785,7 @@
 								class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 								onclick={() => requestDone(item)}
 							><span class="text-[11px] leading-none">✓</span></button>
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
+							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(taskHref(item.id))}>{item.content}</button>
 							<!-- sm+: group, status and tags share the title line, right-aligned before the ⋮ -->
 							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 								<span class="shrink-0 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] text-stone-500 dark:text-stone-400">{item.groupName}</span>
@@ -848,7 +854,7 @@
 										class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white"
 										onclick={() => void toggleItem(item)}
 									><span class="text-[11px] leading-none">✓</span></button>
-									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 dark:text-stone-500 line-through" onclick={() => void goto(`/todo/${item.id}`)}>{item.content}</button>
+									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 dark:text-stone-500 line-through" onclick={() => void goto(taskHref(item.id))}>{item.content}</button>
 									<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 								</div>
 								{#if item.done_at}
@@ -888,7 +894,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void goto(`/todo/${item.id}`); }}
+					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void goto(taskHref(item.id)); }}
 				>Open details</button>
 				<button
 					type="button"
@@ -931,7 +937,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const item = menuItem; menuItem = null; if (item) void goto(`/todo/${item.id}`); }}
+					onclick={() => { const item = menuItem; menuItem = null; if (item) void goto(taskHref(item.id)); }}
 				>Open details</button>
 				<button
 					type="button"
@@ -1030,73 +1036,13 @@
 {/if}
 
 {#if editing}
-	{@const ep = items.find((x) => x.id === editing) ?? progressItems.find((x) => x.id === editing)}
-	{#if ep}
-		<div
-			class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Edit task"
-			tabindex="-1"
-			onclick={(e) => { if (e.target === e.currentTarget) editing = null; }}
-			onkeydown={(e) => { if (e.key === 'Escape') editing = null; }}
-			transition:fade={{ duration: motionMs(BACKDROP_MS) }}
-		>
-			<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Edit task</h2>
-				<textarea
-					bind:this={editField}
-					rows="3"
-					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-					aria-label="Task text"
-					value={editText}
-					oninput={(e) => { editText = e.currentTarget.value; autosizeEdit(); }}
-					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
-				></textarea>
-				<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Leading (subgroup) moves it inside the list; trailing #tags retag it.</p>
-				<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-task-video">YouTube URL (optional)</label>
-				<input
-					id="edit-task-video"
-					class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-					aria-label="YouTube URL"
-					value={editVideo}
-					oninput={(e) => (editVideo = e.currentTarget.value)}
-					onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
-					placeholder="https://www.youtube.com/watch?v=…"
-					inputmode="url"
-				/>
-				{#if groups.length > 1}
-					<div class="mt-3">
-						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-group">Group</label>
-						<select
-							id="edit-group"
-							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2.5 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
-							aria-label="Group"
-							bind:value={editGroup}
-							onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void saveEdit(ep); }}
-						>
-							{#each groups as g (g.id)}
-								<option value={g.id}>{g.name}</option>
-							{/each}
-						</select>
-					</div>
-				{/if}
-				<div class="mt-4 flex justify-end gap-2">
-					<button
-						type="button"
-						class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-						onclick={() => (editing = null)}
-					>Cancel</button>
-					<button
-						type="button"
-						class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
-						disabled={!editText.trim()}
-						onclick={() => void saveEdit(ep)}
-					>Save</button>
-				</div>
-			</div>
-		</div>
-	{/if}
+	<TaskEditModal
+		item={editing}
+		{groups}
+		onSaved={(saved, moved) => void editSaved(saved, moved)}
+		onClose={() => (editing = null)}
+		{onError}
+	/>
 {/if}
 
 {#if renaming}
