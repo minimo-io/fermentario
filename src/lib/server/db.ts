@@ -111,6 +111,18 @@ export const deleteStockGroup = bind('deleteStockGroup');
 export const listShoppingExtras = bind('listShoppingExtras');
 export const addShoppingExtra = bind('addShoppingExtra');
 export const removeShoppingExtra = bind('removeShoppingExtra');
+export const listQuoteFetchLog = bind('listQuoteFetchLog');
+export const listTradingOrgs = bind('listTradingOrgs');
+export const updateTradingOrg = bind('updateTradingOrg');
+export const listTradingOrders = bind('listTradingOrders');
+export const createTradingOrder = bind('createTradingOrder');
+export const deleteTradingOrder = bind('deleteTradingOrder');
+export const setTradingTarget = bind('setTradingTarget');
+export const refreshTradingQuotes = bind('refreshTradingQuotes');
+export const getTradingSummary = bind('getTradingSummary');
+export const getTradingStrip = bind('getTradingStrip');
+export const listB3Tickers = bind('listB3Tickers');
+export const addB3Ticker = bind('addB3Ticker');
 
 export { getDb, getJournal, NoActiveJournalError };
 
@@ -131,6 +143,14 @@ export type {
 	HoldingActionKind,
 	HoldingValuePoint,
 	PortfolioValuePoint,
+	QuoteFetchEntry,
+	TradingOrg,
+	TradingOrder,
+	TradingDiaryLine,
+	TradingPosition,
+	TradingMonthRow,
+	TradingSummary,
+	TradingStripItem,
 	StockItem,
 	StockKind,
 	StockItemInput,

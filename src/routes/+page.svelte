@@ -33,10 +33,12 @@ import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { navigating } from '$app/state';
 	import SectionBar from '$lib/components/SectionBar.svelte';
 	import HoldingsCarousel from '$lib/components/HoldingsCarousel.svelte';
+	import TradingStrip from '$lib/components/TradingStrip.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
 	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
 	import StocksTab from '$lib/components/StocksTab.svelte';
+	import BusinessesTab from '$lib/components/BusinessesTab.svelte';
 	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
@@ -856,6 +858,18 @@ function langTag(p: Lang): string {
 			/>
 		</section>
 
+		<section class="mb-4" aria-label="Trading">
+			<TradingStrip
+				onOpen={() => {
+					try {
+						sessionStorage.setItem('fermentario.business', 'trading');
+					} catch {}
+					selectSection('businesses');
+				}}
+				onError={(m) => showToast(m)}
+			/>
+		</section>
+
 		<div class="mb-4" role="tablist" aria-label="Views">
 			<SectionBar
 				sections={orderedSections}
@@ -930,7 +944,7 @@ function langTag(p: Lang): string {
 		{:else if view === 'stocks'}
 			<StocksTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
 		{:else if view === 'businesses'}
-			<SectionPlaceholder label="Businesses" />
+			<BusinessesTab onError={(m) => showToast(m)} widthClass={contentClass} />
 		{:else}
 			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
 		{/if}

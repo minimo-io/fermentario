@@ -1,4 +1,14 @@
 import type { LinkRef } from './platform/journal';
+export type {
+	QuoteFetchEntry,
+	TradingOrg,
+	TradingOrder,
+	TradingDiaryLine,
+	TradingPosition,
+	TradingMonthRow,
+	TradingSummary,
+	TradingStripItem
+} from './platform/journal';
 
 export interface Note {
 	id: string;

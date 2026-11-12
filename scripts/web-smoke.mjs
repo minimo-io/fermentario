@@ -148,8 +148,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 22) {
-		console.error('The legacy import did not register an active v22 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 24) {
+		console.error('The legacy import did not register an active v24 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -1300,6 +1300,196 @@ const addBirthday = await fetch(`${base}/api/stocks/print?scope=shopping`, {
 });
 must('POST /api/stocks/print restore extra', { status: addBirthday.status }, (r) => r.status === 303, '303 after adding the restore extra');
 
+// --- Swing trading ------------------------------------------------------
+// Mirror the spreadsheet: 2 × PETR4 @ 38.50 buy, then the full-position sale
+// @ 40.00. Fees are 0.03% each way, dedo-duro 0.005% on the sale only.
+const tradingTickers = await api('GET /api/trading/tickers', '/api/trading/tickers');
+must(
+	'GET /api/trading/tickers',
+	tradingTickers,
+	(r) =>
+		r.status === 200 &&
+		Array.isArray(r.body.tickers) &&
+		r.body.tickers.includes('PETR4') &&
+		r.body.tickers.includes('VALE3') &&
+		r.body.tickers.includes('GGRC11') &&
+		r.body.tickers.includes('MXRF11'),
+	'200 with the seeded B3 universe'
+);
+
+const customTicker = await api(
+	'POST /api/trading/tickers custom',
+	'/api/trading/tickers',
+	json({ ticker: 'ZZZZ11' })
+);
+must(
+	'POST /api/trading/tickers custom',
+	customTicker,
+	(r) => r.status === 201 && r.body.ticker === 'ZZZZ11',
+	'201 adding a custom ticker'
+);
+
+const badTicker = await api('POST /api/trading/tickers bad', '/api/trading/tickers', json({ ticker: 'NOPE' }));
+must('POST /api/trading/tickers bad', badTicker, (r) => r.status === 400, '400 for a non-B3 ticker');
+
+const tradingOrgs = await api('GET /api/trading/orgs', '/api/trading/orgs');
+must(
+	'GET /api/trading/orgs',
+	tradingOrgs,
+	(r) =>
+		r.status === 200 &&
+		r.body.orgs?.some((o) => o.id === 'b3' && o.enabled && o.feeRate === 0.0003) &&
+		r.body.orgs?.some((o) => o.id === 'ripio' && !o.enabled),
+	'200 with B3 enabled and Ripio disabled'
+);
+for (const o of tradingOrgs.body.orgs ?? []) volatile.add(o.created_at);
+
+const orgPatch = await api(
+	'PATCH /api/trading/orgs/b3 noop',
+	'/api/trading/orgs/b3',
+	json({ exemptLimit: 20000 }, 'PATCH')
+);
+must('PATCH /api/trading/orgs/b3', orgPatch, (r) => r.status === 200 && r.body.org?.exemptLimit === 20000, '200 with the venue rules');
+
+const badOrg = await api(
+	'PATCH /api/trading/orgs/ripio blocked',
+	'/api/trading/orgs/ripio',
+	json({ exemptLimit: 20000 }, 'PATCH')
+);
+must('PATCH /api/trading/orgs/ripio', badOrg, (r) => r.status === 400, '400 while the venue is disabled');
+
+const tradeBuy = await api(
+	'POST /api/trading/orders buy',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'PETR4', side: 'BUY', qty: 2, unitPrice: 38.5, date: Date.parse('2026-11-03T12:00:00') })
+);
+must(
+	'POST /api/trading/orders buy',
+	tradeBuy,
+	(r) =>
+		r.status === 201 &&
+		r.body.order?.value === 77 &&
+		Math.abs(r.body.order?.fees - 0.0231) < 1e-9 &&
+		r.body.order?.irrf === 0 &&
+		Math.abs(r.body.order?.net - 77.0231) < 1e-9,
+	'201 with value 77, fees 0.0231 and net 77.0231'
+);
+volatile.add(tradeBuy.body.order?.id);
+volatile.add(tradeBuy.body.order?.created_at);
+
+const partialSell = await api(
+	'POST /api/trading/orders partial sell',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'PETR4', side: 'SELL', qty: 1, unitPrice: 40, date: Date.parse('2026-11-12T12:00:00') })
+);
+must('POST /api/trading/orders partial sell', partialSell, (r) => r.status === 400, '400: a sale must close the full position');
+
+const tradeSell = await api(
+	'POST /api/trading/orders sell',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'PETR4', side: 'SELL', qty: 2, unitPrice: 40, date: Date.parse('2026-11-12T12:00:00') })
+);
+must(
+	'POST /api/trading/orders sell',
+	tradeSell,
+	(r) =>
+		r.status === 201 &&
+		r.body.order?.value === 80 &&
+		Math.abs(r.body.order?.fees - 0.024) < 1e-9 &&
+		Math.abs(r.body.order?.irrf - 0.004) < 1e-9 &&
+		Math.abs(r.body.order?.net - 79.972) < 1e-9,
+	'201 with value 80, fees 0.024, dedo-duro 0.004 and net 79.972'
+);
+volatile.add(tradeSell.body.order?.id);
+volatile.add(tradeSell.body.order?.created_at);
+
+const tradingSummary = await api('GET /api/trading/summary', '/api/trading/summary?org=b3');
+must(
+	'GET /api/trading/summary',
+	tradingSummary,
+	(r) =>
+		r.status === 200 &&
+		r.body.summary?.positions?.length === 0 &&
+		Math.abs((r.body.summary?.orders?.find((o) => o.side === 'SELL')?.profit ?? 0) - 2.9489) < 1e-6 &&
+		r.body.summary?.months?.some((m) => m.month === '11/2026' && m.sales === 80 && m.exempt === true),
+	'the sale profits 2.9489 and November stays exempt'
+);
+
+	const delSell = await api('DELETE /api/trading/orders/[id] latest', `/api/trading/orders/${tradeSell.body.order.id}`, {
+		method: 'DELETE'
+	});
+must('DELETE /api/trading/orders latest', delSell, (r) => r.status === 200, '200 removing the latest order');
+
+const delBuy = await api('DELETE /api/trading/orders/[id] now-latest', `/api/trading/orders/${tradeBuy.body.order.id}`, {
+	method: 'DELETE'
+});
+must('DELETE /api/trading/orders now-latest', delBuy, (r) => r.status === 200, '200 removing the new latest order');
+
+const rebuy = await api(
+	'POST /api/trading/orders rebuy',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'PETR4', side: 'BUY', qty: 2, unitPrice: 38.5, date: Date.parse('2026-11-03T12:00:00') })
+);
+must('POST /api/trading/orders rebuy', rebuy, (r) => r.status === 201, '201 rebuilding the fixture position');
+volatile.add(rebuy.body.order?.id);
+volatile.add(rebuy.body.order?.created_at);
+
+const resell = await api(
+	'POST /api/trading/orders resell',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'PETR4', side: 'SELL', qty: 2, unitPrice: 40, date: Date.parse('2026-11-12T12:00:00') })
+);
+must('POST /api/trading/orders resell', resell, (r) => r.status === 201, '201 closing the fixture position again');
+volatile.add(resell.body.order?.id);
+volatile.add(resell.body.order?.created_at);
+
+// Same-day position: buying today can never recommend a swing sale, even
+// past target. A null quote keeps it on 'waiting', with sameDay true.
+const nowMs = Date.now();
+const todayBuy = await api(
+	'POST /api/trading/orders same-day buy',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'VALE3', side: 'BUY', qty: 1, unitPrice: 60, date: nowMs })
+);
+must('POST /api/trading/orders same-day buy', todayBuy, (r) => r.status === 201, '201 opening a same-day position');
+volatile.add(todayBuy.body.order?.id);
+volatile.add(todayBuy.body.order?.created_at);
+volatile.add(todayBuy.body.order?.date);
+
+const todaySummary = await api('GET /api/trading/summary same-day', '/api/trading/summary?org=b3');
+must(
+	'GET /api/trading/summary same-day',
+	todaySummary,
+	(r) =>
+		r.status === 200 &&
+		r.body.summary?.positions?.length === 1 &&
+		r.body.summary.positions[0].ticker === 'VALE3' &&
+		r.body.summary.positions[0].sameDay === true &&
+		r.body.summary.positions[0].recommendation === 'waiting',
+	'the same-day position waits, never sells'
+);
+
+const delToday = await api('DELETE /api/trading/orders/[id] same-day', `/api/trading/orders/${todayBuy.body.order.id}`, {
+	method: 'DELETE'
+});
+must('DELETE /api/trading/orders/[id] same-day', delToday, (r) => r.status === 200, '200 removing the same-day order');
+
+const strip = await api('GET /api/trading/strip', '/api/trading/strip');
+must(
+	'GET /api/trading/strip',
+	strip,
+	(r) => r.status === 200 && Array.isArray(r.body.positions),
+	'200 with the open-ticker strip'
+);
+
+const quoteLog = await api('GET /api/quotes/log', '/api/quotes/log?limit=50');
+must(
+	'GET /api/quotes/log',
+	quoteLog,
+	(r) => r.status === 200 && Array.isArray(r.body.entries),
+	'200 with the quote fetch history'
+);
+
 // --- Export / import round trip -------------------------------------------
 const exported = await fetch(`${base}/api/export`);
 const bytes = Buffer.from(await exported.arrayBuffer());
@@ -1338,7 +1528,10 @@ try {
 		stockActions: count('stock_item_actions'),
 		stockBrands: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'brand'").get().c,
 		stockCategories: d.prepare("SELECT COUNT(*) AS c FROM stock_registries WHERE kind = 'category'").get().c,
-		shoppingExtras: count('shopping_extras')
+		shoppingExtras: count('shopping_extras'),
+		tradingOrgs: count('trading_orgs'),
+		tradingOrders: count('trading_orders'),
+		b3Tickers: count('b3_tickers')
 	};
 	d.close();
 } catch (e) {
@@ -1407,6 +1600,9 @@ must(
 		r.body.done?.holdingValueHistory >= 1 &&
 		r.body.done?.portfolioValueHistory >= 1 &&
 		r.body.done?.shoppingExtras === 1 &&
+		r.body.done?.tradingOrgs === 2 &&
+		r.body.done?.tradingOrders === 2 &&
+		r.body.done?.b3Tickers >= 100 &&
 		r.body.done?.stocks === 2 &&
 		r.body.done?.stockGoal === 1,
 	'200 with a count for every restored section'

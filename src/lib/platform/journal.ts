@@ -557,6 +557,101 @@ function toBytes(v: unknown): Uint8Array {
 	return new Uint8Array(0);
 }
 
+/** One quote attempt for the debug log: ticker, source, success or error. */
+export interface QuoteFetchEntry {
+	ticker: string;
+	source: string;
+	ok: number;
+	price: number | null;
+	previous_close: number | null;
+	error: string;
+	fetched_at: number;
+}
+
+/** A swing-trading venue and its editable cost rules. */
+export interface TradingOrg {
+	id: string;
+	name: string;
+	enabled: boolean;
+	feeRate: number;
+	irrfRate: number;
+	fixedFee: number;
+	exemptLimit: number;
+	position: number;
+	created_at: number;
+}
+
+/** One raw diary event: a buy adds to the position, a sale closes it. */
+export interface TradingOrder {
+	id: string;
+	orgId: string;
+	ticker: string;
+	side: 'BUY' | 'SELL';
+	qty: number;
+	unitPrice: number;
+	value: number;
+	fees: number;
+	irrf: number;
+	net: number;
+	date: number;
+	month: string;
+	created_at: number;
+}
+
+/** A diary line; sales carry their profit over the open cost basis. */
+export interface TradingDiaryLine extends TradingOrder {
+	profit: number | null;
+	profitPct: number | null;
+}
+
+/** An open ticker position with its live quote and recommendation. */
+export interface TradingPosition {
+	ticker: string;
+	qty: number;
+	avgPrice: number;
+	cost: number;
+	quote: number | null;
+	quoteSource: string | null;
+	quoteAt: number | null;
+	targetPct: number;
+	potentialPct: number | null;
+	/** Every open buy is from today: selling now is a day trade. */
+	sameDay: boolean;
+	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
+}
+
+/** One rolling month of the exemption panel. */
+export interface TradingMonthRow {
+	month: string;
+	sales: number;
+	limit: number;
+	irrf: number;
+	profit: number;
+	exempt: boolean;
+}
+
+export interface TradingSummary {
+	org: TradingOrg;
+	orders: TradingDiaryLine[];
+	positions: TradingPosition[];
+	months: TradingMonthRow[];
+}
+
+/** One home-page strip card: an open ticker in an enabled venue. */
+export interface TradingStripItem {
+	ticker: string;
+	orgId: string;
+	orgName: string;
+	qty: number;
+	avgPrice: number;
+	cost: number;
+	quote: number | null;
+	targetPct: number;
+	potentialPct: number | null;
+	sameDay: boolean;
+	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
+}
+
 export function createJournal(db: SqlDb) {
 	function tagsByNote(rows: { id: string }[]): Map<string, string[]> {
 		const map = new Map<string, string[]>();
@@ -1329,6 +1424,72 @@ export function createJournal(db: SqlDb) {
 		return !t.includes('.') && /^[A-Z]{4}\d{1,2}[A-Z0-9]?$/.test(t);
 	}
 
+	/** Every quote attempt lands here: ticker, source, success, price and
+	 *  error. The debug modal reads this table, so a stale card can always
+	 *  explain itself. Best effort: logging never breaks a refresh. */
+	function logQuoteFetch(entry: {
+		ticker: string;
+		source: string;
+		ok: boolean;
+		price?: number | null;
+		previousClose?: number | null;
+		error?: string;
+	}): void {
+		try {
+			db.prepare(
+				'INSERT INTO quote_fetch_log (id, ticker, source, ok, price, previous_close, error, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+			).run(
+				crypto.randomUUID(),
+				entry.ticker.toUpperCase().slice(0, 24),
+				entry.source.slice(0, 24),
+				entry.ok ? 1 : 0,
+				entry.price ?? null,
+				entry.previousClose ?? null,
+				String(entry.error ?? '').slice(0, 200),
+				Date.now()
+			);
+			db.prepare(
+				'DELETE FROM quote_fetch_log WHERE id NOT IN (SELECT id FROM quote_fetch_log ORDER BY fetched_at DESC, id DESC LIMIT 500)'
+			).run();
+		} catch {
+			// Table arrives with migration 23; older journals skip logging.
+		}
+	}
+
+	function listQuoteFetchLog(limit = 100): QuoteFetchEntry[] {
+		const safe = Math.min(500, Math.max(1, Math.trunc(limit) || 100));
+		try {
+			return db
+				.prepare(
+					'SELECT ticker, source, ok, price, previous_close, error, fetched_at FROM quote_fetch_log ORDER BY fetched_at DESC, rowid DESC LIMIT ?'
+				)
+				.all(safe) as unknown as QuoteFetchEntry[];
+		} catch {
+			return [];
+		}
+	}
+
+	/** One shared B3 quote path for Holdings and Trading: Google Finance
+	 *  first (intraday), Fundamentus fallback (session close). Every attempt
+	 *  is logged, success or failure. */
+	async function fetchB3Quote(
+		ticker: string
+	): Promise<{ price: number; previousClose: number | null; source: string } | null> {
+		const google = await fetchGoogleB3Quote(ticker);
+		if (google) {
+			logQuoteFetch({ ticker, source: 'google', ok: true, price: google.price, previousClose: google.previousClose });
+			return { ...google, source: 'google' };
+		}
+		logQuoteFetch({ ticker, source: 'google', ok: false, error: 'no quote' });
+		const fallback = await fetchFundamentusQuote(ticker);
+		if (fallback !== null) {
+			logQuoteFetch({ ticker, source: 'fundamentus', ok: true, price: fallback });
+			return { price: fallback, previousClose: null, source: 'fundamentus' };
+		}
+		logQuoteFetch({ ticker, source: 'fundamentus', ok: false, error: 'no quote' });
+		return null;
+	}
+
 	/** Latest quote for a B3 ticker from Google Finance. The page embeds the
 	 *  main quote as `["TICKER","BVMF"],"Name",0,"BRL",[price,change,pct,…],
 	 *  null,previousClose,…`. Google updates intraday, unlike Fundamentus,
@@ -1905,6 +2066,459 @@ export function createJournal(db: SqlDb) {
 		} catch {
 			return false;
 		}
+	}
+
+	// --- B3 ticker universe -------------------------------------------------
+	// Liquid names seeded by migration 24; a future admin adds custom rows.
+	// Read through a 24-hour in-memory cache: the DB stays the source of
+	// truth, but the picker never pays for the same query twice a day.
+	let b3TickerCache: { at: number; tickers: string[] } | null = null;
+
+	function listB3Tickers(): string[] {
+		const now = Date.now();
+		if (b3TickerCache && now - b3TickerCache.at < 24 * 60 * 60 * 1000) return b3TickerCache.tickers;
+		try {
+			const rows = db.prepare('SELECT ticker FROM b3_tickers ORDER BY ticker ASC').all() as unknown as {
+				ticker: string;
+			}[];
+			b3TickerCache = { at: now, tickers: rows.map((r) => r.ticker) };
+			return b3TickerCache.tickers;
+		} catch {
+			return b3TickerCache?.tickers ?? [];
+		}
+	}
+
+	function addB3Ticker(raw: unknown): { ticker: string } | { error: string } {
+		const ticker = String(raw ?? '').trim().toUpperCase().slice(0, 12);
+		if (!isB3(ticker)) return { error: 'not a B3 ticker' };
+		try {
+			db.prepare("INSERT OR IGNORE INTO b3_tickers (ticker, source, created_at) VALUES (?, 'custom', ?)").run(
+				ticker,
+				Date.now()
+			);
+			b3TickerCache = null;
+			return { ticker };
+		} catch {
+			return { error: 'could not save the ticker' };
+		}
+	}
+
+	// --- Swing trading summary ----------------------------------------------
+	// Orders are raw events: buys add to the open ticker position, a sale
+	// always closes the whole position. Positions, profits and the monthly
+	// panel all derive from the order list, so nothing else is stored.
+
+	type TradingOrgRow = {
+		id: string;
+		name: string;
+		enabled: number;
+		fee_rate: number;
+		irrf_rate: number;
+		fixed_fee: number;
+		exempt_limit: number;
+		position: number;
+		created_at: number;
+	};
+
+	type TradingOrderRow = {
+		id: string;
+		org_id: string;
+		ticker: string;
+		side: string;
+		qty: number;
+		unit_price: number;
+		value: number;
+		fees: number;
+		irrf: number;
+		net: number;
+		date: number;
+		month: string;
+		created_at: number;
+	};
+
+	function tradingMonthKey(date: number): string {
+		const d = new Date(date);
+		return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+	}
+
+	function monthKeyToDate(key: string): number {
+		const m = /^(\d{2})\/(\d{4})$/.exec(key);
+		if (!m) return 0;
+		return new Date(Number(m[2]), Number(m[1]) - 1, 1).getTime();
+	}
+
+	function rowToTradingOrg(r: TradingOrgRow): TradingOrg {
+		return {
+			id: r.id,
+			name: r.name,
+			enabled: r.enabled === 1,
+			feeRate: r.fee_rate ?? 0,
+			irrfRate: r.irrf_rate ?? 0,
+			fixedFee: r.fixed_fee ?? 0,
+			exemptLimit: r.exempt_limit ?? 20000,
+			position: r.position ?? 0,
+			created_at: r.created_at ?? 0
+		};
+	}
+
+	function getTradingOrg(id: string): TradingOrg | null {
+		try {
+			const row = db.prepare('SELECT * FROM trading_orgs WHERE id = ?').get(id) as unknown as TradingOrgRow | undefined;
+			return row ? rowToTradingOrg(row) : null;
+		} catch {
+			return null;
+		}
+	}
+
+	function listTradingOrgs(): TradingOrg[] {
+		try {
+			const rows = db.prepare('SELECT * FROM trading_orgs ORDER BY position ASC, id ASC').all() as unknown as TradingOrgRow[];
+			return rows.map(rowToTradingOrg);
+		} catch {
+			return [];
+		}
+	}
+
+	function updateTradingOrg(
+		id: string,
+		patch: { feeRate?: unknown; irrfRate?: unknown; fixedFee?: unknown; exemptLimit?: unknown }
+	): TradingOrg | null {
+		const org = getTradingOrg(id);
+		if (!org || !org.enabled) return null;
+		const num = (v: unknown): number | null => {
+			if (v === undefined) return null;
+			const n = Number(v);
+			return Number.isFinite(n) && n >= 0 ? n : NaN;
+		};
+		const feeRate = patch.feeRate === undefined ? org.feeRate : num(patch.feeRate);
+		const irrfRate = patch.irrfRate === undefined ? org.irrfRate : num(patch.irrfRate);
+		const fixedFee = patch.fixedFee === undefined ? org.fixedFee : num(patch.fixedFee);
+		const exemptLimit = patch.exemptLimit === undefined ? org.exemptLimit : num(patch.exemptLimit);
+		if (feeRate === null || Number.isNaN(feeRate as number)) return null;
+		if (irrfRate === null || Number.isNaN(irrfRate as number)) return null;
+		if (fixedFee === null || Number.isNaN(fixedFee as number)) return null;
+		if (exemptLimit === null || Number.isNaN(exemptLimit as number)) return null;
+		if ((feeRate as number) > 0.1 || (irrfRate as number) > 0.1) return null;
+		try {
+			db.prepare('UPDATE trading_orgs SET fee_rate = ?, irrf_rate = ?, fixed_fee = ?, exempt_limit = ? WHERE id = ?').run(
+				feeRate as number,
+				irrfRate as number,
+				fixedFee as number,
+				exemptLimit as number,
+				id
+			);
+			return getTradingOrg(id);
+		} catch {
+			return null;
+		}
+	}
+
+	function listTradingOrders(orgId: string): TradingOrder[] {
+		try {
+			const rows = db
+				.prepare('SELECT * FROM trading_orders WHERE org_id = ? ORDER BY date ASC, created_at ASC, id ASC')
+				.all(orgId) as unknown as TradingOrderRow[];
+			return rows.map((r) => ({
+				id: r.id,
+				orgId: r.org_id,
+				ticker: r.ticker,
+				side: r.side === 'SELL' ? 'SELL' : 'BUY',
+				qty: r.qty,
+				unitPrice: r.unit_price,
+				value: r.value,
+				fees: r.fees ?? 0,
+				irrf: r.irrf ?? 0,
+				net: r.net,
+				date: r.date,
+				month: r.month,
+				created_at: r.created_at
+			}));
+		} catch {
+			return [];
+		}
+	}
+
+	/** Open quantities and cost basis per ticker, replaying the diary in
+	 *  order. A sale always empties its ticker, so at most one open group
+	 *  exists per ticker. `since` is the earliest open buy: selling while it
+	 *  is today is a day trade, not a swing trade. */
+	function openTradingPositions(orders: TradingOrder[]): Map<string, { qty: number; cost: number; value: number; since: number }> {
+		const open = new Map<string, { qty: number; cost: number; value: number; since: number }>();
+		for (const o of orders) {
+			const cur = open.get(o.ticker) ?? { qty: 0, cost: 0, value: 0, since: o.date };
+			if (o.side === 'BUY') {
+				cur.qty += o.qty;
+				cur.cost += o.net;
+				cur.value += o.value;
+				if (o.date < cur.since) cur.since = o.date;
+				open.set(o.ticker, cur);
+			} else if (cur.qty > 0) {
+				open.delete(o.ticker);
+			}
+		}
+		return open;
+	}
+
+	function createTradingOrder(input: {
+		orgId?: unknown;
+		ticker?: unknown;
+		side?: unknown;
+		qty?: unknown;
+		unitPrice?: unknown;
+		date?: unknown;
+	}): TradingOrder | { error: string } {
+		const org = getTradingOrg(String(input.orgId ?? ''));
+		if (!org || !org.enabled) return { error: 'unknown or disabled organization' };
+		const ticker = String(input.ticker ?? '').trim().toUpperCase().slice(0, 12);
+		if (!/^[A-Z0-9._-]{1,12}$/.test(ticker)) return { error: 'ticker is required' };
+		const side = String(input.side ?? '').toUpperCase() === 'SELL' ? 'SELL' : String(input.side ?? '').toUpperCase() === 'BUY' ? 'BUY' : null;
+		if (!side) return { error: 'side must be BUY or SELL' };
+		const qty = Number(input.qty);
+		const unitPrice = Number(input.unitPrice);
+		if (!Number.isFinite(qty) || qty <= 0) return { error: 'quantity must be > 0' };
+		if (!Number.isFinite(unitPrice) || unitPrice <= 0) return { error: 'unit price must be > 0' };
+		const date = Number(input.date);
+		const at = Number.isFinite(date) && date > 0 ? Math.min(date, Date.now()) : Date.now();
+		const open = openTradingPositions(listTradingOrders(org.id)).get(ticker) ?? { qty: 0, cost: 0, value: 0 };
+		if (side === 'SELL') {
+			// Full-position sales only: the diary never holds a remainder.
+			if (open.qty <= 0) return { error: 'no open position in this ticker' };
+			if (Math.abs(qty - open.qty) > 1e-9) return { error: `a sale must close the full position (${open.qty})` };
+		}
+		const value = qty * unitPrice;
+		const fees = value * org.feeRate + org.fixedFee;
+		const irrf = side === 'SELL' ? value * org.irrfRate : 0;
+		const net = side === 'BUY' ? value + fees : value - fees - irrf;
+		try {
+			const id = crypto.randomUUID();
+			db.prepare(
+				'INSERT INTO trading_orders (id, org_id, ticker, side, qty, unit_price, value, fees, irrf, net, date, month, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+			).run(id, org.id, ticker, side, qty, unitPrice, value, fees, irrf, net, at, tradingMonthKey(at), Date.now());
+			const row = db.prepare('SELECT * FROM trading_orders WHERE id = ?').get(id) as unknown as TradingOrderRow;
+			return {
+				id: row.id,
+				orgId: row.org_id,
+				ticker: row.ticker,
+				side: row.side === 'SELL' ? 'SELL' : 'BUY',
+				qty: row.qty,
+				unitPrice: row.unit_price,
+				value: row.value,
+				fees: row.fees ?? 0,
+				irrf: row.irrf ?? 0,
+				net: row.net,
+				date: row.date,
+				month: row.month,
+				created_at: row.created_at
+			};
+		} catch {
+			return { error: 'could not save the order' };
+		}
+	}
+
+	/** Only the latest order of an org can go: earlier rows are the cost
+	 *  basis of later sales, so removing them would rewrite history. */
+	function deleteTradingOrder(id: string): { ok: true } | { error: string } {
+		try {
+			const row = db.prepare('SELECT * FROM trading_orders WHERE id = ?').get(String(id)) as unknown as TradingOrderRow | undefined;
+			if (!row) return { error: 'order not found' };
+			const latest = db
+				.prepare('SELECT id FROM trading_orders WHERE org_id = ? ORDER BY date DESC, created_at DESC, id DESC LIMIT 1')
+				.get(row.org_id) as unknown as { id: string } | undefined;
+			if (!latest || latest.id !== row.id) return { error: 'only the latest order can be removed' };
+			db.prepare('DELETE FROM trading_orders WHERE id = ?').run(row.id);
+			return { ok: true };
+		} catch {
+			return { error: 'could not delete the order' };
+		}
+	}
+
+	function setTradingTarget(orgId: string, ticker: string, targetPct: unknown): { ticker: string; targetPct: number } | null {
+		const org = getTradingOrg(String(orgId ?? ''));
+		const t = String(ticker ?? '').trim().toUpperCase().slice(0, 12);
+		const pct = Number(targetPct);
+		if (!org || !org.enabled || !/^[A-Z0-9._-]{1,12}$/.test(t)) return null;
+		if (!Number.isFinite(pct) || pct < 0 || pct > 10) return null;
+		try {
+			db.prepare(
+				'INSERT INTO trading_targets (org_id, ticker, target_pct, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (org_id, ticker) DO UPDATE SET target_pct = excluded.target_pct, updated_at = excluded.updated_at'
+			).run(org.id, t, pct, Date.now());
+			return { ticker: t, targetPct: pct };
+		} catch {
+			return null;
+		}
+	}
+
+	function getStoredTradingQuote(ticker: string): { price: number; previousClose: number | null; source: string; fetchedAt: number } | null {
+		try {
+			const row = db.prepare('SELECT * FROM trading_quotes WHERE ticker = ?').get(ticker.toUpperCase()) as unknown as
+				| { price: number; previous_close: number | null; source: string; fetched_at: number }
+				| undefined;
+			if (!row) return null;
+			return { price: row.price, previousClose: row.previous_close ?? null, source: row.source ?? '', fetchedAt: row.fetched_at ?? 0 };
+		} catch {
+			return null;
+		}
+	}
+
+	/** Fresh B3 quotes for the given tickers through the shared quote path,
+	 *  stored for the monitor. Staggered like the holdings refresh. */
+	async function refreshTradingQuotes(tickers: string[]): Promise<void> {
+		const unique = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => isB3(t));
+		for (let i = 0; i < unique.length; i++) {
+			if (i > 0) await new Promise((r) => setTimeout(r, 500));
+			const t = unique[i]!;
+			const quote = await fetchB3Quote(t);
+			if (quote) {
+				try {
+					db.prepare(
+						'INSERT INTO trading_quotes (ticker, price, previous_close, source, fetched_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ticker) DO UPDATE SET price = excluded.price, previous_close = excluded.previous_close, source = excluded.source, fetched_at = excluded.fetched_at'
+					).run(t, quote.price, quote.previousClose, quote.source, Date.now());
+				} catch {
+					// Table arrives with migration 23.
+				}
+			}
+		}
+	}
+
+	/** Full panel for one org: diary with sale profits, open positions with
+	 *  live quotes, and the rolling monthly exemption panel. */
+	function getTradingSummary(orgId: string): TradingSummary | null {
+		const org = getTradingOrg(String(orgId ?? ''));
+		if (!org) return null;
+		const orders = listTradingOrders(org.id);
+		let targets: Record<string, number> = {};
+		try {
+			const rows = db.prepare('SELECT ticker, target_pct FROM trading_targets WHERE org_id = ?').all(org.id) as unknown as {
+				ticker: string;
+				target_pct: number;
+			}[];
+			for (const r of rows) targets[r.ticker] = r.target_pct;
+		} catch {
+			targets = {};
+		}
+		// Diary: replay in order, attaching each sale its profit over the
+		// open cost basis before the position closes.
+		const diary: TradingDiaryLine[] = [];
+		const open = new Map<string, { qty: number; cost: number; value: number; since: number }>();
+		for (const o of orders) {
+			const cur = open.get(o.ticker) ?? { qty: 0, cost: 0, value: 0, since: o.date };
+			if (o.side === 'BUY') {
+				cur.qty += o.qty;
+				cur.cost += o.net;
+				cur.value += o.value;
+				if (o.date < cur.since) cur.since = o.date;
+				open.set(o.ticker, cur);
+				diary.push({ ...o, profit: null, profitPct: null });
+			} else {
+				const profit = o.net - cur.cost;
+				diary.push({ ...o, profit, profitPct: cur.cost > 0 ? (profit / cur.cost) * 100 : null });
+				open.delete(o.ticker);
+			}
+		}
+		const today = localDayKey(Date.now());
+		const positions: TradingPosition[] = [];
+		for (const [ticker, pos] of open) {
+			const quote = getStoredTradingQuote(ticker);
+			const avgPrice = pos.qty > 0 ? pos.value / pos.qty : 0;
+			const targetPct = targets[ticker] ?? 0.03;
+			const potentialPct = quote && avgPrice > 0 ? ((quote.price - avgPrice) / avgPrice) * 100 : null;
+			// Selling while every open buy is from today is a day trade
+			// (20% IR, no exemption), never a swing sale — even past target.
+			const sameDay = localDayKey(pos.since) === today;
+			const hit = potentialPct !== null && potentialPct >= targetPct * 100;
+			positions.push({
+				ticker,
+				qty: pos.qty,
+				avgPrice,
+				cost: pos.cost,
+				quote: quote?.price ?? null,
+				quoteSource: quote?.source ?? null,
+				quoteAt: quote?.fetchedAt ?? null,
+				targetPct,
+				potentialPct,
+				sameDay,
+				recommendation:
+					quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
+			});
+		}
+		positions.sort((a, b) => b.cost - a.cost);
+		// Rolling months: from the first order month through the current
+		// month, so the panel grows with use instead of fixing a year.
+		const months: TradingMonthRow[] = [];
+		if (orders.length > 0) {
+			const sells = diary.filter((d) => d.side === 'SELL');
+			const byMonth = new Map<string, { sales: number; irrf: number; profit: number }>();
+			for (const s of sells) {
+				const cur = byMonth.get(s.month) ?? { sales: 0, irrf: 0, profit: 0 };
+				cur.sales += s.value;
+				cur.irrf += s.irrf;
+				cur.profit += s.profit ?? 0;
+				byMonth.set(s.month, cur);
+			}
+			const first = monthKeyToDate(orders[0]!.month);
+			const cursor = new Date(first);
+			cursor.setDate(1);
+			const end = new Date();
+			end.setDate(1);
+			while (cursor <= end) {
+				const key = tradingMonthKey(cursor.getTime());
+				const agg = byMonth.get(key) ?? { sales: 0, irrf: 0, profit: 0 };
+				months.push({
+					month: key,
+					sales: agg.sales,
+					limit: org.exemptLimit,
+					irrf: agg.irrf,
+					profit: agg.profit,
+					exempt: agg.sales <= org.exemptLimit
+				});
+				cursor.setMonth(cursor.getMonth() + 1);
+			}
+			months.reverse();
+		}
+		return { org, orders: diary, positions, months };
+	}
+
+	/** One card per open ticker across every enabled venue: the home-page
+	 *  strip below the holdings carousel. */
+	function getTradingStrip(): TradingStripItem[] {
+		const out: TradingStripItem[] = [];
+		for (const org of listTradingOrgs().filter((o) => o.enabled)) {
+			const orders = listTradingOrders(org.id);
+			if (orders.length === 0) continue;
+			let targets: Record<string, number> = {};
+			try {
+				const rows = db.prepare('SELECT ticker, target_pct FROM trading_targets WHERE org_id = ?').all(org.id) as unknown as {
+					ticker: string;
+					target_pct: number;
+				}[];
+				for (const r of rows) targets[r.ticker] = r.target_pct;
+			} catch {
+				targets = {};
+			}
+			for (const [ticker, pos] of openTradingPositions(orders)) {
+				const quote = getStoredTradingQuote(ticker);
+				const avgPrice = pos.qty > 0 ? pos.value / pos.qty : 0;
+				const targetPct = targets[ticker] ?? 0.03;
+				const potentialPct = quote && avgPrice > 0 ? ((quote.price - avgPrice) / avgPrice) * 100 : null;
+				const sameDay = localDayKey(pos.since) === localDayKey(Date.now());
+				const hit = potentialPct !== null && potentialPct >= targetPct * 100;
+				out.push({
+					ticker,
+					orgId: org.id,
+					orgName: org.name,
+					qty: pos.qty,
+					avgPrice,
+					cost: pos.cost,
+					quote: quote?.price ?? null,
+					targetPct,
+					potentialPct,
+					sameDay,
+					recommendation:
+						quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
+				});
+			}
+		}
+		return out.sort((a, b) => b.cost - a.cost);
 	}
 
 	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'photos' | 'created_at' | 'updated_at' | 'brand' | 'category' | 'group'> | null {
@@ -2853,6 +3467,11 @@ export function createJournal(db: SqlDb) {
 			db.transaction(() => {
 				for (const r of targets) upd.run(btcUsd, now, now, r.id);
 			});
+			if (targets.length > 0) {
+				logQuoteFetch({ ticker: 'BTC', source: 'coinbase', ok: true, price: btcUsd });
+			}
+		} else if (btcEmpty.length > 0 || btcAuto.length > 0) {
+			logQuoteFetch({ ticker: 'BTC', source: 'coinbase', ok: false, error: 'no rate in payload' });
 		}
 		if (stockRows.length > 0) {
 			const upd = db.prepare('UPDATE holdings SET price = ?, price_auto = 1, updated_at = ?, price_updated_at = ? WHERE id = ?');
@@ -2860,9 +3479,15 @@ export function createJournal(db: SqlDb) {
 				// Stagger hits: Yahoo 429s rapid sequential requests.
 				if (i > 0) await new Promise((r) => setTimeout(r, 500));
 				const t = stockRows[i]!.ticker;
-				const quote = isB3(t)
-					? ((await fetchGoogleB3Quote(t))?.price ?? (await fetchFundamentusQuote(t)))
-					: await fetchQuote(yahooSymbol(t));
+				const quote = isB3(t) ? (await fetchB3Quote(t))?.price ?? null : await fetchQuote(yahooSymbol(t));
+				if (!isB3(t)) {
+					logQuoteFetch({
+						ticker: t,
+						source: 'yahoo',
+						ok: quote !== null,
+						...(quote !== null ? { price: quote } : { error: 'no quote' })
+					});
+				}
 				if (quote !== null) {
 					const at = Date.now();
 					upd.run(quote, at, at, stockRows[i]!.id);
@@ -3187,6 +3812,18 @@ export function createJournal(db: SqlDb) {
 		listShoppingExtras,
 		addShoppingExtra,
 		removeShoppingExtra,
+		listQuoteFetchLog,
+		listTradingOrgs,
+		updateTradingOrg,
+		listTradingOrders,
+		createTradingOrder,
+		deleteTradingOrder,
+		setTradingTarget,
+		refreshTradingQuotes,
+		getTradingSummary,
+		getTradingStrip,
+		listB3Tickers,
+		addB3Ticker,
 		listTagColors,
 		listTagCounts,
 		setTagColor

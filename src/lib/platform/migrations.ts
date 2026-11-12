@@ -515,6 +515,120 @@ const shoppingExtras: Migration = {
 	}
 };
 
+/** Swing-trading panel. Orders are raw events; positions and the monthly
+ *  panel derive from them, so future features attach without rewrites.
+ *  `trading_orgs` holds each venue and its editable cost rules. */
+const trading: Migration = {
+	version: 23,
+	name: 'trading',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS trading_orgs (
+				id            TEXT PRIMARY KEY,
+				name          TEXT NOT NULL,
+				enabled       INTEGER NOT NULL DEFAULT 1,
+				fee_rate      REAL NOT NULL DEFAULT 0.0003,
+				irrf_rate     REAL NOT NULL DEFAULT 0.00005,
+				fixed_fee     REAL NOT NULL DEFAULT 0,
+				exempt_limit  REAL NOT NULL DEFAULT 20000,
+				position      INTEGER NOT NULL DEFAULT 0,
+				created_at    INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS trading_orders (
+				id         TEXT PRIMARY KEY,
+				org_id     TEXT NOT NULL REFERENCES trading_orgs(id) ON DELETE CASCADE,
+				ticker     TEXT NOT NULL,
+				side       TEXT NOT NULL,
+				qty        REAL NOT NULL,
+				unit_price REAL NOT NULL,
+				value      REAL NOT NULL,
+				fees       REAL NOT NULL DEFAULT 0,
+				irrf       REAL NOT NULL DEFAULT 0,
+				net        REAL NOT NULL,
+				date       INTEGER NOT NULL,
+				month      TEXT NOT NULL,
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS trading_orders_org_date
+				ON trading_orders(org_id, date);
+			CREATE TABLE IF NOT EXISTS trading_targets (
+				org_id     TEXT NOT NULL REFERENCES trading_orgs(id) ON DELETE CASCADE,
+				ticker     TEXT NOT NULL,
+				target_pct REAL NOT NULL DEFAULT 0.03,
+				updated_at INTEGER NOT NULL,
+				PRIMARY KEY (org_id, ticker)
+			);
+			CREATE TABLE IF NOT EXISTS trading_quotes (
+				ticker         TEXT PRIMARY KEY,
+				price          REAL NOT NULL,
+				previous_close REAL,
+				source         TEXT NOT NULL DEFAULT '',
+				fetched_at     INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS quote_fetch_log (
+				id             TEXT PRIMARY KEY,
+				ticker         TEXT NOT NULL,
+				source         TEXT NOT NULL,
+				ok             INTEGER NOT NULL DEFAULT 0,
+				price          REAL,
+				previous_close REAL,
+				error          TEXT NOT NULL DEFAULT '',
+				fetched_at     INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS quote_fetch_log_time
+				ON quote_fetch_log(fetched_at DESC);
+		`);
+		const now = Date.now();
+		const seed = db.prepare(
+			'INSERT OR IGNORE INTO trading_orgs (id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+		);
+		seed.run('b3', 'B3', 1, 0.0003, 0.00005, 0, 20000, 0, now);
+		seed.run('ripio', 'Ripio', 0, 0, 0, 0, 0, 1, now);
+	}
+};
+
+/** B3 ticker universe for the order picker. Seeds are the liquid names;
+ *  custom rows are user additions a future admin UI will manage. */
+const b3Tickers: Migration = {
+	version: 24,
+	name: 'b3-tickers',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS b3_tickers (
+				ticker     TEXT PRIMARY KEY,
+				source     TEXT NOT NULL DEFAULT 'seed',
+				created_at INTEGER NOT NULL
+			);
+		`);
+		const now = Date.now();
+		const seed = db.prepare(
+			"INSERT OR IGNORE INTO b3_tickers (ticker, source, created_at) VALUES (?, 'seed', ?)"
+		);
+		for (const t of [
+			'ABEV3', 'ALOS3', 'ALPA4', 'ASAI3', 'AURE3', 'AZUL4', 'B3SA3', 'BBAS3',
+			'BBDC3', 'BBDC4', 'BBSE3', 'BEEF3', 'BPAC11', 'BRAP4', 'BRAVA3', 'BRFS3',
+			'CMIG4', 'COGN3', 'CPFE3', 'CPLE6', 'CSAN3', 'CSNA3', 'CVCB3', 'CYRE3',
+			'DXCO3', 'EGIE3', 'ELET3', 'ELET6', 'EMBR3', 'ENEV3', 'EQTL3', 'EZTC3',
+			'FLRY3', 'GGBR3', 'GGBR4', 'GMAT3', 'GOAU4', 'GOLL4', 'HAPV3', 'HYPE3',
+			'IGTI11', 'ITSA4', 'ITUB4', 'JBSS3', 'JHSF3', 'KLBN11', 'LREN3', 'LWSA3',
+			'MGLU3', 'MRFG3', 'MRVE3', 'MULT3', 'NTCO3', 'PCAR3', 'PETR3', 'PETR4',
+			'PETZ3', 'PRIO3', 'PSSA3', 'RADL3', 'RAIL3', 'RDOR3', 'RECV3', 'RENT3',
+			'SANB11', 'SBSP3', 'SLCE3', 'SMFT3', 'STBP3', 'SUZB3', 'TAEE11', 'TIMS3',
+			'TOTS3', 'UGPA3', 'USIM5', 'VALE3', 'VAMO3', 'VBBR3', 'VIVA3', 'VIVT3', 'WEGE3',
+			'YDUQ3',
+			'ALZR11', 'BCRI11', 'BRCR11', 'BTLG11', 'CACR11', 'CPTS11', 'CVBI11',
+			'DEVA11', 'FOFT11', 'GARE11', 'GGRC11', 'HGFF11', 'HGLG11', 'HGRE11',
+			'HGRU11', 'HFOF11', 'IRDM11', 'JSRE11', 'KFOF11', 'KNCR11', 'KNIP11',
+			'KNSC11', 'KNRI11', 'LVBI11', 'MCCI11', 'MXRF11', 'NCHB11', 'OUJP11',
+			'PLCR11', 'PVBI11', 'RBRF11', 'RBRP11', 'RCRB11', 'RECR11', 'RZTR11',
+			'SNEL11', 'TGAR11', 'TRXF11', 'VGIR11', 'VILG11', 'VISC11', 'XPML11',
+			'XPLG11'
+		]) {
+			seed.run(t, now);
+		}
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -537,7 +651,9 @@ export const MIGRATIONS: Migration[] = [
 	stockRegistryParents,
 	stockExpiresAt,
 	holdingValueHistory,
-	shoppingExtras
+	shoppingExtras,
+	trading,
+	b3Tickers
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

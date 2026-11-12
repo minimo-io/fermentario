@@ -2774,6 +2774,498 @@
 			"color": "violet"
 		}
 	},
+	"GET /api/trading/tickers": {
+		"status": 200,
+		"body": {
+			"tickers": [
+				"ABEV3",
+				"ALOS3",
+				"ALPA4",
+				"ALZR11",
+				"ASAI3",
+				"AURE3",
+				"AZUL4",
+				"B3SA3",
+				"BBAS3",
+				"BBDC3",
+				"BBDC4",
+				"BBSE3",
+				"BCRI11",
+				"BEEF3",
+				"BPAC11",
+				"BRAP4",
+				"BRAVA3",
+				"BRCR11",
+				"BRFS3",
+				"BTLG11",
+				"CACR11",
+				"CMIG4",
+				"COGN3",
+				"CPFE3",
+				"CPLE6",
+				"CPTS11",
+				"CSAN3",
+				"CSNA3",
+				"CVBI11",
+				"CVCB3",
+				"CYRE3",
+				"DEVA11",
+				"DXCO3",
+				"EGIE3",
+				"ELET3",
+				"ELET6",
+				"EMBR3",
+				"ENEV3",
+				"EQTL3",
+				"EZTC3",
+				"FLRY3",
+				"FOFT11",
+				"GARE11",
+				"GGBR3",
+				"GGBR4",
+				"GGRC11",
+				"GMAT3",
+				"GOAU4",
+				"GOLL4",
+				"HAPV3",
+				"HFOF11",
+				"HGFF11",
+				"HGLG11",
+				"HGRE11",
+				"HGRU11",
+				"HYPE3",
+				"IGTI11",
+				"IRDM11",
+				"ITSA4",
+				"ITUB4",
+				"JBSS3",
+				"JHSF3",
+				"JSRE11",
+				"KFOF11",
+				"KLBN11",
+				"KNCR11",
+				"KNIP11",
+				"KNRI11",
+				"KNSC11",
+				"LREN3",
+				"LVBI11",
+				"LWSA3",
+				"MCCI11",
+				"MGLU3",
+				"MRFG3",
+				"MRVE3",
+				"MULT3",
+				"MXRF11",
+				"NCHB11",
+				"NTCO3",
+				"OUJP11",
+				"PCAR3",
+				"PETR3",
+				"PETR4",
+				"PETZ3",
+				"PLCR11",
+				"PRIO3",
+				"PSSA3",
+				"PVBI11",
+				"RADL3",
+				"RAIL3",
+				"RBRF11",
+				"RBRP11",
+				"RCRB11",
+				"RDOR3",
+				"RECR11",
+				"RECV3",
+				"RENT3",
+				"RZTR11",
+				"SANB11",
+				"SBSP3",
+				"SLCE3",
+				"SMFT3",
+				"SNEL11",
+				"STBP3",
+				"SUZB3",
+				"TAEE11",
+				"TGAR11",
+				"TIMS3",
+				"TOTS3",
+				"TRXF11",
+				"UGPA3",
+				"USIM5",
+				"VALE3",
+				"VAMO3",
+				"VBBR3",
+				"VGIR11",
+				"VILG11",
+				"VISC11",
+				"VIVA3",
+				"VIVT3",
+				"WEGE3",
+				"XPLG11",
+				"XPML11",
+				"YDUQ3"
+			]
+		}
+	},
+	"POST /api/trading/tickers custom": {
+		"status": 201,
+		"body": {
+			"ticker": "ZZZZ11"
+		}
+	},
+	"POST /api/trading/tickers bad": {
+		"status": 400,
+		"body": {
+			"error": "not a B3 ticker"
+		}
+	},
+	"GET /api/trading/orgs": {
+		"status": 200,
+		"body": {
+			"orgs": [
+				{
+					"id": "b3",
+					"name": "B3",
+					"enabled": true,
+					"feeRate": 0.0003,
+					"irrfRate": 0.00005,
+					"fixedFee": 0,
+					"exemptLimit": 20000,
+					"position": 0,
+					"created_at": "<runtime>"
+				},
+				{
+					"id": "ripio",
+					"name": "Ripio",
+					"enabled": false,
+					"feeRate": 0,
+					"irrfRate": 0,
+					"fixedFee": 0,
+					"exemptLimit": 0,
+					"position": 1,
+					"created_at": "<runtime>"
+				}
+			]
+		}
+	},
+	"PATCH /api/trading/orgs/b3 noop": {
+		"status": 200,
+		"body": {
+			"org": {
+				"id": "b3",
+				"name": "B3",
+				"enabled": true,
+				"feeRate": 0.0003,
+				"irrfRate": 0.00005,
+				"fixedFee": 0,
+				"exemptLimit": 20000,
+				"position": 0,
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"PATCH /api/trading/orgs/ripio blocked": {
+		"status": 400,
+		"body": {
+			"error": "unknown or disabled organization, or a rate is invalid (rates 0–0.1, amounts >= 0)"
+		}
+	},
+	"POST /api/trading/orders buy": {
+		"status": 201,
+		"body": {
+			"order": {
+				"id": "<runtime>",
+				"orgId": "b3",
+				"ticker": "PETR4",
+				"side": "BUY",
+				"qty": 2,
+				"unitPrice": 38.5,
+				"value": 77,
+				"fees": 0.0231,
+				"irrf": 0,
+				"net": 77.0231,
+				"date": 1793718000000,
+				"month": "11/2026",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/trading/orders partial sell": {
+		"status": 400,
+		"body": {
+			"error": "a sale must close the full position (2)"
+		}
+	},
+	"POST /api/trading/orders sell": {
+		"status": 201,
+		"body": {
+			"order": {
+				"id": "<runtime>",
+				"orgId": "b3",
+				"ticker": "PETR4",
+				"side": "SELL",
+				"qty": 2,
+				"unitPrice": 40,
+				"value": 80,
+				"fees": 0.023999999999999997,
+				"irrf": 0.004,
+				"net": 79.972,
+				"date": "<runtime>",
+				"month": "11/2026",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"GET /api/trading/summary": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"org": {
+					"id": "b3",
+					"name": "B3",
+					"enabled": true,
+					"feeRate": 0.0003,
+					"irrfRate": 0.00005,
+					"fixedFee": 0,
+					"exemptLimit": 20000,
+					"position": 0,
+					"created_at": "<runtime>"
+				},
+				"orders": [
+					{
+						"id": "<runtime>",
+						"orgId": "b3",
+						"ticker": "PETR4",
+						"side": "BUY",
+						"qty": 2,
+						"unitPrice": 38.5,
+						"value": 77,
+						"fees": 0.0231,
+						"irrf": 0,
+						"net": 77.0231,
+						"date": 1793718000000,
+						"month": "11/2026",
+						"created_at": "<runtime>",
+						"profit": null,
+						"profitPct": null
+					},
+					{
+						"id": "<runtime>",
+						"orgId": "b3",
+						"ticker": "PETR4",
+						"side": "SELL",
+						"qty": 2,
+						"unitPrice": 40,
+						"value": 80,
+						"fees": 0.023999999999999997,
+						"irrf": 0.004,
+						"net": 79.972,
+						"date": "<runtime>",
+						"month": "11/2026",
+						"created_at": "<runtime>",
+						"profit": 2.9488999999999947,
+						"profitPct": 3.8285916822355825
+					}
+				],
+				"positions": [],
+				"months": [
+					{
+						"month": "11/2026",
+						"sales": 80,
+						"limit": 20000,
+						"irrf": 0.004,
+						"profit": 2.9488999999999947,
+						"exempt": true
+					}
+				]
+			}
+		}
+	},
+	"DELETE /api/trading/orders/[id] latest": {
+		"status": 200,
+		"body": {
+			"ok": true
+		}
+	},
+	"DELETE /api/trading/orders/[id] now-latest": {
+		"status": 200,
+		"body": {
+			"ok": true
+		}
+	},
+	"POST /api/trading/orders rebuy": {
+		"status": 201,
+		"body": {
+			"order": {
+				"id": "<runtime>",
+				"orgId": "b3",
+				"ticker": "PETR4",
+				"side": "BUY",
+				"qty": 2,
+				"unitPrice": 38.5,
+				"value": 77,
+				"fees": 0.0231,
+				"irrf": 0,
+				"net": 77.0231,
+				"date": 1793718000000,
+				"month": "11/2026",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/trading/orders resell": {
+		"status": 201,
+		"body": {
+			"order": {
+				"id": "<runtime>",
+				"orgId": "b3",
+				"ticker": "PETR4",
+				"side": "SELL",
+				"qty": 2,
+				"unitPrice": 40,
+				"value": 80,
+				"fees": 0.023999999999999997,
+				"irrf": 0.004,
+				"net": 79.972,
+				"date": "<runtime>",
+				"month": "11/2026",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/trading/orders same-day buy": {
+		"status": 201,
+		"body": {
+			"order": {
+				"id": "<runtime>",
+				"orgId": "b3",
+				"ticker": "VALE3",
+				"side": "BUY",
+				"qty": 1,
+				"unitPrice": 60,
+				"value": 60,
+				"fees": 0.018,
+				"irrf": 0,
+				"net": 60.018,
+				"date": "<runtime>",
+				"month": "11/2026",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"GET /api/trading/summary same-day": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"org": {
+					"id": "b3",
+					"name": "B3",
+					"enabled": true,
+					"feeRate": 0.0003,
+					"irrfRate": 0.00005,
+					"fixedFee": 0,
+					"exemptLimit": 20000,
+					"position": 0,
+					"created_at": "<runtime>"
+				},
+				"orders": [
+					{
+						"id": "<runtime>",
+						"orgId": "b3",
+						"ticker": "PETR4",
+						"side": "BUY",
+						"qty": 2,
+						"unitPrice": 38.5,
+						"value": 77,
+						"fees": 0.0231,
+						"irrf": 0,
+						"net": 77.0231,
+						"date": 1793718000000,
+						"month": "11/2026",
+						"created_at": "<runtime>",
+						"profit": null,
+						"profitPct": null
+					},
+					{
+						"id": "<runtime>",
+						"orgId": "b3",
+						"ticker": "PETR4",
+						"side": "SELL",
+						"qty": 2,
+						"unitPrice": 40,
+						"value": 80,
+						"fees": 0.023999999999999997,
+						"irrf": 0.004,
+						"net": 79.972,
+						"date": "<runtime>",
+						"month": "11/2026",
+						"created_at": "<runtime>",
+						"profit": 2.9488999999999947,
+						"profitPct": 3.8285916822355825
+					},
+					{
+						"id": "<runtime>",
+						"orgId": "b3",
+						"ticker": "VALE3",
+						"side": "BUY",
+						"qty": 1,
+						"unitPrice": 60,
+						"value": 60,
+						"fees": 0.018,
+						"irrf": 0,
+						"net": 60.018,
+						"date": "<runtime>",
+						"month": "11/2026",
+						"created_at": "<runtime>",
+						"profit": null,
+						"profitPct": null
+					}
+				],
+				"positions": [
+					{
+						"ticker": "VALE3",
+						"qty": 1,
+						"avgPrice": 60,
+						"cost": 60.018,
+						"quote": null,
+						"quoteSource": null,
+						"quoteAt": null,
+						"targetPct": 0.03,
+						"potentialPct": null,
+						"sameDay": true,
+						"recommendation": "waiting"
+					}
+				],
+				"months": [
+					{
+						"month": "11/2026",
+						"sales": 80,
+						"limit": 20000,
+						"irrf": 0.004,
+						"profit": 2.9488999999999947,
+						"exempt": true
+					}
+				]
+			}
+		}
+	},
+	"DELETE /api/trading/orders/[id] same-day": {
+		"status": 200,
+		"body": {
+			"ok": true
+		}
+	},
+	"GET /api/trading/strip": {
+		"status": 200,
+		"body": {
+			"positions": []
+		}
+	},
+	"GET /api/quotes/log": {
+		"status": 200,
+		"body": {
+			"entries": []
+		}
+	},
 	"GET /api/export": {
 		"status": 200,
 		"contentType": "application/vnd.sqlite3",
@@ -2804,7 +3296,10 @@
 			"stockActions": 1,
 			"stockBrands": 2,
 			"stockCategories": 4,
-			"shoppingExtras": 1
+			"shoppingExtras": 1,
+			"tradingOrgs": 2,
+			"tradingOrders": 2,
+			"b3Tickers": 126
 		}
 	},
 	"POST /api/import": {
@@ -2834,7 +3329,10 @@
 			"stockActions": 1,
 			"holdingValueHistory": 2,
 			"portfolioValueHistory": 1,
-			"shoppingExtras": 1
+			"shoppingExtras": 1,
+			"tradingOrgs": 2,
+			"tradingOrders": 2,
+			"b3Tickers": 126
 		}
 	},
 	"GET /api/notes/[id] after restore": {

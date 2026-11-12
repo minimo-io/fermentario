@@ -100,7 +100,11 @@ sizing. Consult this before changing any of them.
   Google Finance first (embedded `["TICKER","BVMF"]…[price,change,pct],null,
   previousClose` block, updated intraday) with the Fundamentus `Cotação` row
   as fallback (comma decimals normalized, regular-session close only); every
-  other ticker uses the Yahoo chart, and fiat converts for the USD total. A
+  other ticker uses the Yahoo chart, and fiat converts for the USD total.
+  Every quote attempt is logged to `quote_fetch_log` (ticker, source,
+  success, price, error). The **Quote fetches** button in Settings →
+  Database opens the shared history, newest first — the single place for
+  every stock, FII and BTC fetch attempt. A
   full exchange
   API and a scheduled refresh are future work; the schema (`price`,
   `price_auto`, `currency`, `fx_rates`) already carries them, so no migration
@@ -244,6 +248,25 @@ sizing. Consult this before changing any of them.
   `sessionStorage` (`fermentario.todoView`); task links carry `?from=` and the
   detail Back button returns to that subview instead of resetting to In
   progress.
+- **Businesses**: `Cubiq` and `Trading` sub-tabs, remembered in
+  `sessionStorage`. Cubiq is a Soon placeholder only. Trading is the
+  swing-trade admin panel: one org at a time (B3 active, Ripio disabled with
+  a Soon badge), open positions with live quotes and targets, the diary, and
+  the rolling monthly exemption panel. Orders are raw events; a sale always
+  closes the full position and only the latest order can be deleted. The
+  venue rules (fee %, dedo-duro %, fixed fee, monthly limit) are editable;
+  new orders use them, past orders keep theirs. The ticker field suggests
+  from the B3 universe in `b3_tickers` (seeded liquid names, custom rows for
+  the future admin, 24-hour server cache); free text still saves any
+  well-formed ticker. SELL mode ranks open tickers first. A sale past target
+  shows green `Sell` only when the position is older than today; a position
+  opened today shows a soft red `Day trade` pill instead. The home page
+  carries a trading strip below the holdings carousel, always visible once
+  loaded: same card rail, one card per open ticker with its swing call
+  (`Sell`, `Day trade`, `Hold`, `No quote`), plus an empty state that opens
+  Businesses → Trading; the strip reloads on every diary change, every 60
+  seconds, and when the tab becomes visible again. Section order is
+  positions → monthly panel → diary.
 - **To-Do group row**: the new-group `+`, the in-progress filter and every
   group pill share ONE line at every width. The row is a horizontal carousel
   (`overflow-x-auto no-scrollbar snap-x`) and never wraps on desktop; extra

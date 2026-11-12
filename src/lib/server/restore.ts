@@ -49,6 +49,9 @@ export interface RestoreCounts {
 	holdingValueHistory: number;
 	portfolioValueHistory: number;
 	shoppingExtras: number;
+	tradingOrgs: number;
+	tradingOrders: number;
+	b3Tickers: number;
 }
 
 function sqlString(value: string): string {
@@ -182,8 +185,14 @@ export function copyUploadIntoTarget(
 			'DELETE FROM stock_category_goals',
 			'DELETE FROM stock_items',
 			'DELETE FROM stock_registries',
-			'DELETE FROM stock_goals'
+			'DELETE FROM stock_goals',
+			'DELETE FROM trading_orders',
+			'DELETE FROM trading_targets',
+			'DELETE FROM trading_quotes',
+			'DELETE FROM trading_orgs',
+			'DELETE FROM quote_fetch_log',
 		];
+		if (has('b3_tickers')) statements.push('DELETE FROM b3_tickers');
 		if (hasTodo) statements.push('DELETE FROM todo_items', 'DELETE FROM todo_groups');
 		if (has('principles')) statements.push('DELETE FROM principles');
 		if (has('tag_colors')) statements.push('DELETE FROM tag_colors');
@@ -351,6 +360,22 @@ export function copyUploadIntoTarget(
 				'INSERT INTO shopping_extras (id, text, position, created_at) SELECT id, text, position, created_at FROM backup.shopping_extras'
 			);
 		}
+		if (has('trading_orgs')) {
+			statements.push(
+				'INSERT INTO trading_orgs (id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at) SELECT id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at FROM backup.trading_orgs',
+				'INSERT INTO trading_orders (id, org_id, ticker, side, qty, unit_price, value, fees, irrf, net, date, month, created_at) SELECT id, org_id, ticker, side, qty, unit_price, value, fees, irrf, net, date, month, created_at FROM backup.trading_orders'
+			);
+		}
+		if (has('trading_targets')) {
+			statements.push(
+				'INSERT INTO trading_targets (org_id, ticker, target_pct, updated_at) SELECT org_id, ticker, target_pct, updated_at FROM backup.trading_targets'
+			);
+		}
+		if (has('b3_tickers')) {
+			statements.push(
+				"INSERT INTO b3_tickers (ticker, source, created_at) SELECT ticker, source, created_at FROM backup.b3_tickers"
+			);
+		}
 		if (has('stock_registries')) {
 			statements.push(
 				`INSERT INTO stock_registries (id, kind, name, name_key, created_at, parent)
@@ -476,7 +501,10 @@ export function copyUploadIntoTarget(
 		stockActions: count(target, 'stock_item_actions'),
 		holdingValueHistory: count(target, 'holding_value_history'),
 		portfolioValueHistory: count(target, 'portfolio_value_history'),
-		shoppingExtras: count(target, 'shopping_extras')
+		shoppingExtras: count(target, 'shopping_extras'),
+		tradingOrgs: count(target, 'trading_orgs'),
+		tradingOrders: count(target, 'trading_orders'),
+		b3Tickers: count(target, 'b3_tickers')
 	};
 }
 

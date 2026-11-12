@@ -2283,3 +2283,41 @@
 - Do not change the snapshot logic for this. Refresh today's row with the
   fresh price; the previous day's row stays the baseline. GGRC11 really can
   be flat, so `0.0%` is valid when Google reports no move.
+
+## Session: Swing-trading panel
+- Orders are raw events; positions, sale profits and the monthly panel all
+  derive by replaying the diary. A sale must equal the full open quantity
+  (400 otherwise) and only the latest order of a venue can be deleted, so
+  earlier rows never lose their meaning as cost basis.
+- B3 defaults (0.03% fees both ways, 0.005% dedo-duro on sales, R$20k monthly
+  limit, no fixed fee) come from the user's spreadsheet and stay editable in
+  Venue rules. New orders use the edited rules; past orders keep theirs.
+- One shared B3 quote path serves Holdings and Trading: Google Finance first,
+  Fundamentus fallback. Every attempt (google, fundamentus, yahoo, coinbase)
+  lands in `quote_fetch_log`, capped at 500 rows. The Quote debug button
+  lives inside the config modals (holdings goals, venue rules), never on a
+  card footer. Smoke registers runtime ids and `created_at` values as
+  volatile, or the golden diffs on every run.
+
+## Session: Strip visibility and debug home
+- A strip that hides when empty looks broken once a position exists elsewhere.
+  Render the Trading header whenever data has loaded, with an empty state that
+  navigates to the panel. Loading (`null`) still renders nothing.
+- Same-SPA views never remount the home page: the strip must reload on a
+  `trading:changed` window event (dispatched on every diary and target
+  write), on a 60-second interval, and on `visibilitychange`. Mount-only
+  loading goes stale the moment the user records an order.
+- There is exactly one quote-debug entry point: Settings → Database, next to
+  Diagnostics. Never scatter it across card footers or per-panel modals.
+
+## Session: Ticker universe and day-trade rule
+- The B3 ticker list lives in `b3_tickers` (seeded liquid names, custom rows
+  for the future admin), read through a 24-hour in-memory cache. The picker
+  is a shortcut, never a restriction: free text still saves. SELL mode ranks
+  open tickers first.
+- A position carries `since` (earliest open buy) and `sameDay`. Past target
+  plus same-day opens render a soft red `daytrade` pill, never green `sell`.
+  Check seed lists against the test that reads them: VALE3 was missing and
+  the smoke caught it.
+- Trading section order is positions, monthly panel, diary: the exemption
+  status must not sit below a long order list.

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import QuoteDebugModal from '$lib/components/QuoteDebugModal.svelte';
 
 	type Props = { onRestoreStart: (file: File) => void };
 	let { onRestoreStart }: Props = $props();
@@ -12,6 +13,7 @@
 	let restoreErr = $state('');
 	let exporting = $state(false);
 	let exportErr = $state('');
+	let debugOpen = $state(false);
 
 	/** Download the database without navigating.
 	 *
@@ -129,16 +131,29 @@
 </div>
 
 <div class="mt-4 border-t border-stone-200 dark:border-stone-800 pt-4">
-	<a
-		href="/diagnostics"
-		class="inline-flex items-center gap-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-		>Diagnostics</a
-	>
+	<div class="flex flex-wrap gap-2">
+		<a
+			href="/diagnostics"
+			class="inline-flex items-center gap-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+			>Diagnostics</a
+		>
+		<button
+			type="button"
+			class="inline-flex items-center gap-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+			aria-haspopup="dialog"
+			onclick={() => (debugOpen = true)}
+		>Quote fetches</button>
+	</div>
 	<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
-		What this device supports: cross-origin isolation, WebGPU, speech, storage. Copy the report when
+		What this device supports: cross-origin isolation, WebGPU, speech, storage. Quote fetches show
+		every stock, FII and BTC price attempt with its source, price or error. Copy the report when
 		reporting a problem.
 	</p>
 </div>
+
+{#if debugOpen}
+	<QuoteDebugModal onClose={() => (debugOpen = false)} />
+{/if}
 
 {#if confirming && selected}
 	<ConfirmDialog
