@@ -617,6 +617,8 @@ export interface TradingPosition {
 	potentialPct: number | null;
 	/** Every open buy is from today: selling now is a day trade. */
 	sameDay: boolean;
+	/** Earliest open buy: the position age counts from here. */
+	since: number;
 	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
 }
 
@@ -649,6 +651,7 @@ export interface TradingStripItem {
 	targetPct: number;
 	potentialPct: number | null;
 	sameDay: boolean;
+	since: number;
 	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
 }
 
@@ -2437,6 +2440,7 @@ export function createJournal(db: SqlDb) {
 				targetPct,
 				potentialPct,
 				sameDay,
+				since: pos.since,
 				recommendation:
 					quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
 			});
@@ -2513,6 +2517,7 @@ export function createJournal(db: SqlDb) {
 					targetPct,
 					potentialPct,
 					sameDay,
+					since: pos.since,
 					recommendation:
 						quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
 				});

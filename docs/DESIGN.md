@@ -260,9 +260,12 @@ sizing. Consult this before changing any of them.
   the future admin, 24-hour server cache); free text still saves any
   well-formed ticker. SELL mode ranks open tickers first. A sale past target
   shows green `Sell` only when the position is older than today; a position
-  opened today shows a soft red `Day trade` pill instead. The home page
-  carries a trading strip below the holdings carousel, always visible once
-  loaded: same card rail, one card per open ticker with its swing call
+  opened today shows a soft red `Day trade` pill instead. Diary lines show
+  the exact date plus the relative age (`bought 3 days ago`, `sold 2 hours
+  ago`); position cards show `open X ago` from the earliest open buy. The
+  home page carries a trading strip below the holdings carousel, always
+  visible once loaded: same card rail, one card per open ticker with its
+  swing call
   (`Sell`, `Day trade`, `Hold`, `No quote`), plus an empty state that opens
   Businesses → Trading; the strip reloads on every diary change, every 60
   seconds, and when the tab becomes visible again. Section order is

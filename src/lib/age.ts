@@ -72,9 +72,39 @@ export function durationText(span: Span, lang: AgeLang): string {
 	return `${parts[0]}, ${parts[1]} ${labels.and} ${parts[2]}`;
 }
 
+/** Short relative time: `just now`, `5 min ago`, `3 h ago`, `2 days ago`.
+ *  One minute is the floor; future dates clamp to `just now`. */
+export function timeAgo(atMs: number, lang: AgeLang = 'en', now = Date.now()): string {
+	if (!Number.isFinite(atMs) || atMs <= 0) return '';
+	const mins = Math.max(0, Math.floor((now - atMs) / 60000));
+	if (mins < 1) {
+		return lang === 'es' ? 'ahora mismo' : lang === 'pt' ? 'agora mesmo' : 'just now';
+	}
+	if (mins < 60) {
+		return lang === 'es' ? `hace ${mins} min` : lang === 'pt' ? `há ${mins} min` : `${mins} min ago`;
+	}
+	const hours = Math.floor(mins / 60);
+	if (hours < 24) {
+		return lang === 'es' ? `hace ${hours} h` : lang === 'pt' ? `há ${hours} h` : `${hours} h ago`;
+	}
+	const days = Math.floor(hours / 24);
+	if (days < 30) {
+		return lang === 'es' ? `hace ${days} ${days === 1 ? 'día' : 'días'}` : lang === 'pt' ? `há ${days} ${days === 1 ? 'dia' : 'dias'}` : `${days} ${days === 1 ? 'day' : 'days'} ago`;
+	}
+	const months = Math.floor(days / 30);
+	if (months < 12) {
+		return lang === 'es' ? `hace ${months} ${months === 1 ? 'mes' : 'meses'}` : lang === 'pt' ? `há ${months} ${months === 1 ? 'mês' : 'meses'}` : `${months} ${months === 1 ? 'month' : 'months'} ago`;
+	}
+	const years = Math.floor(months / 12);
+	return lang === 'es'
+		? `hace ${years} ${years === 1 ? 'año' : 'años'}`
+		: lang === 'pt'
+			? `há ${years} ${years === 1 ? 'ano' : 'anos'}`
+			: `${years} ${years === 1 ? 'year' : 'years'} ago`;
+}
+
 /** Split age: `prefix` is the status word (neutral), `duration` is the time
- *  span (highlighted). An empty duration means there is nothing to highlight
- *  and the prefix carries the whole phrase, e.g. “Today”. */
+ *  span (highlighted). */
 export interface DurableAge {
 	prefix: string;
 	duration: string;

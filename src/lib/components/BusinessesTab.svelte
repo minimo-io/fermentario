@@ -3,14 +3,17 @@
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { fmtCurrency } from '$lib/currency';
 	import { loading } from '$lib/loading.svelte';
+	import { timeAgo, type AgeLang } from '$lib/age';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { TradingOrg, TradingSummary } from '$lib/types';
 
 	// Businesses: Cubiq shows a Soon placeholder; Trading is the swing-trade
 	// admin panel. Orders are raw events, positions and the monthly panel
 	// derive from them. Sales always close the full position.
-	type Props = { onError: (msg: string) => void; widthClass?: string };
-	let { onError, widthClass = 'max-w-2xl' }: Props = $props();
+	type Props = { onError: (msg: string) => void; lang?: string; widthClass?: string };
+	let { onError, lang = 'en', widthClass = 'max-w-2xl' }: Props = $props();
+
+	const ageLang: AgeLang = $derived(lang === 'es' ? 'es' : lang === 'pt' ? 'pt' : 'en');
 
 	const SUB_KEY = 'fermentario.business';
 	let sub = $state<'cubiq' | 'trading'>('trading');
@@ -350,6 +353,9 @@
 										{fmtNum(p.qty, 0)} shares · avg {fmtMoney(p.avgPrice)} · cost {fmtMoney(p.cost)}
 									</p>
 									<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
+										open {timeAgo(p.since, ageLang)}
+									</p>
+									<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
 										quote {p.quote === null ? '—' : fmtMoney(p.quote)}{#if p.quoteSource} · {p.quoteSource}{/if}
 										{#if p.potentialPct !== null}
 											<span class={p.potentialPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
@@ -423,7 +429,10 @@
 										{o.ticker}
 									</p>
 									<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
-										{fmtDate(o.date)} · {fmtNum(o.qty, 0)} × {fmtMoney(o.unitPrice)} = {fmtMoney(o.value)}
+										{fmtDate(o.date)} · {o.side === 'BUY' ? 'bought' : 'sold'} {timeAgo(o.date, ageLang)}
+									</p>
+									<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
+										{fmtNum(o.qty, 0)} × {fmtMoney(o.unitPrice)} = {fmtMoney(o.value)}
 									</p>
 									<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
 										fees {fmtMoney(o.fees)}{#if o.side === 'SELL'} · dedo-duro {fmtMoney(o.irrf)}{/if} · net {fmtMoney(o.net)}

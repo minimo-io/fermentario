@@ -944,7 +944,7 @@ function langTag(p: Lang): string {
 		{:else if view === 'stocks'}
 			<StocksTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
 		{:else if view === 'businesses'}
-			<BusinessesTab onError={(m) => showToast(m)} widthClass={contentClass} />
+			<BusinessesTab onError={(m) => showToast(m)} lang={config.entriesLang} widthClass={contentClass} />
 		{:else}
 			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
 		{/if}

@@ -2321,3 +2321,12 @@
   the smoke caught it.
 - Trading section order is positions, monthly panel, diary: the exemption
   status must not sit below a long order list.
+
+## Session: Position age
+- Diary lines show both the exact date and the relative age (`bought 3 days
+  ago`, `sold 2 hours ago`); the verb follows the side, never the position.
+  Position cards show `open X ago` from the earliest open buy (`since`,
+  already tracked for the day-trade rule). `timeAgo` lives in `src/lib/age.ts`
+  with en/es/pt, one minute as the floor, future clamped to `just now`.
+- `lang` prop values are `$derived`, never plain consts: svelte-check warns
+  `state_referenced_locally` otherwise, and the gates allow zero warnings.
