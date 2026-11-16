@@ -26,7 +26,9 @@
 		"@tailwindcss/vite": "^4.3.3",
 		"@types/better-sqlite3": "^9.6.0",
 		"@types/dom-speech-recognition": "^0.0.12",
+		"@types/ws": "^8.18.2",
 		"daisyui": "^5.7.42",
+		"playwright-core": "^1.65.0",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.3",
@@ -36,7 +38,10 @@
 	"dependencies": {
 		"@huggingface/transformers": "^4.3.0",
 		"@lucide/svelte": "^1.47.0",
-		"better-sqlite3": "^13.0.3"
+		"better-sqlite3": "^13.0.3",
+		"epubjs": "^0.3.93",
+		"nostr-tools": "^2.26.0",
+		"ws": "^8.23.0"
 	},
 	"allowScripts": {
 		"onnxruntime-node@1.30.0": true,

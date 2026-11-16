@@ -1,1031 +1,183 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
+	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
+	import TimeTrackerBar from '$lib/components/TimeTrackerBar.svelte';
+	import { renderNoteContent } from '$lib/note-links';
+	import { dayLocale } from '$lib/dates';
 	import type { Note } from '$lib/types';
-	import type { AskEntry, AskSource } from '$lib/types';
-	import Composer from '$lib/components/Composer.svelte';
-import Settings from '@lucide/svelte/icons/settings';
-import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import Weekly from '$lib/components/Weekly.svelte';
-	import Timeline from '$lib/components/Timeline.svelte';
-	import AskTab from '$lib/components/AskTab.svelte';
-	import TodoTab from '$lib/components/TodoTab.svelte';
-	import PrinciplesTab from '$lib/components/PrinciplesTab.svelte';
-	import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from '$lib/chat-models';
-	import { isAppleDevice } from '$lib/platform';
-	import { splitTrailingHashtags } from '$lib/hashtags';
-	import { NotePager } from '$lib/note-pager.svelte';
-	import { loading } from '$lib/loading.svelte';
-	import { showToast } from '$lib/toast.svelte';
-	import { invalidateTagChoices } from '$lib/tag-suggest';
-	import { tagColors } from '$lib/tag-colors.svelte';
-	import { formatNotesForClipboard } from '$lib/note-export';
-	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
-	import RestoreOverlay from '$lib/components/RestoreOverlay.svelte';
-	import CopyFallback from '$lib/components/CopyFallback.svelte';
-	import Copy from '@lucide/svelte/icons/copy';
-	import Grid3x3 from '@lucide/svelte/icons/grid-3x3';
-	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import MessageCircle from '@lucide/svelte/icons/message-circle';
-	import Search from '@lucide/svelte/icons/search';
-	import Tags from '@lucide/svelte/icons/tags';
-	import Kbd from '$lib/components/Kbd.svelte';
-	import { search } from '$lib/search.svelte';
-	import { navigating } from '$app/state';
-	import SectionBar from '$lib/components/SectionBar.svelte';
-	import HoldingsCarousel from '$lib/components/HoldingsCarousel.svelte';
-	import TradingStrip from '$lib/components/TradingStrip.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
-	import SectionPlaceholder from '$lib/components/SectionPlaceholder.svelte';
-	import StocksTab from '$lib/components/StocksTab.svelte';
-	import BusinessesTab from '$lib/components/BusinessesTab.svelte';
-	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
-	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
-	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
-	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
+	import { timeTracker } from '$lib/time-tracker.svelte';
 
-	let heatmapLoading = $derived(navigating.to?.url.pathname === '/heatmap');
-	let tagsLoading = $derived(navigating.to?.url.pathname === '/tags');
+	// Public homepage: published notes only, server-rendered so crawlers see
+	// HTML. Both year and month levels toggle with the shared
+	// CollapsibleSection (slide 180 ms, remembered state). No composer, no
+	// admin actions here. Older pages append client-side via the public API.
+	let { data } = $props();
+	// svelte-ignore state_referenced_locally
+	let notes = $state<Note[]>(data.notes ?? []);
+	// svelte-ignore state_referenced_locally
+	let hasMore = $state(data.hasMore ?? false);
+	// svelte-ignore state_referenced_locally
+	let nextCursor = $state<{ created_at: number; id: string } | null>(data.nextCursor ?? null);
+	let loading = $state(false);
+	let loadingMore = $state(false);
+	let error = $state('');
 
-	let summaryLoading = $state(false);
-	let week = $state<string | null>(null);
-	let dismissed = $state(true);
-	let saving = $state(false);
-let showSettings = $state(false);
-let settingsTab = $state<'general' | 'models' | 'database'>('general');
-type Lang = 'en' | 'es' | 'pt';
-type LangConfig = { modelLang: Lang; entriesLang: Lang; chatModel: string; summaryPrompt: string; sections: string[]; contentWidth: string; theme: Theme };
-const DEFAULT_CONFIG: LangConfig = { modelLang: 'en', entriesLang: 'en', chatModel: DEFAULT_CHAT_MODEL_ID, summaryPrompt: '', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH, theme: DEFAULT_THEME };
-let config = $state<LangConfig>(DEFAULT_CONFIG);
-function saveConfig(p: Partial<LangConfig>) {
-	config = { ...config, ...p };
-	if (p.theme !== undefined) applyTheme(p.theme);
-	if (typeof localStorage !== 'undefined') localStorage.setItem('fermentario.config', JSON.stringify(config));
-}
-function langTag(p: Lang): string {
-	return p === 'es' ? 'es-ES' : p === 'pt' ? 'pt-PT' : 'en-US';
-}
-	let reading = $state(false);
-	let utterance: SpeechSynthesisUtterance | null = null;
-	let summaryTimer: ReturnType<typeof setTimeout>;
-	let summaryEpoch = 0;
-
-	const NO_STATE = new Set(['', 'dismissed']);
-	let weekLoading = $state(false);
-	let weekErr = '';
-	let question = $state('');
-	let answering = $state(false);
-	let answerStopped = $state(false);
-	let askAbort: AbortController | null = null;
-	let answer = $state('');
-	let answerSources = $state<AskSource[]>([]);
-	let lastQuestion = $state('');
-	let asks = $state<AskEntry[]>([]);
-	const pager = new NotePager();
-	pager.featured = 'exclude';
-	let notes = $derived(pager.notes);
-	let featured = $state<Note[]>([]);
-	let view = $state<View>('notes');
-	let lastSection = $state<SectionId>('notes');
-	const orderedSections = $derived(
-		sanitizeSectionOrder(config.sections)
-			.map((id) => SECTIONS.find((s) => s.id === id))
-			.filter((s) => s !== undefined)
-	);
-	const fixedSections = $derived(
-		FIXED_SECTIONS.map((id) => SECTIONS.find((s) => s.id === id)).filter((s) => s !== undefined)
-	);
-	/** The composer only knows notes vs ask. Every other section uses note mode. */
-	const composerView = $derived(view === 'ask' ? 'ask' : 'notes');
-	const contentClass = $derived(contentWidthClass(config.contentWidth));
-	function selectSection(id: SectionId) {
-		lastSection = id;
-		view = id;
-	}
-	function toggleAsk() {
-		if (view === 'ask') view = lastSection;
-		else {
-			lastSection = view;
-			view = 'ask';
-		}
-	}
-	let apple = $state(false);
 	onMount(() => {
-		apple = isAppleDevice();
+		void timeTracker.load();
 	});
 
-	// Section shortcuts are a two-key sequence: `G` then `1…5`, with an
-	// 800 ms pending window. Modifier chords are out: Ctrl/⌘ + digits belong
-	// to the browser tab bar and collide with macOS screen capture, so a
-	// sequence is the safe option here. Ctrl/⌘ + Shift + L still focuses the
-	// composer. The hints live in the config Sections list, not on the pills.
-	let pendingSectionKey = $state(false);
-	let pendingSectionTimer: ReturnType<typeof setTimeout> | undefined;
-	function handleViewShortcut(e: KeyboardEvent) {
-		if (search.open) return;
-		const t = e.target as HTMLElement | null;
-		if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
-		if (e.isComposing) return;
-		if (pendingSectionKey) {
-			clearTimeout(pendingSectionTimer);
-			pendingSectionTimer = undefined;
-			pendingSectionKey = false;
-			const n = Number(e.key);
-			if (!e.metaKey && !e.ctrlKey && !e.altKey && n >= 1 && n <= 5 && orderedSections[n - 1]) {
-				selectSection(orderedSections[n - 1].id);
-				e.preventDefault();
-			}
-			return;
+	const publicConfig = $derived(
+		data.publicConfig ?? {
+			siteTitle: 'fermentario',
+			description: 'Published notes.',
+			notesEnabled: true,
+			showCoverImages: true,
+			updatedAt: 0
 		}
-		if (e.metaKey || e.ctrlKey) {
-			if (!e.shiftKey || e.altKey) return;
-			if (showSettings) return;
-			if (e.key === 'l' || e.key === 'L') focusComposer();
-			return;
-		}
-		if (!e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'G')) {
-			pendingSectionKey = true;
-			pendingSectionTimer = setTimeout(() => (pendingSectionKey = false), 800);
-		}
-	}
+	);
+	const locale = $derived(dayLocale('en'));
 
-	function focusComposer() {
-		const el = document.getElementById('composer-field');
-		if (!(el instanceof HTMLTextAreaElement)) return;
-		el.focus();
-		el.setSelectionRange(el.value.length, el.value.length);
-	}
-
-	let restoreName = $state('');
-	let restorePhase = $state<RestorePhase | null>(null);
-	let restoreError = $state('');
-	let restoreElapsed = $state(0);
-	let restoreTimer: ReturnType<typeof setInterval> | undefined;
-	type RestoreCounts = {
-		notes: number;
-		tags: number;
-		recaps: number;
-		asks: number;
-		todoGroups: number;
-		todoItems: number;
-		principles: number;
-		holdings: number;
-		goals: number;
-		stocks: number;
-	};
-
-	function closeRestore() {
-		restorePhase = null;
-		restoreError = '';
-		restoreName = '';
-	}
-
-	let copied = $state(false);
-	let copyText = $state<string | null>(null);
-
-	async function copyLoadedNotes() {
-		const text = formatNotesForClipboard(notes, config.entriesLang);
-		if (!text) return;
+	async function loadMore() {
+		if (loadingMore || !hasMore) return;
+		loadingMore = true;
 		try {
-			if (!navigator.clipboard) throw new Error('clipboard unavailable');
-			await navigator.clipboard.writeText(text);
-			copied = true;
-			setTimeout(() => (copied = false), 1500);
-		} catch {
-			// Plain-HTTP origins have no navigator.clipboard: show the text.
-			copyText = text;
-		}
-	}
-
-	async function runRestore(file: File) {
-		showSettings = false;
-		view = 'notes';
-		lastSection = 'notes';
-		restoreName = file.name;
-		restoreError = '';
-		restorePhase = 'uploading';
-		// The recap belongs to the journal that is being replaced. Drop it and
-		// ignore any summary response that started before the import.
-		summaryEpoch += 1;
-		clearTimeout(summaryTimer);
-		summaryLoading = false;
-		week = null;
-		dismissed = true;
-		const started = Date.now();
-		restoreElapsed = 0;
-		restoreTimer = setInterval(() => (restoreElapsed = Math.floor((Date.now() - started) / 1000)), 1000);
-		try {
-			const body = new FormData();
-			body.append('file', file);
-			const res = await fetch('/api/import', { method: 'POST', body });
-			if (!res.body) throw new Error('The server did not answer.');
-			const reader = res.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = '';
-			let counts: RestoreCounts | null = null;
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				buffer += decoder.decode(value, { stream: true });
-				const events = buffer.split('\n\n');
-				buffer = events.pop() ?? '';
-				for (const e of events) {
-					for (const line of e.split('\n')) {
-						if (!line.startsWith('data: ')) continue;
-						const d = JSON.parse(line.slice(6)) as {
-							phase?: RestorePhase;
-							error?: string;
-							done?: boolean;
-							counts?: RestoreCounts;
-						};
-						if (d.phase) restorePhase = d.phase;
-						else if (d.error) throw new Error(String(d.error));
-						else if (d.done) {
-							restorePhase = 'done';
-							counts = d.counts ?? null;
-						}
-					}
-				}
-			}
-			await pager.open();
-			await loadAsks();
-			await tagColors.reload();
-			invalidateTagChoices();
-			// The import already copied weekly_recaps and cleared the server
-			// memo. Refresh silently: forcing here regenerated the recap and
-			// re-opened the hidden weekly card.
-			refreshSummaryAnswer(false, null, false);
-			showToast(
-				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.holdings ?? 0} holdings, ${counts?.goals ?? 0} goals, ${counts?.stocks ?? 0} stock items, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
-				'success'
-			);
-			setTimeout(closeRestore, 2500);
+			const q = nextCursor
+				? `&before=${nextCursor.created_at}&before_id=${encodeURIComponent(nextCursor.id)}`
+				: '';
+			const res = await fetch(`/api/public/notes?limit=50${q}`);
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to load notes.');
+			notes = [...notes, ...((d.notes as Note[]) ?? [])];
+			hasMore = !!d.hasMore;
+			nextCursor = (d.nextCursor as typeof nextCursor) ?? null;
 		} catch (e) {
-			restoreError = (e as Error)?.message ?? 'Restore failed.';
+			error = (e as Error)?.message ?? 'Failed to load notes.';
 		} finally {
-			clearInterval(restoreTimer);
-			restoreTimer = undefined;
+			loadingMore = false;
 		}
 	}
-	let text = $state('');
-	let listening = $state(false);
 
-	$effect(() => {
-		loadNotes();
-		void loadFeatured();
-		void tagColors.load();
-		void loadHoldings();
-		refreshSummaryAnswer(true, null, false);
-		void loadAsks();
-		// Restore the unsaved composer text after SPA navigation or a reload.
-		const draft = loadDraft();
-		text = draft.note;
-		question = draft.ask;
-		// And the section the user was in, so Back from a detail page lands
-		// back in To-Do (or Ask) instead of always on Notes.
-		try {
-			const v = sessionStorage.getItem('fermentario.view');
-			const ids = SECTIONS.map((s) => s.id);
-			if (v === 'ask') view = 'ask';
-			else if (v && (ids as string[]).includes(v)) {
-				lastSection = v as SectionId;
-				view = v as SectionId;
+	function monthKey(d: Date): string {
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+	}
+
+	function monthLabel(d: Date): string {
+		return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+	}
+
+	type MonthGroup = { key: string; label: string; items: Note[] };
+	type YearGroup = { year: string; months: MonthGroup[]; count: number };
+
+	const years = $derived.by((): YearGroup[] => {
+		const byYear = new Map<string, Map<string, MonthGroup>>();
+		for (const n of notes) {
+			const d = new Date(n.created_at);
+			const y = String(d.getFullYear());
+			const k = monthKey(d);
+			let months = byYear.get(y);
+			if (!months) {
+				months = new Map();
+				byYear.set(y, months);
 			}
-		} catch {}
+			let m = months.get(k);
+			if (!m) {
+				m = { key: k, label: monthLabel(d), items: [] };
+				months.set(k, m);
+			}
+			m.items.push(n);
+		}
+		return [...byYear.entries()]
+			.sort((a, b) => Number(b[0]) - Number(a[0]))
+			.map(([year, months]) => {
+				const ordered = [...months.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
+				return { year, months: ordered, count: ordered.reduce((c, m) => c + m.items.length, 0) };
+			});
 	});
 
-	$effect(() => {
-		try {
-			sessionStorage.setItem('fermentario.view', view);
-		} catch {}
-	});
-
-	// Holdings auto-refresh: every 5 minutes while the tab is visible. Quiet
-	// and forced — without force the server would answer from its daily cache
-	// and the spinner would update nothing. The guard skips hidden tabs and
-	// in-flight refreshes; any manual refresh restarts the clock. onMount,
-	// not $effect: the tick reads refresh state that must not re-arm the
-	// timer on every refresh.
-	onMount(() => {
-		if (typeof document === 'undefined') return;
-		const tick = () => {
-			if (document.hidden) return;
-			if (holdingsRefreshing) return;
-			if (Date.now() - lastHoldingsRefresh < HOLDINGS_AUTO_MS) return;
-			void refreshHoldings(true, true);
-		};
-		const timer = setInterval(tick, 30_000);
-		const onVisible = () => {
-			if (!document.hidden) tick();
-		};
-		document.addEventListener('visibilitychange', onVisible);
-		return () => {
-			clearInterval(timer);
-			document.removeEventListener('visibilitychange', onVisible);
-		};
-	});
-
-	$effect(() => {
-	if (typeof localStorage === 'undefined') return;
-	const raw = localStorage.getItem('fermentario.config');
-	if (!raw) return;
-	try {
-		const p = JSON.parse(raw) as Partial<LangConfig>;
-		if ((p.modelLang === 'en' || p.modelLang === 'es' || p.modelLang === 'pt') && (p.entriesLang === 'en' || p.entriesLang === 'es' || p.entriesLang === 'pt')) {
-			const theme = sanitizeTheme(p.theme);
-			config = {
-				modelLang: p.modelLang as Lang,
-				entriesLang: p.entriesLang as Lang,
-				chatModel: typeof p.chatModel === 'string' && CHAT_MODELS.some((m) => m.id === p.chatModel) ? p.chatModel : DEFAULT_CHAT_MODEL_ID,
-				summaryPrompt: typeof p.summaryPrompt === 'string' ? p.summaryPrompt : '',
-					sections: sanitizeSectionOrder(p.sections),
-					contentWidth: sanitizeContentWidth(p.contentWidth),
-					theme
-			};
-			applyTheme(theme);
-		}
-	} catch {}
-});
-
-	async function loadNotes() {
-		try {
-			await pager.open();
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to load notes.');
-		}
-	}
-
-	async function loadFeatured() {
-		try {
-			const d = await (await loading.track(fetch('/api/notes?limit=100&featured=only'))).json();
-			featured = Array.isArray(d.notes) ? d.notes : [];
-		} catch {
-			showToast('Failed to load featured notes.');
-		}
-	}
-
-	async function handleFeature(n: Note) {
-		try {
-			const res = await loading.track(fetch(`/api/notes/${n.id}`, {
-				method: 'PATCH',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ featured: !n.featured })
-			}));
-			const d = await res.json();
-			if (!res.ok) throw new Error(d?.error ?? 'Failed to update note.');
-			const saved = d.note as Note;
-			if (saved.featured) {
-				pager.remove(n.id);
-				featured = [saved, ...featured.filter((f) => f.id !== saved.id)];
-			} else {
-				// Back into the chronological list at the top; the next full
-				// load restores the exact position. Never refetch here: that
-				// collapses accumulated pages and loses the scroll position.
-				featured = featured.filter((f) => f.id !== saved.id);
-				pager.prepend(saved);
-			}
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to update note.');
-		}
-	}
-
-	async function loadAsks() {
-		try {
-			const d = await (await loading.track(fetch('/api/asks'))).json();
-			asks = Array.isArray(d.asks) ? d.asks : [];
-		} catch {}
-	}
-
-	let holdings = $state<HoldingsSummary | null>(null);
-	let holdingsRefreshing = $state(false);
-	let confirmingHolding = $state<Holding | null>(null);
-	let holdingsAutoRefreshed = false;
-	let lastHoldingsRefresh = $state(0);
-	const HOLDINGS_AUTO_MS = 5 * 60 * 1000;
-
-	async function loadHoldings() {
-		try {
-			const d = await (await fetch('/api/holdings')).json();
-			if (!Array.isArray(d.holdings)) return;
-			holdings = d as HoldingsSummary;
-			// Every non-cash quote comes from the market: ask on load, once
-			// per session. The server answers from cache until a quote is a
-			// day old, so this costs one request, not one network fetch.
-			if (
-				!holdingsAutoRefreshed &&
-				holdings.holdings.some((h) => h.category !== 'cash' && (h.priceAuto || h.price === null))
-			) {
-				holdingsAutoRefreshed = true;
-				void refreshHoldings(true);
-			}
-		} catch {
-			showToast('Failed to load holdings.');
-		}
-	}
-
-	async function createHolding(h: { ticker: string; amount: number; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }): Promise<boolean> {
-		try {
-			const res = await fetch('/api/holdings', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(h)
-			});
-			const d = await res.json();
-			if (!res.ok) throw new Error(d?.error ?? 'Failed to add holding.');
-			holdings = d.summary as HoldingsSummary;
-			// New tickers start with no quote; fill it without blocking the
-			// modal or showing a toast. The daily cache still applies.
-			void refreshHoldings(true);
-			return true;
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to add holding.');
-			return false;
-		}
-	}
-
-	async function updateHolding(
-		id: string,
-		patch: { ticker: string; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }
-	): Promise<boolean> {
-		try {
-			const res = await fetch(`/api/holdings/${id}`, {
-				method: 'PATCH',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(patch)
-			});
-			const d = await res.json();
-			if (!res.ok) throw new Error(d?.error ?? 'Failed to update holding.');
-			holdings = d.summary as HoldingsSummary;
-			// A ticker or category change clears the quote; fetch the new one
-			// quietly. Amount-only edits stay served from the cache.
-			void refreshHoldings(true);
-			return true;
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to update holding.');
-			return false;
-		}
-	}
-
-	async function loadHoldingActions(id: string): Promise<HoldingAction[] | null> {
-		try {
-			const res = await fetch(`/api/holdings/${id}/actions`);
-			const d = await res.json();
-			if (!res.ok) throw new Error(d?.error ?? 'Failed to load actions.');
-			return Array.isArray(d.actions) ? (d.actions as HoldingAction[]) : null;
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to load actions.');
-			return null;
-		}
-	}
-
-	async function recordHoldingAction(
-		id: string,
-		kind: 'buy' | 'sell',
-		amount: number,
-		price: number | null
-	): Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }> {
-		try {
-			const res = await fetch(`/api/holdings/${id}/actions`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ kind, amount, price })
-			});
-			const d = await res.json();
-			if (!res.ok) return { ok: false, error: d?.error ?? 'Failed to record the action.' };
-			if (d.summary) holdings = d.summary as HoldingsSummary;
-			return { ok: true, actions: Array.isArray(d.actions) ? (d.actions as HoldingAction[]) : undefined };
-		} catch {
-			return { ok: false, error: 'Failed to record the action.' };
-		}
-	}
-
-	async function updateGoals(
-		pct: { btc: number; fii: number; cash: number },
-		values: { btc: number | null; fii: number | null; cash: number | null }
-	): Promise<boolean> {
-		try {
-			const res = await fetch('/api/holdings/goals', {
-				method: 'PUT',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ pct, values })
-			});
-			const d = await res.json();
-			if (!res.ok) throw new Error(d?.error ?? 'Failed to save goals.');
-			holdings = d.summary as HoldingsSummary;
-			return true;
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to save goals.');
-			return false;
-		}
-	}
-
-	async function deleteHolding(h: Holding) {
-		try {
-			const res = await fetch(`/api/holdings/${h.id}`, { method: 'DELETE' });
-			if (!res.ok) throw new Error('Failed to delete holding.');
-			holdings = ((await res.json()).summary ?? null) as HoldingsSummary | null;
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to delete holding.');
-		}
-	}
-
-	async function refreshHoldings(quiet = false, force = false) {
-		if (holdingsRefreshing) return;
-		holdingsRefreshing = true;
-		// Every refresh — manual or automatic — moves the 5-minute auto tick
-		// out, so a manual tap is never followed by a duplicate auto fetch.
-		lastHoldingsRefresh = Date.now();
-		try {
-			const res = await fetch('/api/holdings', {
-				method: 'PUT',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(force ? { force: true } : {})
-			});
-			const d = await res.json();
-			if (d.summary) holdings = d.summary as HoldingsSummary;
-			if (d.error && !quiet) showToast(`Prices not refreshed — ${d.error}. Showing cached values.`);
-		} catch {
-			if (!quiet) showToast('Prices not refreshed — showing cached values.');
-		} finally {
-			holdingsRefreshing = false;
-		}
-	}
-
-	function refreshSummaryAnswer(force: boolean, keepAnswer: string | null, withLoading: boolean) {clearTimeout(summaryTimer);
-		const epoch = summaryEpoch;
-		if (withLoading) summaryLoading = true;
-		summaryTimer = setTimeout(async () => {
-			const started = performance.now();
-			const custom = config.summaryPrompt.trim();
-			try {
-				const d = await (await fetch('/api/summary?' + (force ? 'rf=1&' : '') + 'lang=' + config.modelLang + '&model=' + config.chatModel + (custom ? '&prompt=' + encodeURIComponent(custom) : ''), { headers: {} })).json();
-				if (epoch !== summaryEpoch) return;
-				const rest = withLoading ? Math.max(0, 900 - (performance.now() - started)) : 0;
-				if (rest > 0) await new Promise((r) => setTimeout(r, rest));
-				if (epoch !== summaryEpoch) return;
-				week = d.exists ? d.week : null;
-				if (withLoading && d.exists) dismissed = false;
-			} catch {
-				// fall through to finally
-			} finally {
-				if (epoch === summaryEpoch) {
-					summaryLoading = false;
-					weekLoading = false;
-				}
-			}
-		}, force ? 0 : 500);
-	}
-
-	function readWeekly() {
-		if (!week || reading || reading) return;
-		reading = true;
-		utterance = new SpeechSynthesisUtterance(week);
-		utterance.rate = 0.95;
-		utterance.lang = langTag(config.modelLang);
-		utterance.onend = () => (reading = false);
-		window.speechSynthesis.speak(utterance);
-	}
-	function dismissWeekly() {
-		dismissed = true;
-		reading = false;
-		window.speechSynthesis.cancel();
-	}
-
-	function handleNote(cd: string, createdAt?: number) {
-		if (!cd.trim() || NO_STATE.has(cd)) return;
-		view = 'notes';
-		lastSection = 'notes';
-		saving = true;
-		const { content, tags } = splitTrailingHashtags(cd);
-		if (!content) {
-			saving = false;
-			showToast('A note needs text before the hashtags.');
-			return;
-		}
-		const now = Date.now();
-		const stamp = createdAt && Number.isFinite(createdAt) ? Math.min(createdAt, now) : now;
-		const last = pager.notes[pager.notes.length - 1];
-		// A backdated note outside the loaded cursor range is stored, but it
-		// must not jump into a gap the pager has not fetched yet.
-		const fitsLoadedPage = !last || !pager.hasMore || stamp >= last.created_at;
-		const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		if (fitsLoadedPage) {
-			pager.insertSorted({ id: tempId, content, created_at: stamp, updated_at: stamp, tags, pending: true });
-		}
-		fetch('/api/notes', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ content: cd, created_at: stamp })
-		})
-			.then(async (r) => {
-				const d = await r.json();
-				if (!r.ok) throw new Error(d?.error ?? 'Failed to save note.');
-				const saved: Note = d.note;
-				// The card is still listed under the temp id, so it must be
-				// swapped, not patched by the server id.
-				pager.replace(tempId, saved);
-				if (!fitsLoadedPage) showToast('Note saved. Scroll down to find it.', 'success');
-				else showToast('Note saved.', 'success');
-				clearDraft();
-				invalidateTagChoices();
-				refreshSummaryAnswer(false, null, false);
-				setTimeout(() => {
-					if (!notes.some((n) => n.pending)) void pager.sync().catch(() => {});
-				}, 4000);
-			})
-			.catch((e) => {
-				pager.remove(tempId);
-				text = cd;
-				showToast((e as Error)?.message ?? 'Failed to save note.');
-			})
-			.finally(() => (saving = false));
-	}
-
-	function handleDelete(id: string) {
-		loading.track(fetch(`/api/notes/${id}`, { method: 'DELETE' }))
-			.then((r) => r.json())
-			.then(() => {
-				pager.remove(id);
-				featured = featured.filter((f) => f.id !== id);
-				refreshSummaryAnswer(false, null, false);
-			})
-			.catch((e) => showToast((e as Error)?.message ?? 'Failed to delete note.'));
-	}
-
-	async function removeTag(noteId: string, tag: string) {
-		try {
-			const res = await loading.track(fetch(
-				`/api/notes/${noteId}/tags/${encodeURIComponent(tag)}`,
-				{ method: 'DELETE' }
-			));
-			if (!res.ok) throw new Error('Failed to remove the tag.');
-			const note = notes.find((n) => n.id === noteId);
-			if (!note) return;
-			// Always patch, even when no tags remain. Removing the row is the
-			// tag page's behavior (the note no longer matches its filter);
-			// on the timeline the note stays with an empty tag list.
-			pager.patch({ ...note, tags: (note.tags ?? []).filter((t) => t !== tag) });
-			featured = featured.map((f) =>
-				f.id === noteId ? { ...f, tags: (f.tags ?? []).filter((t) => t !== tag) } : f
-			);
-		} catch (e) {
-			showToast((e as Error)?.message ?? 'Failed to remove the tag.');
-		}
-	}
-
-	async function handleEdit(id: string, content: string, video?: string, createdAt?: number) {
-		const body: { content: string; video?: string; created_at?: number } = { content };
-		if (video !== undefined) body.video = video;
-		if (createdAt !== undefined) body.created_at = createdAt;
-		const res = await loading.track(fetch(`/api/notes/${id}`, {
-			method: 'PATCH',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify(body)
-		}));
-		const d = await res.json();
-		if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
-		const note = d.note as Note;
-		const wasLoaded = pager.notes.some((n) => n.id === note.id);
-		if (wasLoaded && !pager.replaceSorted(note)) {
-			showToast('Note saved. Scroll down to find it.', 'success');
-		}
-		featured = featured
-			.map((f) => (f.id === note.id ? note : f))
-			.sort((a, b) => b.created_at - a.created_at);
-		invalidateTagChoices();
-		refreshSummaryAnswer(false, null, false);
-	}
-
-	async function handleAsk(q: string) {
-		if (!q.trim()) return;
-		view = 'ask';
-		answering = true;
-		answerStopped = false;
-		lastQuestion = q;
-		answer = '';
-		answerSources = [];
-		const controller = new AbortController();
-		askAbort = controller;
-		try {
-			const res = await fetch('/api/chat', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ question: q, history: [] }),
-				signal: controller.signal
-			});
-			if (!res.ok || !res.body) throw new Error(`Ask failed (HTTP ${res.status})`);
-			const reader = res.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = '';
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				buffer += decoder.decode(value, { stream: true });
-				const events = buffer.split('\n\n');
-				buffer = events.pop() ?? '';
-				for (const e of events) {
-					for (const line of e.split('\n')) {
-						if (!line.startsWith('data: ')) continue;
-					const data = JSON.parse(line.slice(6)) as { t?: string; error?: string; done?: boolean; full?: string; entryId?: string; sources?: AskSource[] };
-					if (data.t) answer += data.t;
-					else if (data.error) throw new Error(String(data.error));
-					else if (data.done) {
-						if (data.sources) answerSources = data.sources;
-						const finalText = (data.full ?? answer).trim();
-						if (data.entryId && finalText) {
-							// Newest first, like the notes timeline.
-							asks = [{
-								id: data.entryId,
-								question: q,
-								answer: finalText,
-								sources: data.sources ?? [],
-								created_at: Date.now()
-							} as AskEntry, ...asks];
-							// The saved card is now the single source of truth. Leaving
-							// `answer` set would render the same Q&A twice: once from
-							// `asks` and once from the live block.
-							answer = '';
-							answerSources = [];
-							lastQuestion = '';
-							clearDraft();
-						} else {
-							// Nothing was persisted, so keep the live card visible.
-							answer = finalText;
-						}
-					}
-					}
-				}
-			}
-		} catch (e) {
-			if (answerStopped) return;
-			console.error('Ask failed:', e);
-			answer = 'Something went wrong asking the archive.';
-		} finally {
-			answering = false;
-			askAbort = null;
-		}
-	}
-
-	function stopAsk() {
-		if (!askAbort) return;
-		answerStopped = true;
-		answering = false;
-		askAbort.abort();
-		askAbort = null;
-	}
-
-	async function handleDeleteAsk(id: string) {
-		asks = asks.filter((a) => a.id !== id);
-		try {
-			await fetch(`/api/asks/${encodeURIComponent(id)}`, { method: 'DELETE' });
-		} catch {}
-	}
-
-	function onListenIm(on: boolean) {
-		listening = on;
-	}
-
-	$effect(() => {
-		void sessionStorage;
-	});
-
-	function handleAskWeeklyRead() {
-		if (week && !reading) readWeekly();
-		else dismissWeekly();
-	}
-
-	// ensure fallback placeholder fns round out props
-	function onQuestionIm(q2: string) {
-		question = q2;
-		saveDraft({ note: text, ask: q2 });
-	}
-	function onTextIm(t2: string) {
-		text = t2;
-		saveDraft({ note: t2, ask: question });
+	function excerpt(content: string, max = 160): string {
+		const flat = content.replace(/\s+/g, ' ').trim();
+		return flat.length <= max ? flat : `${flat.slice(0, max).trim()}…`;
 	}
 </script>
 
 <svelte:head>
-	<title>fermentario</title>
+	<title>{publicConfig.siteTitle}</title>
+	<meta name="description" content={publicConfig.description} />
+	<link rel="canonical" href="{data.origin}/" />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content={publicConfig.siteTitle} />
+	<meta property="og:description" content={publicConfig.description} />
+	<meta property="og:url" content="{data.origin}/" />
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content={publicConfig.siteTitle} />
+	<meta name="twitter:description" content={publicConfig.description} />
 </svelte:head>
 
 <main class="min-h-dvh">
-	<div class="mx-auto {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6">
-		<header class="mb-5">
-			<div class="flex flex-wrap items-center gap-2">
-				<a href="/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmaps</a>
-				<a href="/tags" aria-disabled={tagsLoading} aria-busy={tagsLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {tagsLoading ? 'pointer-events-none opacity-40' : ''}">{#if tagsLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Tags class="h-3.5 w-3.5" />{/if} Tags</a>
-				<button
-					type="button"
-					class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					aria-label="Search"
-					aria-haspopup="dialog"
-					aria-keyshortcuts="Meta+K Control+K"
-					onclick={() => search.openSearch()}
-				>
-					<Search class="h-3.5 w-3.5" />
-					<span class="hidden sm:inline">Search</span>
-					<Kbd keys={apple ? ['⌘', 'K'] : ['Ctrl', 'K']} />
-				</button>
-				<span class="ml-auto inline-flex items-center gap-2">
-					<button
-						type="button"
-						class="inline-flex items-center gap-1 rounded-full bg-stone-900 dark:bg-stone-700 px-3 py-1 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
-						aria-label={view === 'ask' ? 'Close Ask' : 'Ask the archive'}
-						onclick={toggleAsk}
-					>{#if view === 'ask'}<span aria-hidden="true">×</span> Close{:else}<MessageCircle class="h-3.5 w-3.5" /> Ask{/if}</button>
-					<button
-						type="button"
-						class="grid h-7 w-7 place-items-center rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-						aria-label="Settings"
-						onclick={() => (showSettings = true)}
-					><Settings class="h-3.5 w-3.5" /></button>
-				</span>
-			</div>
+	<div class="mx-auto max-w-2xl px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
+		<TimeTrackerBar widthClass="max-w-2xl" />
+		<header class="mb-5 flex items-center justify-between gap-2">
+			<h1 class="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">{publicConfig.siteTitle}</h1>
+			<a
+				href="/admin/notes"
+				class="rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+			>Admin</a>
 		</header>
 
-		<section class="mb-4" aria-label="Holdings">
-			<HoldingsCarousel
-				summary={holdings}
-				refreshing={holdingsRefreshing}
-				onCreate={createHolding}
-				onUpdate={updateHolding}
-				onDelete={(h) => (confirmingHolding = h)}
-				onLoadActions={loadHoldingActions}
-				onRecordAction={recordHoldingAction}
-				onRefresh={() => void refreshHoldings(false, true)}
-				onGoals={updateGoals}
-			/>
-		</section>
-
-		<section class="mb-4" aria-label="Trading">
-			<TradingStrip
-				onOpen={() => {
-					try {
-						sessionStorage.setItem('fermentario.business', 'trading');
-					} catch {}
-					selectSection('businesses');
-				}}
-				onError={(m) => showToast(m)}
-			/>
-		</section>
-
-		<div class="mb-4" role="tablist" aria-label="Views">
-			<SectionBar
-				sections={orderedSections}
-				fixed={fixedSections}
-				active={view === 'ask' ? lastSection : view}
-				onSelect={selectSection}
-				onReorder={(ids) => saveConfig({ sections: ids })}
-			/>
-		</div>
-
-		{#if view === 'notes'}
-			{#if week && !dismissed}
-				<section class="mt-5 mb-5">
-					<Weekly {summaryLoading} {week} {reading} onRead={readWeekly} onDismiss={dismissWeekly} />
+		{#if loading}
+			<p class="py-10 text-center text-sm text-stone-500 dark:text-stone-400">Loading published notes…</p>
+		{:else if error}
+			<p class="py-10 text-center text-sm text-rose-600 dark:text-rose-400">{error}</p>
+		{:else if notes.length === 0}
+			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400">
+				Nothing published yet.
+			</p>
+		{:else}
+			{#each years as y (y.year)}
+				<section class="mb-4" aria-label="Published in {y.year}">
+					<CollapsibleSection label="{y.year} · {y.count}" storageKey="ferm:pub-year-{y.year}">
+						{#each y.months as m (m.key)}
+							<div class="mb-3">
+								<CollapsibleSection label="{m.label} · {m.items.length}" storageKey="ferm:pub-month-{m.key}">
+									<ul class="space-y-2">
+										{#each m.items as n (n.id)}
+											<li>
+												<a
+													href="/notes/{n.id}"
+													class="block rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70 px-4 py-3 hover:bg-stone-100 dark:hover:bg-stone-800"
+												>
+													{#if n.coverId && publicConfig.showCoverImages}<img src="/api/notes/photos/{n.coverId}" alt="" loading="lazy" class="mb-2 h-32 w-full rounded-xl object-cover" />{/if}
+													<p class="text-[15px] leading-snug text-stone-800 dark:text-stone-200">{excerpt(n.content)}</p>
+													<p class="mt-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+														{new Date(n.created_at).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}
+														{#if (n.commentCount ?? 0) > 0} · {n.commentCount} comments{/if}
+													</p>
+													{#if (n.linkedNotes?.length ?? 0) > 0}
+														<div class="mt-1.5">
+															<NoteLinkPills links={n.linkedNotes ?? []} />
+														</div>
+													{/if}
+												</a>
+											</li>
+										{/each}
+									</ul>
+								</CollapsibleSection>
+							</div>
+						{/each}
+					</CollapsibleSection>
 				</section>
-			{/if}
-
-			{#if featured.length > 0}
-				<section class="mt-5 mb-5" aria-label="Featured notes">
-					<Timeline
-						notes={featured}
-						{summaryLoading}
-						onDelete={handleDelete}
-						onEdit={handleEdit}
-						onFeature={handleFeature}
-						onLoadMore={() => pager.loadMore()}
-						hasMore={false}
-						loadingMore={false}
-						onRemoveTag={removeTag}
-						lang={config.entriesLang}
-					/>
-				</section>
-			{/if}
-
-			<section>
-				<div class="mb-2 flex items-center justify-between gap-2 px-1">
-					<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{notes.length} notes loaded</span>
+			{/each}
+			{#if hasMore}
+				<div class="flex justify-center pb-2">
 					<button
 						type="button"
-						class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-[11px] font-medium text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40"
-						disabled={notes.length === 0}
-						onclick={copyLoadedNotes}
-					><Copy class="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy all'}</button>
+						class="rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-4 py-2 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-60"
+						disabled={loadingMore}
+						onclick={() => void loadMore()}
+					>{loadingMore ? 'Loading…' : 'Load more'}</button>
 				</div>
-				<Timeline
-				notes={notes}
-				{summaryLoading}
-				onDelete={handleDelete}
-				onEdit={handleEdit}
-				onFeature={handleFeature}
-				onLoadMore={() => pager.loadMore()}
-				hasMore={pager.hasMore}
-				loadingMore={pager.loading}
-				onRemoveTag={removeTag}
-				lang={config.entriesLang}
-			/>
-			</section>
-		{:else if view === 'ask'}
-			<AskTab
-				{asks}
-				{lastQuestion}
-				{answer}
-				{answerSources}
-				{answering}
-				{answerStopped}
-				onDelete={handleDeleteAsk}
-			/>
-		{:else if view === 'todo'}
-			<TodoTab onError={(m) => showToast(m)} lang={config.entriesLang} widthClass={contentClass} />
-		{:else if view === 'principles'}
-			<PrinciplesTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
-		{:else if view === 'stocks'}
-			<StocksTab onError={(m) => showToast(m)} widthClass={contentClass} lang={config.entriesLang} />
-		{:else if view === 'businesses'}
-			<BusinessesTab onError={(m) => showToast(m)} lang={config.entriesLang} widthClass={contentClass} />
-		{:else}
-			<SectionPlaceholder label={SECTIONS.find((s) => s.id === view)?.label ?? view} />
-		{/if}
-
-		{#if copyText !== null}
-			<CopyFallback text={copyText} onClose={() => (copyText = null)} />
-		{/if}
-
-		{#if confirmingHolding}
-			<ConfirmDialog
-				title="Delete this holding?"
-				message="{confirmingHolding.ticker} and its history leave the carousel. The notes stay."
-				confirmLabel="Delete holding"
-				cancelLabel="Cancel"
-				confirmTone="danger"
-				onConfirm={() => { const h = confirmingHolding; confirmingHolding = null; if (h) void deleteHolding(h); }}
-				onCancel={() => (confirmingHolding = null)}
-			/>
-		{/if}
-
-		{#if restorePhase}
-			<RestoreOverlay
-				fileName={restoreName}
-				phase={restorePhase}
-				elapsed={restoreElapsed}
-				error={restoreError}
-				onClose={closeRestore}
-			/>
-		{/if}
-
-		{#if view === 'notes' || view === 'ask'}
-		<Composer
-			onNote={handleNote}
-			onAsk={handleAsk}
-			onStop={stopAsk}
-			view={composerView}
-			{listening} onListen={onListenIm}
-			{question} onQuestion={onQuestionIm}
-			{answering}
-			{text} onText={onTextIm}
-			{saving}
-			lang={config.entriesLang}
-			{apple}
-			widthClass={contentClass}
-		/>
-		{/if}
-
-		{#if showSettings}
-			<SettingsModal
-				modelLang={config.modelLang}
-				entriesLang={config.entriesLang}
-				contentWidth={sanitizeContentWidth(config.contentWidth)}
-				sections={orderedSections}
-				theme={config.theme}
-				{summaryLoading}
-				{week}
-				tab={settingsTab}
-				onTab={(t) => (settingsTab = t)}
-				onClose={() => (showSettings = false)}
-				onRerun={() => { void refreshSummaryAnswer(true, null, true); }}
-				model={config.chatModel}
-				models={CHAT_MODELS}
-				prompt={config.summaryPrompt}
-				onPromptChange={(value) => saveConfig({ summaryPrompt: value })}
-				onModelChange={(id) => {
-					saveConfig({ chatModel: id });
-					void fetch('/api/status', {
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ kind: 'chatModel', id })
-					});
-				}}
-				onSaveLanguages={(p) => saveConfig(p)}
-				onModelLang={(v) => saveConfig({ modelLang: v })}
-				onWidth={(w) => saveConfig({ contentWidth: w })}
-				onSections={(ids) => saveConfig({ sections: ids })}
-				onTheme={(t) => saveConfig({ theme: t })}
-				onRestoreStart={runRestore}
-			/>
+			{/if}
 		{/if}
 	</div>
 </main>
-
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape') { showSettings = false; } handleViewShortcut(e); }} />

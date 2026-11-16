@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { parseDecimal } from '$lib/numbers';
 	import StockRegistryField from '$lib/components/StockRegistryField.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { StockCategoryGoal } from '$lib/types';
@@ -81,8 +82,8 @@
 		const hasGoal = amount.trim() !== '';
 		let goalBody: { people: number; amount: number; unit: string; note: string } | null = null;
 		if (hasGoal) {
-			const p = Math.trunc(Number(people.trim().replace(',', '.')));
-			const a = Number(amount.trim().replace(',', '.'));
+			const p = Math.trunc(parseDecimal(people));
+			const a = parseDecimal(amount);
 			if (!Number.isFinite(p) || p < 1 || p > 999) {
 				error = 'People must be a whole number from 1 to 999.';
 				return;
@@ -202,7 +203,6 @@
 								type="number"
 								min="0"
 								step="0.01"
-								inputmode="decimal"
 								placeholder="Empty = no goal"
 								value={amount}
 								oninput={(e) => (amount = e.currentTarget.value)}

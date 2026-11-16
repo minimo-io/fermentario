@@ -39,8 +39,8 @@
 
 	// Add shortcut: desktop pointers only. ⌘⇧A on Mac, Ctrl+Shift+A
 	// elsewhere — the same as tasks and principles.
-	const isMac = navigator.userAgent.includes('Mac');
-	const canKeyShortcut = matchMedia('(hover: hover) and (pointer: fine)').matches;
+	const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
+	const canKeyShortcut = typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 	const addShortcutKeys = isMac ? ['⌘', '⇧', 'A'] : ['Ctrl', 'Shift', 'A'];
 
 	const TAB_KEY = 'ferm:stocks-tab';
@@ -442,6 +442,22 @@
 		} catch {}
 	}
 
+	function persistGroupKeys() {
+		try {
+			localStorage.setItem(GROUPS_KEY, JSON.stringify(collapsedGroupKeys));
+		} catch {}
+	}
+
+	function collapseAllGroups() {
+		collapsedGroupKeys = consumableBlocks.map((b) => b.key);
+		persistGroupKeys();
+	}
+
+	function expandAllGroups() {
+		collapsedGroupKeys = [];
+		persistGroupKeys();
+	}
+
 	$effect(() => {
 		void load();
 	});
@@ -531,6 +547,23 @@
 							</span>
 						{/if}
 					</button>
+					<span class="flex shrink-0 items-center gap-0.5">
+						<button
+							type="button"
+							class="rounded-full px-2 py-0.5 text-[11px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-700 disabled:opacity-40 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+							aria-label="Collapse all groups"
+							disabled={consumableBlocks.length > 0 && consumableBlocks.every((b) => collapsedGroupKeys.includes(b.key))}
+							onclick={collapseAllGroups}
+						>Collapse all</button>
+						<span class="text-stone-300 dark:text-stone-700" aria-hidden="true">·</span>
+						<button
+							type="button"
+							class="rounded-full px-2 py-0.5 text-[11px] font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-700 disabled:opacity-40 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+							aria-label="Expand all groups"
+							disabled={collapsedGroupKeys.length === 0}
+							onclick={expandAllGroups}
+						>Expand all</button>
+					</span>
 				</div>
 				{#if !statusCollapsed}
 				<div transition:slide={{ duration: motionMs(180) }}>
@@ -946,15 +979,6 @@
 	/>
 {/if}
 
-{#if consuming && viewing !== null}
-	{@const cp = items.find((x) => x.id === (viewing as StockItem).id) ?? (viewing as StockItem)}
-	<StockConsumeModal
-		item={cp}
-		onSubmit={(body) => consume(cp, body)}
-		onClose={() => (consuming = false)}
-	/>
-{/if}
-
 {#if viewing !== null}
 	{@const vp = items.find((x) => x.id === (viewing as StockItem).id) ?? (viewing as StockItem)}
 	{@const vpGroup = consumableGroups.find((g) => g.category === (vp.category || 'No category'))}
@@ -978,6 +1002,15 @@
 			viewing = null;
 		}}
 		onClose={() => (viewing = null)}
+	/>
+{/if}
+
+{#if consuming && viewing !== null}
+	{@const cp = items.find((x) => x.id === (viewing as StockItem).id) ?? (viewing as StockItem)}
+	<StockConsumeModal
+		item={cp}
+		onSubmit={(body) => consume(cp, body)}
+		onClose={() => (consuming = false)}
 	/>
 {/if}
 

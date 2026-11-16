@@ -1,6 +1,7 @@
 import type { SearchHit } from '../search.ts';
 import type { TagCount } from '../tag-cloud.ts';
 import type { SqlDb, SqlValue } from './sqlite';
+import { splitTrailingHashtags } from '../hashtags.ts';
 
 /**
  * Every query the app makes, written once against the `SqlDb` interface.
@@ -18,7 +19,8 @@ export const SCHEMA = `
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL,
 		featured   INTEGER NOT NULL DEFAULT 0,
-		video      TEXT NOT NULL DEFAULT ''
+		video      TEXT NOT NULL DEFAULT '',
+		published  INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS note_vectors (
@@ -128,6 +130,9 @@ export interface Note {
 	updated_at: number;
 	featured: boolean;
 	video: string;
+	published: boolean;
+	/** Cover photo id, when the note has one. */
+	coverId: string | null;
 	tags: string[];
 	/** Comments live in note_comments; batched with the tags query. */
 	commentCount?: number;
@@ -142,6 +147,7 @@ export interface NoteRow {
 	updated_at: number;
 	featured: number;
 	video: string;
+	published: number;
 }
 
 export interface NoteCursor {
@@ -153,6 +159,128 @@ export interface NotePage {
 	notes: Note[];
 	hasMore: boolean;
 	nextCursor: NoteCursor | null;
+}
+
+/** Settings that control the public homepage and published note pages. */
+export interface PublicConfig {
+	siteTitle: string;
+	description: string;
+	notesEnabled: boolean;
+	showCoverImages: boolean;
+	updatedAt: number;
+}
+
+export const PUBLIC_CONFIG_DEFAULT: PublicConfig = {
+	siteTitle: 'fermentario',
+	description: 'Published notes.',
+	notesEnabled: true,
+	showCoverImages: true,
+	updatedAt: 0
+};
+
+/** One Library entry: EPUB metadata plus the last reading position. The
+ *  bytes never ride along — `getBookBytes` is the only reader. */
+export interface Book {
+	id: string;
+	title: string;
+	author: string;
+	size: number;
+	added_at: number;
+	lastCfi: string;
+	lastPct: number;
+	lastChapter: string;
+	lastReadAt: number;
+}
+
+/** A highlight (empty `note`) or a highlight + note, anchored by CFI range. */
+export interface BookNote {
+	id: string;
+	book_id: string;
+	cfi: string;
+	excerpt: string;
+	note: string;
+	color: string;
+	created_at: number;
+	updated_at: number;
+}
+
+/** One page of notes for the drawer: (created_at, id) cursor, newest first,
+ *  plus the full total so the badge stays honest before all pages load. */
+export interface BookNotesPage {
+	notes: BookNote[];
+	hasMore: boolean;
+	nextCursor: { created_at: number; id: string } | null;
+	total: number;
+}
+
+/** What the admin UI may know about a stored service key: that it exists
+ *  and when it was saved. The token and secret never leave the server. */
+export interface ApiCredentialStatus {
+	configured: boolean;
+	updatedAt: number;
+}
+
+/** A Nostr account configured in the app (one for now; the schema allows
+ *  more). The nsec is stored locally in the journal DB and never returned
+ *  to the browser. */
+export interface NostrProfile {
+	id: number;
+	nsec: string;
+	npub: string;
+	name: string;
+	about: string;
+	picture: string;
+	relays: string[];
+	updatedAt: number;
+}
+
+/** One published Nostr event kept locally. `isReply` marks events that
+ *  carry an `e` tag (a reply). */
+export interface NostrEvent {
+	id: string;
+	accountId: string;
+	pubkey: string;
+	kind: number;
+	content: string;
+	tags: string[][];
+	createdAt: number;
+	publishedAt: number;
+	sourceNoteId: string | null;
+	isReply: boolean;
+	rawEvent: string;
+}
+
+export interface TimeEntry {
+	id: string;
+	comment: string;
+	tags: string[];
+	startedAt: number;
+	endedAt: number | null;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface TimeStatsSegment {
+	tag: string;
+	ms: number;
+}
+
+export interface TimeStatsBucket {
+	key: string;
+	label: string;
+	start: number;
+	end: number;
+	totalMs: number;
+	segments: TimeStatsSegment[];
+}
+
+export interface TimeTrackerStats {
+	period: 'month' | 'week' | 'year';
+	start: number;
+	end: number;
+	label: string;
+	buckets: TimeStatsBucket[];
+	tags: string[];
 }
 
 export interface AskRow {
@@ -518,13 +646,15 @@ export interface HoldingsSummary {
 	displayTotals: { USD: number; BRL: number | null; UYU: number | null };
 }
 
-const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0, links: LinkRef[] = []): Note => ({
+const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0, links: LinkRef[] = [], coverId: string | null = null): Note => ({
 	id: r.id,
 	content: r.content,
 	created_at: r.created_at,
 	updated_at: r.updated_at,
 	featured: r.featured === 1,
 	video: r.video ?? '',
+	published: (r.published ?? 0) === 1,
+	coverId,
 	tags,
 	commentCount: comments,
 	linkedNotes: links
@@ -555,6 +685,16 @@ function toBytes(v: unknown): Uint8Array {
 	if (ArrayBuffer.isView(v)) return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
 	if (v instanceof ArrayBuffer) return new Uint8Array(v);
 	return new Uint8Array(0);
+}
+
+/** HMAC-SHA256 → Base64 via WebCrypto, so the same code signs on Node and
+ *  in any WebView engine that provides crypto.subtle + btoa. */
+async function hmacBase64(secret: string, message: string): Promise<string> {
+	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+	const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+	let bin = '';
+	for (const b of new Uint8Array(sig)) bin += String.fromCharCode(b);
+	return btoa(bin);
 }
 
 /** One quote attempt for the debug log: ticker, source, success or error. */
@@ -607,6 +747,8 @@ export interface TradingDiaryLine extends TradingOrder {
 /** An open ticker position with its live quote and recommendation. */
 export interface TradingPosition {
 	ticker: string;
+	orgId: string;
+	orgName: string;
 	qty: number;
 	avgPrice: number;
 	cost: number;
@@ -619,6 +761,12 @@ export interface TradingPosition {
 	sameDay: boolean;
 	/** Earliest open buy: the position age counts from here. */
 	since: number;
+	/** Unit sell price whose net clears the target. */
+	targetPrice: number | null;
+	/** Cash the position would actually yield selling now, sell costs off. */
+	netValue: number | null;
+	/** Itemized sell costs behind the net value. */
+	sellFees: { fee: number; irrf: number; fixed: number; feeRatePct: number; irrfRatePct: number } | null;
 	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
 }
 
@@ -627,6 +775,8 @@ export interface TradingMonthRow {
 	month: string;
 	sales: number;
 	limit: number;
+	/** Buy plus sell fees paid that month. Never touches the ceiling. */
+	fees: number;
 	irrf: number;
 	profit: number;
 	exempt: boolean;
@@ -637,6 +787,16 @@ export interface TradingSummary {
 	orders: TradingDiaryLine[];
 	positions: TradingPosition[];
 	months: TradingMonthRow[];
+}
+
+/** One day of a position's own line: stored quote times the quantity
+ *  still open that day. Days before the first buy never appear; a sale
+ *  ends the line. */
+export interface TradingQuotePoint {
+	day: string;
+	price: number;
+	qty: number;
+	value: number;
 }
 
 /** One home-page strip card: an open ticker in an enabled venue. */
@@ -652,6 +812,14 @@ export interface TradingStripItem {
 	potentialPct: number | null;
 	sameDay: boolean;
 	since: number;
+	/** Last fetch of the market quote. */
+	quoteAt: number | null;
+	/** Unit sell price whose net clears the target. */
+	targetPrice: number | null;
+	/** Cash the position would actually yield selling now, sell costs off. */
+	netValue: number | null;
+	/** Itemized sell costs behind the net value. */
+	sellFees: { fee: number; irrf: number; fixed: number; feeRatePct: number; irrfRatePct: number } | null;
 	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
 }
 
@@ -740,9 +908,491 @@ export function createJournal(db: SqlDb) {
 		const tags = tagsByNote(rows);
 		const comments = commentsByNote(rows);
 		const links = linksByNote(rows);
+		const covers = coversByNote(rows);
 		return rows.map((r) =>
-			rowToNote(r, tags.get(r.id) ?? [], comments.get(r.id) ?? 0, links.get(r.id) ?? [])
+			rowToNote(r, tags.get(r.id) ?? [], comments.get(r.id) ?? 0, links.get(r.id) ?? [], covers.get(r.id) ?? null)
 		);
+	}
+
+	/** Newest notes whose `[[id]]` tokens reference this entry — the reverse
+	 *  of the outgoing links. The uuid carries no LIKE wildcards or escapes,
+	 *  so the pre-filter stays exact; `noteLinkIds` is the real test. */
+	function listNotesLinkingTo(id: string): Note[] {
+		const token = `[[${id}]]`;
+		const rows = db
+			.prepare('SELECT * FROM notes WHERE content LIKE ? ORDER BY created_at DESC, id DESC LIMIT 100')
+			.all(`%${token}%`) as unknown as NoteRow[];
+		return withTags(rows.filter((r) => noteLinkIds(r.content).includes(id)));
+	}
+
+	function publicString(value: unknown, fallback: string, max: number): string {
+		if (typeof value !== 'string') return fallback;
+		const clean = value.replace(/\s+/g, ' ').trim().slice(0, max);
+		return clean || fallback;
+	}
+
+	function publicBoolean(value: unknown, fallback: boolean): boolean {
+		if (typeof value === 'boolean') return value;
+		if (value === 1 || value === '1') return true;
+		if (value === 0 || value === '0') return false;
+		return fallback;
+	}
+
+	function sanitizePublicConfig(value: unknown): PublicConfig {
+		const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+		return {
+			siteTitle: publicString(input.siteTitle, PUBLIC_CONFIG_DEFAULT.siteTitle, 80),
+			description: publicString(input.description, PUBLIC_CONFIG_DEFAULT.description, 200),
+			notesEnabled: publicBoolean(input.notesEnabled, PUBLIC_CONFIG_DEFAULT.notesEnabled),
+			showCoverImages: publicBoolean(input.showCoverImages, PUBLIC_CONFIG_DEFAULT.showCoverImages),
+			updatedAt: Number.isFinite(Number(input.updatedAt ?? input.updated_at))
+				? Math.max(0, Math.trunc(Number(input.updatedAt ?? input.updated_at)))
+				: 0
+		};
+	}
+
+	function getPublicConfig(): PublicConfig {
+		try {
+			const row = db
+				.prepare(
+					`SELECT site_title, description, notes_enabled, show_cover_images, updated_at
+					 FROM public_config WHERE id = 1`
+				)
+				.get() as unknown as
+				| {
+						site_title: string;
+						description: string;
+						notes_enabled: number;
+						show_cover_images: number;
+						updated_at: number;
+				  }
+				| undefined;
+			if (!row) return PUBLIC_CONFIG_DEFAULT;
+			return sanitizePublicConfig({
+				siteTitle: row.site_title,
+				description: row.description,
+				notesEnabled: row.notes_enabled,
+				showCoverImages: row.show_cover_images,
+				updatedAt: row.updated_at
+			});
+		} catch {
+			// Migration 28 creates the row. Older databases fall back safely.
+			return PUBLIC_CONFIG_DEFAULT;
+		}
+	}
+
+	function setPublicConfig(input: Partial<PublicConfig>): PublicConfig {
+		const next = sanitizePublicConfig({ ...getPublicConfig(), ...input, updatedAt: Date.now() });
+		db.prepare(
+			`INSERT INTO public_config (
+				id, site_title, description, notes_enabled, show_cover_images, updated_at
+			) VALUES (1, ?, ?, ?, ?, ?)
+			ON CONFLICT (id) DO UPDATE SET
+				site_title = excluded.site_title,
+				description = excluded.description,
+				notes_enabled = excluded.notes_enabled,
+				show_cover_images = excluded.show_cover_images,
+				updated_at = excluded.updated_at`
+		).run(
+			next.siteTitle,
+			next.description,
+			next.notesEnabled ? 1 : 0,
+			next.showCoverImages ? 1 : 0,
+			next.updatedAt
+		);
+		return getPublicConfig();
+	}
+
+	// --- Library ------------------------------------------------------------
+
+	type BookMetaRow = {
+		id: string;
+		title: string;
+		author: string;
+		size: number;
+		added_at: number;
+		last_cfi: string;
+		last_pct: number;
+		last_chapter: string;
+		last_read_at: number;
+	};
+	const BOOK_COLUMNS = 'id, title, author, size, added_at, last_cfi, last_pct, last_chapter, last_read_at';
+
+	function rowToBook(r: BookMetaRow): Book {
+		return {
+			id: r.id,
+			title: r.title,
+			author: r.author,
+			size: r.size,
+			added_at: r.added_at,
+			lastCfi: r.last_cfi ?? '',
+			lastPct: r.last_pct ?? 0,
+			lastChapter: r.last_chapter ?? '',
+			lastReadAt: r.last_read_at ?? 0
+		};
+	}
+
+	/** Library table rows, most recently read first. Never loads `bytes`. */
+	function listBooks(): Book[] {
+		const rows = db
+			.prepare(`SELECT ${BOOK_COLUMNS} FROM books ORDER BY last_read_at DESC, added_at DESC, id DESC`)
+			.all() as unknown as BookMetaRow[];
+		return rows.map(rowToBook);
+	}
+
+	function getBook(id: string): Book | null {
+		const r = db.prepare(`SELECT ${BOOK_COLUMNS} FROM books WHERE id = ?`).get(id) as unknown as
+			| BookMetaRow
+			| undefined;
+		return r ? rowToBook(r) : null;
+	}
+
+	/** The EPUB bytes for the file endpoint only. */
+	function getBookBytes(id: string): Uint8Array | null {
+		const r = db.prepare('SELECT bytes FROM books WHERE id = ?').get(id) as unknown as
+			| { bytes: unknown }
+			| undefined;
+		if (!r || r.bytes === null || r.bytes === undefined) return null;
+		const bytes = toBytes(r.bytes);
+		return bytes.length > 0 ? bytes : null;
+	}
+
+	/** Store one upload. Title/author arrive from the client-side metadata
+	 *  parse; the bytes keep their exact shape (the file endpoint must hand
+	 *  back what epub.js would unzip). */
+	function addBook(input: { bytes: Uint8Array; title: unknown; author: unknown }): Book | null {
+		if (!(input.bytes instanceof Uint8Array) || input.bytes.length === 0) return null;
+		const title = String(input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 200) || 'Untitled';
+		const author = String(input.author ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.prepare('INSERT INTO books (id, title, author, bytes, size, added_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+			id,
+			title,
+			author,
+			// Same cast as note covers: the SqlValue type is shared with the
+			// WebView engine, which takes the Uint8Array as-is.
+			input.bytes as unknown as string,
+			input.bytes.length,
+			now
+		);
+		return getBook(id);
+	}
+
+	function setBookPosition(
+		id: string,
+		input: { cfi: unknown; pct: unknown; chapter: unknown }
+	): Book | null {
+		const existing = getBook(id);
+		if (!existing) return null;
+		const cfi = String(input.cfi ?? '').trim().slice(0, 2048);
+		const pct = Number(input.pct);
+		const cleanPct = Number.isFinite(pct) ? Math.min(Math.max(pct, 0), 1) : existing.lastPct;
+		const chapter = String(input.chapter ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+		db.prepare('UPDATE books SET last_cfi = ?, last_pct = ?, last_chapter = ?, last_read_at = ? WHERE id = ?').run(
+			cfi || existing.lastCfi,
+			cleanPct,
+			chapter || existing.lastChapter,
+			Date.now(),
+			id
+		);
+		return getBook(id);
+	}
+
+	function deleteBook(id: string): boolean {
+		// book_notes rows leave with the book (FK ON DELETE CASCADE).
+		return db.prepare('DELETE FROM books WHERE id = ?').run(id).changes > 0;
+	}
+
+	type BookNoteRow = {
+		id: string;
+		book_id: string;
+		cfi: string;
+		excerpt: string;
+		note: string;
+		color: string;
+		created_at: number;
+		updated_at: number;
+	};
+
+	function rowToBookNote(r: BookNoteRow): BookNote {
+		return {
+			id: r.id,
+			book_id: r.book_id,
+			cfi: r.cfi,
+			excerpt: r.excerpt,
+			note: r.note,
+			color: r.color,
+			created_at: r.created_at,
+			updated_at: r.updated_at
+		};
+	}
+
+	function getBookNote(id: string): BookNote | null {
+		const r = db.prepare('SELECT * FROM book_notes WHERE id = ?').get(id) as unknown as BookNoteRow | undefined;
+		return r ? rowToBookNote(r) : null;
+	}
+
+	function listBookNotes(
+		bookId: string,
+		opts: { limit?: number; before?: number | null; beforeId?: string | null } = {}
+	): BookNotesPage {
+		const limit = Math.max(1, Math.min(100, Math.trunc(opts.limit ?? 50)));
+		const total = (db.prepare('SELECT COUNT(*) AS c FROM book_notes WHERE book_id = ?').get(bookId) as {
+			c: number;
+		}).c;
+		const useCursor = typeof opts.before === 'number' && Number.isFinite(opts.before) && !!opts.beforeId;
+		const params: SqlValue[] = [bookId];
+		if (useCursor) params.push(opts.before as number, opts.before as number, opts.beforeId as string);
+		params.push(limit + 1);
+		// Same (created_at,id) cursor rule as listNotesPage: ids break ties
+		// for rows stored in the same millisecond.
+		const rows = db
+			.prepare(
+				`SELECT * FROM book_notes WHERE book_id = ?${useCursor ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
+				 ORDER BY created_at DESC, id DESC LIMIT ?`
+			)
+			.all(...params) as unknown as BookNoteRow[];
+		const hasMore = rows.length > limit;
+		const page = hasMore ? rows.slice(0, limit) : rows;
+		const last = page[page.length - 1];
+		return {
+			notes: page.map(rowToBookNote),
+			hasMore,
+			nextCursor: last ? { created_at: last.created_at, id: last.id } : null,
+			total
+		};
+	}
+
+	/** A highlight with an optional note. The CFI range is the anchor; the
+	 *  excerpt keeps the panel readable and survives a dead anchor. */
+	function createBookNote(bookId: string, input: { cfi: unknown; excerpt?: unknown; note?: unknown }): BookNote | null {
+		const cfi = String(input.cfi ?? '').trim().slice(0, 2048);
+		if (!cfi || !getBook(bookId)) return null;
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.prepare(
+			`INSERT INTO book_notes (id, book_id, cfi, excerpt, note, color, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, 'amber', ?, ?)`
+		).run(id, bookId, cfi, String(input.excerpt ?? '').trim().slice(0, 500), String(input.note ?? '').trim().slice(0, 4000), now, now);
+		return getBookNote(id);
+	}
+
+	function updateBookNote(id: string, input: { note?: unknown; excerpt?: unknown }): BookNote | null {
+		if (!getBookNote(id)) return null;
+		const note = input.note !== undefined ? String(input.note).trim().slice(0, 4000) : undefined;
+		const excerpt = input.excerpt !== undefined ? String(input.excerpt).trim().slice(0, 500) : undefined;
+		db.prepare('UPDATE book_notes SET note = COALESCE(?, note), excerpt = COALESCE(?, excerpt), updated_at = ? WHERE id = ?').run(
+			note ?? null,
+			excerpt ?? null,
+			Date.now(),
+			id
+		);
+		return getBookNote(id);
+	}
+
+	function deleteBookNote(id: string): boolean {
+		return db.prepare('DELETE FROM book_notes WHERE id = ?').run(id).changes > 0;
+	}
+
+	// --- Service API credentials ----------------------------------------
+
+	function getApiCredential(service: string): { token: string; secret: string } | null {
+		const r = db.prepare('SELECT token, secret FROM api_credentials WHERE service = ?').get(service) as unknown as
+			| { token: string; secret: string }
+			| undefined;
+		return r ?? null;
+	}
+
+	/** Everything the admin UI may learn about a credential: no token, no
+	 *  secret, only existence and the save time. */
+	function getApiCredentialStatus(service: string): ApiCredentialStatus {
+		const r = db.prepare('SELECT updated_at FROM api_credentials WHERE service = ?').get(service) as unknown as
+			| { updated_at: number }
+			| undefined;
+		return { configured: !!r, updatedAt: r?.updated_at ?? 0 };
+	}
+
+	function setApiCredential(service: string, token: unknown, secret: unknown): ApiCredentialStatus | null {
+		const t = String(token ?? '').trim().slice(0, 200);
+		const s = String(secret ?? '').trim().slice(0, 200);
+		if (!t || !s) return null;
+		db.prepare(
+			`INSERT INTO api_credentials (service, token, secret, updated_at) VALUES (?, ?, ?, ?)
+			 ON CONFLICT (service) DO UPDATE SET token = excluded.token, secret = excluded.secret, updated_at = excluded.updated_at`
+		).run(service, t, s, Date.now());
+		return getApiCredentialStatus(service);
+	}
+
+	function deleteApiCredential(service: string): ApiCredentialStatus {
+		db.prepare('DELETE FROM api_credentials WHERE service = ?').run(service);
+		return getApiCredentialStatus(service);
+	}
+
+	// --- Nostr -----------------------------------------------------------
+
+	function getNostrProfile(): NostrProfile {
+		const r = db.prepare('SELECT id, nsec, npub, name, about, picture, relays, updated_at FROM nostr_profile WHERE id = 1').get() as unknown as
+			| { id: number; nsec: string; npub: string; name: string; about: string; picture: string; relays: string; updated_at: number }
+			| undefined;
+		if (!r) {
+			return { id: 1, nsec: '', npub: '', name: '', about: '', picture: '', relays: [], updatedAt: 0 };
+		}
+		let relays: string[] = [];
+		try { const p = JSON.parse(r.relays); if (Array.isArray(p)) relays = p.filter((x) => typeof x === 'string'); } catch {}
+		return { id: r.id, nsec: r.nsec, npub: r.npub, name: r.name, about: r.about, picture: r.picture, relays, updatedAt: r.updated_at };
+	}
+
+	function setNostrProfile(input: { nsec?: unknown; npub?: unknown; name?: unknown; about?: unknown; picture?: unknown; relays?: unknown }): NostrProfile {
+		const cur = getNostrProfile();
+		// The nsec is stored verbatim; the npub is derived by the caller
+		// (the API route uses nostr-tools so journal.ts stays free of that
+		// dependency and runs on both engines).
+		const nsec = input.nsec !== undefined ? String(input.nsec ?? '').trim() : cur.nsec;
+		const npub = input.npub !== undefined ? String(input.npub ?? '').trim() : cur.npub;
+		const name = input.name !== undefined ? String(input.name).trim().slice(0, 80) : cur.name;
+		const about = input.about !== undefined ? String(input.about).trim().slice(0, 500) : cur.about;
+		const picture = input.picture !== undefined ? String(input.picture).trim().slice(0, 500) : cur.picture;
+		let relays = cur.relays;
+		if (Array.isArray(input.relays)) {
+			relays = input.relays.map((x) => String(x ?? '').trim()).filter((x) => x.startsWith('ws://') || x.startsWith('wss://')).slice(0, 50);
+		}
+		db.prepare(
+			`UPDATE nostr_profile SET nsec = ?, npub = ?, name = ?, about = ?, picture = ?, relays = ?, updated_at = ? WHERE id = 1`
+		).run(nsec, npub, name, about, picture, JSON.stringify(relays), Date.now());
+		return getNostrProfile();
+	}
+
+	function deleteNostrProfile(): NostrProfile {
+		db.prepare(`UPDATE nostr_profile SET nsec = '', npub = '', name = '', about = '', picture = '', relays = '[]', updated_at = ? WHERE id = 1`).run(Date.now());
+		return getNostrProfile();
+	}
+
+	function listNostrEvents(kind: number | null = null, limit = 100): NostrEvent[] {
+		const rows = db
+			.prepare(
+				`SELECT id, account_id, pubkey, kind, content, tags, created_at, published_at, source_note_id, is_reply, raw_event
+				 FROM nostr_events ${kind === null ? '' : 'WHERE kind = ?'} ORDER BY created_at DESC, id DESC LIMIT ?`
+			)
+			.all(...(kind === null ? [] : [kind]), limit) as unknown as {
+			id: string;
+			account_id: string;
+			pubkey: string;
+			kind: number;
+			content: string;
+			tags: string;
+			created_at: number;
+			published_at: number;
+			source_note_id: string | null;
+			is_reply: number;
+			raw_event: string;
+		}[];
+		return rows.map((r) => ({
+			id: r.id,
+			accountId: r.account_id,
+			pubkey: r.pubkey,
+			kind: r.kind,
+			content: r.content,
+			tags: (() => {
+				try { const p = JSON.parse(r.tags); return Array.isArray(p) ? p : []; } catch { return []; }
+			})(),
+			createdAt: r.created_at,
+			publishedAt: r.published_at,
+			sourceNoteId: r.source_note_id,
+			isReply: r.is_reply === 1,
+			rawEvent: r.raw_event
+		}));
+	}
+
+	function addNostrEvent(input: {
+		accountId?: unknown;
+		pubkey?: unknown;
+		kind?: unknown;
+		content: unknown;
+		tags?: unknown;
+		rawEvent: unknown;
+		isReply?: unknown;
+		sourceNoteId?: unknown;
+		createdAt?: unknown;
+	}): NostrEvent | null {
+		const content = String(input.content ?? '').trim();
+		if (!content) return null;
+		const kind = Number(input.kind ?? 1);
+		const id = String(input.rawEvent ? JSON.parse(String(input.rawEvent)).id ?? '' : '').trim();
+		if (!id) return null;
+		const now = Date.now();
+		const tags = Array.isArray(input.tags) ? input.tags : [];
+		db.prepare(
+			`INSERT OR IGNORE INTO nostr_events (id, account_id, pubkey, kind, content, tags, created_at, published_at, source_note_id, is_reply, raw_event)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		).run(
+			id,
+			String(input.accountId ?? '').trim(),
+			String(input.pubkey ?? '').trim(),
+			kind,
+			content,
+			JSON.stringify(tags),
+			Number(input.createdAt ?? now),
+			now,
+			(input.sourceNoteId ?? null) as string | null,
+			input.isReply ? 1 : 0,
+			String(input.rawEvent)
+		);
+		return listNostrEvents(null, 1)[0] ?? null;
+	}
+
+	/** Counts for the backup card. `notes` are own kind-1 events without an
+	 *  `e` tag, `replies` the ones that carry one (NIP-10 replies). */
+	function getNostrStats(): {
+		notes: number;
+		replies: number;
+		total: number;
+		lastAt: number;
+		lastStoredAt: number;
+	} {
+		const row = db
+			.prepare(
+				`SELECT
+					COALESCE(SUM(CASE WHEN is_reply = 0 THEN 1 ELSE 0 END), 0) AS notes,
+					COALESCE(SUM(CASE WHEN is_reply = 1 THEN 1 ELSE 0 END), 0) AS replies,
+					COALESCE(COUNT(*), 0) AS total,
+					COALESCE(MAX(created_at), 0) AS lastAt,
+					COALESCE(MAX(published_at), 0) AS lastStoredAt
+				 FROM nostr_events`
+			)
+			.get() as unknown as {
+			notes: number;
+			replies: number;
+			total: number;
+			lastAt: number;
+			lastStoredAt: number;
+		};
+		return row;
+	}
+
+	/** Per-day counts for the heatmap: published notes (kind 1) and replies
+	 *  (kind 1 with an e tag), split by day. */
+	function getNostrHeatmap(): { published: { day: string; count: number }[]; replies: { day: string; count: number }[] } {
+		const noteRows = db
+			.prepare(`SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS count FROM nostr_events WHERE is_reply = 0 GROUP BY day ORDER BY day`)
+			.all() as { day: string; count: number }[];
+		const replyRows = db
+			.prepare(`SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS count FROM nostr_events WHERE is_reply = 1 GROUP BY day ORDER BY day`)
+			.all() as { day: string; count: number }[];
+		return { published: noteRows, replies: replyRows };
+	}
+
+	/** One cover photo id per note, batched like the comment counts. */
+	function coversByNote(rows: { id: string }[]): Map<string, string> {
+		const map = new Map<string, string>();
+		if (rows.length === 0) return map;
+		const ids = [...new Set(rows.map((r) => r.id))];
+		const placeholders = ids.map(() => '?').join(',');
+		const found = db
+			.prepare(`SELECT note_id, id FROM note_photos WHERE note_id IN (${placeholders})`)
+			.all(...ids) as unknown as { note_id: string; id: string }[];
+		for (const f of found) map.set(f.note_id, f.id);
+		return map;
 	}
 
 	function createNote(content: string, createdAt: number): Note {
@@ -755,7 +1405,7 @@ export function createJournal(db: SqlDb) {
 			now
 		);
 		db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
-		return { id, content, created_at: now, updated_at: now, featured: false, video: '', tags: [] };
+		return { id, content, created_at: now, updated_at: now, featured: false, video: '', published: false, coverId: null, tags: [] };
 	}
 
 	function deleteNote(id: string): boolean {
@@ -804,6 +1454,57 @@ export function createJournal(db: SqlDb) {
 		return getNote(id);
 	}
 
+	/** Publish or unpublish a note. Only the flag changes. */
+	function setNotePublished(id: string, published: boolean): Note | null {
+		const done = db.prepare('UPDATE notes SET published = ? WHERE id = ?').run(published ? 1 : 0, id).changes > 0;
+		if (!done) return null;
+		return getNote(id);
+	}
+
+	/** Set (replacing) a note's cover photo. Null bytes clear it. */
+	function setNoteCover(noteId: string, photo: Uint8Array | null, mime: string): { id: string; created_at: number } | null {
+		const exists = db.prepare('SELECT id FROM notes WHERE id = ?').get(noteId) as unknown as { id: string } | undefined;
+		if (!exists) return null;
+		if (photo === null) {
+			db.prepare('DELETE FROM note_photos WHERE note_id = ?').run(noteId);
+			return null;
+		}
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.transaction(() => {
+			db.prepare('DELETE FROM note_photos WHERE note_id = ?').run(noteId);
+			db.prepare('INSERT INTO note_photos (id, note_id, photo, mime, created_at) VALUES (?, ?, ?, ?, ?)').run(
+				id,
+				noteId,
+				photo as unknown as string,
+				mime,
+				now
+			);
+		});
+		return { id, created_at: now };
+	}
+
+	/** Remove a note's cover photo. True when a row went away. */
+	function removeNoteCover(noteId: string): boolean {
+		return db.prepare('DELETE FROM note_photos WHERE note_id = ?').run(noteId).changes > 0;
+	}
+
+	/** Cover bytes by photo id, for the public image URL. */
+	function getNotePhoto(photoId: string): { photo: Uint8Array; mime: string; createdAt: number } | null {
+		let r: { photo: unknown; mime: string; created_at: number } | undefined;
+		try {
+			r = db
+				.prepare('SELECT photo, mime, created_at FROM note_photos WHERE id = ?')
+				.get(photoId) as unknown as { photo: unknown; mime: string; created_at: number } | undefined;
+		} catch {
+			return null;
+		}
+		if (!r || r.photo === null || r.photo === undefined) return null;
+		const bytes = toBytes(r.photo);
+		if (bytes.length === 0) return null;
+		return { photo: bytes, mime: r.mime || 'image/jpeg', createdAt: r.created_at };
+	}
+
 	/** Set or clear the YouTube video id. Empty clears. Like featuring, this
 	 *  touches only its column. Returns null when the note does not exist. */
 	function setNoteVideo(id: string, video: string): Note | null {
@@ -819,11 +1520,12 @@ export function createJournal(db: SqlDb) {
 	 *  variant joins note_tags, so every page of a tag view is filtered on the
 	 *  server and the client only ever appends matching notes. */
 	function listNotesPage(
-		opts: { limit?: number; before?: number | null; beforeId?: string | null; tag?: string | null; featured?: 'only' | 'exclude' } = {}
+		opts: { limit?: number; before?: number | null; beforeId?: string | null; tag?: string | null; featured?: 'only' | 'exclude'; published?: 'only' | 'exclude' } = {}
 	): NotePage {
 		const limit = Math.max(1, Math.min(100, Math.trunc(opts.limit ?? 50)));
 		const tag = opts.tag?.trim().toLowerCase() || null;
 		const featuredSql = opts.featured === 'only' ? ' AND n.featured = 1' : opts.featured === 'exclude' ? ' AND n.featured = 0' : '';
+		const publishedSql = opts.published === 'only' ? ' AND n.published = 1' : opts.published === 'exclude' ? ' AND n.published = 0' : '';
 		const useCursor =
 			typeof opts.before === 'number' && Number.isFinite(opts.before) && !!opts.beforeId;
 		const cursorSql = useCursor
@@ -832,11 +1534,11 @@ export function createJournal(db: SqlDb) {
 		const params: SqlValue[] = [];
 		let sql: string;
 		if (tag) {
-			sql = `SELECT n.* FROM notes n JOIN note_tags t ON t.note_id = n.id WHERE t.tag = ?${featuredSql}${cursorSql}
+			sql = `SELECT n.* FROM notes n JOIN note_tags t ON t.note_id = n.id WHERE t.tag = ?${featuredSql}${publishedSql}${cursorSql}
 				ORDER BY n.created_at DESC, n.id DESC LIMIT ?`;
 			params.push(tag);
 		} else {
-			sql = `SELECT n.* FROM notes n WHERE 1 = 1${featuredSql}${cursorSql}
+			sql = `SELECT n.* FROM notes n WHERE 1 = 1${featuredSql}${publishedSql}${cursorSql}
 				ORDER BY n.created_at DESC, n.id DESC LIMIT ?`;
 		}
 		if (useCursor) params.push(opts.before as number, opts.before as number, opts.beforeId as string);
@@ -1245,6 +1947,21 @@ export function createJournal(db: SqlDb) {
 		return map;
 	}
 
+	/** One principle by id, with the same batched tags, links and comment
+	 *  count as the list. Null when it does not exist. */
+	function getPrinciple(id: string): Principle | null {
+		const row = db
+			.prepare(
+				`SELECT p.*, (SELECT COUNT(*) FROM principle_comments c WHERE c.principle_id = p.id) AS comment_count
+				 FROM principles p WHERE p.id = ?`
+			)
+			.get(id) as unknown as (Omit<Principle, 'tags' | 'commentCount' | 'video' | 'linkedNotes'> & { video: string; comment_count: number } | undefined);
+		if (!row) return null;
+		const tags = tagsByPrinciple([row]);
+		const links = linksByPrinciple([row]);
+		return { ...row, video: row.video ?? '', tags: tags.get(row.id) ?? [], commentCount: row.comment_count ?? 0, linkedNotes: links.get(row.id) ?? [] };
+	}
+
 	function listPrinciples(): Principle[] {
 		const rows = db
 			.prepare(
@@ -1469,6 +2186,225 @@ export function createJournal(db: SqlDb) {
 				.all(safe) as unknown as QuoteFetchEntry[];
 		} catch {
 			return [];
+		}
+	}
+
+	/** Ripio quote for the Ripio venue, priced in USD (BTC_USDC tracks
+	 *  the dollar). With saved credentials it uses the signed Market
+	 *  ticker (real time); without them, or after an auth rejection, the
+	 *  public endpoint (which Ripio itself caches up to 30 s). Ripio
+	 *  throttles fast callers, so results cache for a minute and a
+	 *  throttled refresh serves the cached price instead of failing.
+	 *  Independent from the holdings BTC price (Coinbase): neither
+	 *  source can break the other. */
+	let ripioCache: {
+		at: number;
+		pair: string;
+		price: number;
+		high: number | null;
+		low: number | null;
+		change: number | null;
+		bid: number | null;
+		ask: number | null;
+		live: boolean;
+	} | null = null;
+	const RIPIO_TTL_MS = 60_000;
+
+	type RipioQuote =
+		| {
+				pair: string;
+				priceUsd: number;
+				high24h: number | null;
+				low24h: number | null;
+				changePct24h: number | null;
+				/** Best bid/ask — only the signed Market ticker answers with
+				 *  them; null on the public path. */
+				bid: number | null;
+				ask: number | null;
+				fetchedAt: number;
+				cached: boolean;
+				/** true = signed Market ticker; false = public endpoint. */
+				live: boolean;
+				/** Present only when the stored key was rejected (401/403)
+				 *  and the public endpoint answered instead; the string is the
+				 *  HTTP status plus whatever Ripio's body reported. */
+				authError?: string;
+		  }
+		| { error: string };
+
+	async function getRipioQuote(rawPair: unknown, force = false): Promise<RipioQuote> {
+		const pair = String(rawPair ?? 'BTC_USDC').trim().toUpperCase();
+		if (!/^[A-Z0-9]{2,10}_[A-Z0-9]{2,10}$/.test(pair)) return { error: 'bad pair' };
+		const now = Date.now();
+		const fromCache = (): RipioQuote => ({
+			pair,
+			priceUsd: ripioCache!.price,
+			high24h: ripioCache!.high,
+			low24h: ripioCache!.low,
+			changePct24h: ripioCache!.change,
+			bid: ripioCache!.bid,
+			ask: ripioCache!.ask,
+			fetchedAt: ripioCache!.at,
+			cached: true,
+			live: ripioCache!.live
+		});
+		// force = the page's Refresh button: an honest re-read, never the
+		// minute-old cache.
+		if (ripioCache && ripioCache.pair === pair && !force && now - ripioCache.at < RIPIO_TTL_MS) {
+			return fromCache();
+		}
+		const fail = (error: string): RipioQuote => {
+			logQuoteFetch({ ticker: pair, source: 'ripio', ok: false, error });
+			if (ripioCache && ripioCache.pair === pair) return fromCache();
+			return { error };
+		};
+		let cred: { token: string; secret: string } | null = null;
+		try {
+			cred = getApiCredential('ripio');
+		} catch {
+			cred = null;
+		}
+		const send = async (
+			signed: boolean
+		): Promise<{
+			status: number;
+			body?: {
+				data?: { last?: unknown; high?: unknown; low?: unknown; bid?: unknown; ask?: unknown; price_change_percent_24h?: unknown };
+				message?: unknown;
+				error?: unknown;
+				error_code?: unknown;
+			};
+		}> => {
+			const path = signed
+				? `/trade/ticker/${encodeURIComponent(pair)}`
+				: `/trade/public/tickers/${encodeURIComponent(pair)}`;
+			const headers: Record<string, string> = { 'user-agent': YAHOO_UA, 'content-type': 'application/json' };
+			if (signed && cred) {
+				const ts = String(Date.now());
+				// Ripio signs Timestamp + HTTP Method + Path + JSON Payload;
+				// GET takes the path WITHOUT query and an empty payload.
+				headers.authorization = cred.token;
+				headers.timestamp = ts;
+				headers.signature = await hmacBase64(cred.secret, `${ts}GET${path}`);
+				// Handle minor clock skew between this machine and Ripio.
+				headers['timestamp-tolerance'] = '5000';
+			}
+			const res = await fetch(`https://api.ripio.com${path}`, { signal: AbortSignal.timeout(10000), headers });
+			// Parse the body even on non-OK so the auth rejection carries
+			// Ripio's own error message, not just the status code.
+			const body = await res.json().catch(() => undefined);
+			return { status: res.status, body };
+		};
+		try {
+			let status = 0;
+			let body: Awaited<ReturnType<typeof send>>['body'];
+			let live = false;
+			let authFellBack = false;
+			let authMsg = '';
+			if (cred) {
+				const signed = await send(true);
+				if (signed.status === 401 || signed.status === 403) {
+					// A bad or expired key must never empty the cards:
+					// log the rejection and serve the public quote instead.
+					// Surface whatever Ripio reported so the user sees the
+					// real reason (bad token, missing permission, clock skew)
+					// instead of a bare status code.
+					authFellBack = true;
+					const detail = (signed.body as any)?.message ?? (signed.body as any)?.error ?? (signed.body as any)?.error_code ?? (signed.body as any)?.data?.message ?? '';
+					authMsg = detail ? `auth ${signed.status}: ${detail}` : `auth ${signed.status}`;
+					logQuoteFetch({ ticker: pair, source: 'ripio', ok: false, error: `${authMsg}, used public` });
+					const pub = await send(false);
+					status = pub.status;
+					body = pub.body;
+				} else {
+					status = signed.status;
+					body = signed.body;
+					live = signed.status === 200;
+				}
+			} else {
+				const pub = await send(false);
+				status = pub.status;
+				body = pub.body;
+			}
+			if (status !== 200) return fail(`HTTP ${status}`);
+			const last = Number(body?.data?.last);
+			if (!Number.isFinite(last) || last <= 0) return fail('no quote');
+			const num = (v: unknown): number | null => {
+				const n = Number(v);
+				return Number.isFinite(n) && n > 0 ? n : null;
+			};
+			const pct = Number(body?.data?.price_change_percent_24h);
+			ripioCache = {
+				at: now,
+				pair,
+				price: last,
+				high: num(body?.data?.high),
+				low: num(body?.data?.low),
+				bid: num(body?.data?.bid),
+				ask: num(body?.data?.ask),
+				change: Number.isFinite(pct) ? pct : null,
+				live
+			};
+			logQuoteFetch({ ticker: pair, source: live ? 'ripio-market' : 'ripio', ok: true, price: last });
+			return {
+				pair,
+				priceUsd: last,
+				high24h: ripioCache.high,
+				low24h: ripioCache.low,
+				changePct24h: ripioCache.change,
+				bid: ripioCache.bid,
+				ask: ripioCache.ask,
+				fetchedAt: now,
+				cached: false,
+				live,
+				...(authFellBack ? { authError: authMsg } : {})
+			};
+		} catch (e) {
+			return fail((e as Error)?.message ?? 'network');
+		}
+	}
+
+	/** Canonical BTC-USD for comparison: the same Coinbase exchange-rates
+	 *  row Holdings prices BTC with. Serves the stored fx_rates row while it
+	 *  is under a day old — the number must match the holdings card exactly;
+	 *  a network fetch on every view would also drift between the two. */
+	type GlobalBtc = { priceUsd: number; fetchedAt: number; cached: boolean } | { error: string };
+
+	async function getGlobalBtcQuote(force = false): Promise<GlobalBtc> {
+		const row = (() => {
+			try {
+				return db.prepare('SELECT rate_to_usd, fetched_at FROM fx_rates WHERE currency = ?').get('BTC') as unknown as
+					| { rate_to_usd: number; fetched_at: number }
+					| undefined;
+			} catch {
+				return undefined;
+			}
+		})();
+		if (!force && row && Date.now() - row.fetched_at < DAY_MS) {
+			return { priceUsd: row.rate_to_usd, fetchedAt: row.fetched_at, cached: true };
+		}
+		try {
+			if (typeof fetch !== 'function') throw new Error('network unavailable');
+			const res = await fetch(RATES_URL, { signal: AbortSignal.timeout(10000) });
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const body = (await res.json()) as { data?: { rates?: Record<string, string> } };
+			const btcPerUsd = Number(body?.data?.rates?.['BTC']);
+			if (!Number.isFinite(btcPerUsd) || btcPerUsd <= 0) throw new Error('no rate in payload');
+			const price = 1 / btcPerUsd;
+			const now = Date.now();
+			db.prepare(
+				'INSERT INTO fx_rates (currency, rate_to_usd, fetched_at) VALUES (?, ?, ?) ON CONFLICT (currency) DO UPDATE SET rate_to_usd = excluded.rate_to_usd, fetched_at = excluded.fetched_at'
+			).run('BTC', price, now);
+			// Deliberately NOT logged: the Logs modal tracks the venue quote
+			// hunt (ripio/yahoo/google/b3) plus refreshRates' own Coinbase BTC
+			// line. Logging every comparison-card read would flood it with
+			// duplicate BTC/coinbase entries that mean nothing new.
+			return { priceUsd: price, fetchedAt: now, cached: false };
+		} catch (e) {
+			const error = (e as Error)?.message ?? 'network';
+			// A stored (even stale) row beats no number for the comparison.
+			if (row) return { priceUsd: row.rate_to_usd, fetchedAt: row.fetched_at, cached: true };
+			return { error };
 		}
 	}
 
@@ -1940,6 +2876,50 @@ export function createJournal(db: SqlDb) {
 		updated_at: number;
 	}
 
+	/** One-tap market refresh for the home Market card: forced holdings
+	 *  refresh plus fresh quotes for every open trading ticker. Never
+	 *  throws: a dead network returns cached data with the error noted. */
+	async function refreshMarket(): Promise<{
+		summary: HoldingsSummary;
+		tickers: string[];
+		errors: string[];
+		quotes: { ticker: string; ok: boolean; source: string | null; price: number | null; error: string | null }[];
+		ripio: { pair: string; priceUsd: number; fetchedAt: number; cached: boolean } | null;
+	}> {
+		const errors: string[] = [];
+		let summary: HoldingsSummary;
+		try {
+			summary = await refreshRates(true);
+		} catch (e) {
+			errors.push((e as Error)?.message ?? 'holdings refresh failed');
+			summary = getHoldingsSummary();
+		}
+		const tickers = [
+			...new Set(
+				listTradingOrgs()
+					.filter((o) => o.enabled)
+					.flatMap((o) => listTradingOrders(o.id).map((t) => t.ticker))
+			)
+		];
+		let quotes: { ticker: string; ok: boolean; source: string | null; price: number | null; error: string | null }[] = [];
+		try {
+			quotes = await refreshTradingQuotes(tickers);
+			for (const q of quotes) {
+				if (!q.ok) errors.push(`${q.ticker}: ${q.error ?? 'no quote'}`);
+			}
+		} catch (e) {
+			errors.push((e as Error)?.message ?? 'trading quotes failed');
+		}
+		let ripio: { pair: string; priceUsd: number; fetchedAt: number; cached: boolean } | null = null;
+		try {
+			const r = await getRipioQuote('BTC_USDC');
+			if (!('error' in r)) ripio = { pair: r.pair, priceUsd: r.priceUsd, fetchedAt: r.fetchedAt, cached: r.cached };
+		} catch {
+			// The Ripio quote never fails the market refresh.
+		}
+		return { summary, tickers, errors, quotes, ripio };
+	}
+
 	function cleanStockKind(v: unknown): StockKind {
 		return v === 'durable' ? 'durable' : 'consumable';
 	}
@@ -2184,10 +3164,20 @@ export function createJournal(db: SqlDb) {
 
 	function updateTradingOrg(
 		id: string,
-		patch: { feeRate?: unknown; irrfRate?: unknown; fixedFee?: unknown; exemptLimit?: unknown }
+		patch: { feeRate?: unknown; irrfRate?: unknown; fixedFee?: unknown; exemptLimit?: unknown; enabled?: unknown }
 	): TradingOrg | null {
 		const org = getTradingOrg(id);
-		if (!org || !org.enabled) return null;
+		if (!org) return null;
+		// The enabled flag is the one thing a disabled venue accepts, so a
+		// venue can be previewed and switched off again without a migration.
+		let enabled = org.enabled;
+		if (patch.enabled !== undefined) {
+			const raw = patch.enabled;
+			if (raw === true || raw === 1 || raw === 'true' || raw === '1') enabled = true;
+			else if (raw === false || raw === 0 || raw === 'false' || raw === '0') enabled = false;
+			else return null;
+		}
+		if (!org.enabled && !enabled) return null;
 		const num = (v: unknown): number | null => {
 			if (v === undefined) return null;
 			const n = Number(v);
@@ -2203,11 +3193,12 @@ export function createJournal(db: SqlDb) {
 		if (exemptLimit === null || Number.isNaN(exemptLimit as number)) return null;
 		if ((feeRate as number) > 0.1 || (irrfRate as number) > 0.1) return null;
 		try {
-			db.prepare('UPDATE trading_orgs SET fee_rate = ?, irrf_rate = ?, fixed_fee = ?, exempt_limit = ? WHERE id = ?').run(
+			db.prepare('UPDATE trading_orgs SET fee_rate = ?, irrf_rate = ?, fixed_fee = ?, exempt_limit = ?, enabled = ? WHERE id = ?').run(
 				feeRate as number,
 				irrfRate as number,
 				fixedFee as number,
 				exemptLimit as number,
+				enabled ? 1 : 0,
 				id
 			);
 			return getTradingOrg(id);
@@ -2363,24 +3354,200 @@ export function createJournal(db: SqlDb) {
 		}
 	}
 
+	/** Store one quote for the monitor: the current price plus the day's
+	 *  point. Best effort, because the tables arrive with migrations 23/25. */
+	function storeTradingQuote(
+		ticker: string,
+		price: number,
+		previousClose: number | null,
+		source: string,
+		now = Date.now()
+	): void {
+		try {
+			db.prepare(
+				'INSERT INTO trading_quotes (ticker, price, previous_close, source, fetched_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ticker) DO UPDATE SET price = excluded.price, previous_close = excluded.previous_close, source = excluded.source, fetched_at = excluded.fetched_at'
+			).run(ticker, price, previousClose, source, now);
+			db.prepare(
+				'INSERT INTO trading_quote_history (ticker, day, price, source, recorded_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ticker, day) DO UPDATE SET price = excluded.price, source = excluded.source, recorded_at = excluded.recorded_at'
+			).run(ticker, localDayKey(now), price, source, now);
+		} catch {
+			// Tables arrive with migration 23/25.
+		}
+	}
+
 	/** Fresh B3 quotes for the given tickers through the shared quote path,
-	 *  stored for the monitor. Staggered like the holdings refresh. */
-	async function refreshTradingQuotes(tickers: string[]): Promise<void> {
-		const unique = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => isB3(t));
+	 *  stored for the monitor. Staggered like the holdings refresh. Reports
+	 *  per ticker, so a silent no-op refresh is impossible: a failed ticker
+	 *  comes back with its error instead of vanishing. */
+	async function refreshTradingQuotes(
+		tickers: string[],
+		force = false
+	): Promise<{ ticker: string; ok: boolean; source: string | null; price: number | null; error: string | null }[]> {
+		const all = [...new Set(tickers.map((t) => t.toUpperCase()))];
+		const unique = all.filter((t) => isB3(t));
+		// Ripio venue tickers are pairs (BASE_QUOTE): they quote through the
+		// signed/public Ripio path and store USD, like the venue itself.
+		const pairs = all.filter((t) => !isB3(t) && /^[A-Z0-9]{2,10}_[A-Z0-9]{2,10}$/.test(t));
+		const out: { ticker: string; ok: boolean; source: string | null; price: number | null; error: string | null }[] = [];
+		for (const p of pairs) {
+			const q = await getRipioQuote(p, force);
+			if ('priceUsd' in q) {
+				const source = q.live ? 'ripio-market' : 'ripio';
+				storeTradingQuote(p, q.priceUsd, null, source);
+				out.push({ ticker: p, ok: true, source, price: q.priceUsd, error: null });
+			} else {
+				out.push({ ticker: p, ok: false, source: null, price: null, error: q.error });
+			}
+		}
 		for (let i = 0; i < unique.length; i++) {
 			if (i > 0) await new Promise((r) => setTimeout(r, 500));
 			const t = unique[i]!;
 			const quote = await fetchB3Quote(t);
 			if (quote) {
-				try {
-					db.prepare(
-						'INSERT INTO trading_quotes (ticker, price, previous_close, source, fetched_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ticker) DO UPDATE SET price = excluded.price, previous_close = excluded.previous_close, source = excluded.source, fetched_at = excluded.fetched_at'
-					).run(t, quote.price, quote.previousClose, quote.source, Date.now());
-				} catch {
-					// Table arrives with migration 23.
-				}
+				storeTradingQuote(t, quote.price, quote.previousClose, quote.source);
+				out.push({ ticker: t, ok: true, source: quote.source, price: quote.price, error: null });
+			} else {
+				out.push({ ticker: t, ok: false, source: null, price: null, error: 'no quote from Google or Fundamentus' });
 			}
 		}
+		return out;
+	}
+
+	/** One ticker, one network fetch, both surfaces: update its auto-priced
+	 *  holdings rows and its trading quote, then snapshot. Cash and a
+	 *  hand-priced holding (`price_auto = 0`) are never touched, so a single
+	 *  refresh cannot overwrite a manual value. This path is separate from
+	 *  `refreshMarket`: the global updater keeps its own multi-ticker run. */
+	async function refreshTickerQuote(tickerRaw: string): Promise<{
+		ticker: string;
+		ok: boolean;
+		price: number | null;
+		previousClose: number | null;
+		source: string | null;
+		error: string | null;
+		summary: HoldingsSummary;
+	}> {
+		const ticker = String(tickerRaw ?? '').trim().toUpperCase();
+		const fail = (error: string) => ({
+			ticker,
+			ok: false,
+			price: null,
+			previousClose: null,
+			source: null,
+			error,
+			summary: getHoldingsSummary()
+		});
+		if (!ticker) return fail('ticker required');
+		let quote: { price: number; previousClose: number | null; source: string } | null = null;
+		try {
+			if (ticker === 'BTC') {
+				const q = await getGlobalBtcQuote(true);
+				if ('error' in q) return fail(q.error);
+				quote = { price: q.priceUsd, previousClose: null, source: 'coinbase' };
+			} else if (isB3(ticker)) {
+				quote = await fetchB3Quote(ticker);
+				if (!quote) return fail('no quote from Google or Fundamentus');
+			} else if (/^[A-Z0-9]{2,10}_[A-Z0-9]{2,10}$/.test(ticker)) {
+				const q = await getRipioQuote(ticker, true);
+				if ('error' in q) return fail(q.error);
+				quote = { price: q.priceUsd, previousClose: null, source: q.live ? 'ripio-market' : 'ripio' };
+			} else {
+				const price = await fetchQuote(yahooSymbol(ticker));
+				if (price === null) {
+					logQuoteFetch({ ticker, source: 'yahoo', ok: false, error: 'no quote' });
+					return fail('no quote from Yahoo');
+				}
+				logQuoteFetch({ ticker, source: 'yahoo', ok: true, price });
+				quote = { price, previousClose: null, source: 'yahoo' };
+			}
+		} catch (e) {
+			return fail((e as Error)?.message ?? 'network');
+		}
+		const q = quote;
+		if (!q) return fail('no quote');
+		// Holdings: auto-priced rows only. A manual price stays manual.
+		const rows = db
+			.prepare("SELECT id FROM holdings WHERE UPPER(ticker) = ? AND category != 'cash' AND price_auto = 1")
+			.all(ticker) as unknown as { id: string }[];
+		if (rows.length > 0) {
+			const at = Date.now();
+			const upd = db.prepare(
+				'UPDATE holdings SET price = ?, price_auto = 1, updated_at = ?, price_updated_at = ? WHERE id = ?'
+			);
+			db.transaction(() => {
+				for (const r of rows) upd.run(q.price, at, at, r.id);
+			});
+			if (ticker === 'BTC') logQuoteFetch({ ticker: 'BTC', source: 'coinbase', ok: true, price: q.price });
+		}
+		storeTradingQuote(ticker, q.price, q.previousClose, q.source);
+		snapshotAllValues();
+		return {
+			ticker,
+			ok: true,
+			price: q.price,
+			previousClose: q.previousClose,
+			source: q.source,
+			error: null,
+			summary: getHoldingsSummary()
+		};
+	}
+
+	/** Net cash of selling `qty` units at `quote` right now: the quote
+	 *  value minus the venue's sell fee, dedo-duro and fixed fee. Null
+	 *  without a usable quote. */
+	function saleNet(
+		qty: number,
+		quote: number | null,
+		org: { feeRate: number; irrfRate: number; fixedFee: number }
+	): number | null {
+		return saleBreakdown(qty, quote, org)?.net ?? null;
+	}
+
+	/** Itemized sell costs behind the net value, with their configured rates. */
+	function saleBreakdown(
+		qty: number,
+		quote: number | null,
+		org: { feeRate: number; irrfRate: number; fixedFee: number }
+	): { net: number; fee: number; irrf: number; fixed: number; feeRatePct: number; irrfRatePct: number } | null {
+		if (quote === null || !Number.isFinite(quote) || quote <= 0 || !(qty > 0)) return null;
+		const value = qty * quote;
+		const fee = value * org.feeRate;
+		const irrf = value * org.irrfRate;
+		const fixed = org.fixedFee;
+		const net = value - fee - irrf - fixed;
+		if (!Number.isFinite(net)) return null;
+		return { net, fee, irrf, fixed, feeRatePct: org.feeRate * 100, irrfRatePct: org.irrfRate * 100 };
+	}
+
+	/** Forward-looking swing estimate for one open position, using the
+	 *  venue's current rules: a sale pays fees, dedo-duro and the fixed
+	 *  fee again, so the target compares against the net profit, not the
+	 *  gross price move. Null without a usable quote or cost basis. */
+	function positionPotential(
+		qty: number,
+		cost: number,
+		quote: number | null,
+		org: { feeRate: number; irrfRate: number; fixedFee: number }
+	): number | null {
+		if (quote === null || !Number.isFinite(quote) || quote <= 0 || cost <= 0) return null;
+		const net = saleNet(qty, quote, org);
+		if (net === null) return null;
+		return ((net - cost) / cost) * 100;
+	}
+
+	/** Unit sell price whose net clears the target: `qty × P` minus sell
+	 *  fees, dedo-duro and the fixed fee must equal `cost × (1 + target)`.
+	 *  Null without a usable position or a degenerate fee config. */
+	function targetSellPrice(
+		qty: number,
+		cost: number,
+		targetPct: number,
+		org: { feeRate: number; irrfRate: number; fixedFee: number }
+	): number | null {
+		const rate = 1 - org.feeRate - org.irrfRate;
+		if (!(qty > 0) || !(cost > 0) || !(rate > 0)) return null;
+		const price = (cost * (1 + targetPct) + org.fixedFee) / (qty * rate);
+		return Number.isFinite(price) && price > 0 ? price : null;
 	}
 
 	/** Full panel for one org: diary with sale profits, open positions with
@@ -2424,13 +3591,15 @@ export function createJournal(db: SqlDb) {
 			const quote = getStoredTradingQuote(ticker);
 			const avgPrice = pos.qty > 0 ? pos.value / pos.qty : 0;
 			const targetPct = targets[ticker] ?? 0.03;
-			const potentialPct = quote && avgPrice > 0 ? ((quote.price - avgPrice) / avgPrice) * 100 : null;
+			const potentialPct = positionPotential(pos.qty, pos.cost, quote?.price ?? null, org);
 			// Selling while every open buy is from today is a day trade
 			// (20% IR, no exemption), never a swing sale — even past target.
 			const sameDay = localDayKey(pos.since) === today;
 			const hit = potentialPct !== null && potentialPct >= targetPct * 100;
 			positions.push({
 				ticker,
+				orgId: org.id,
+				orgName: org.name,
 				qty: pos.qty,
 				avgPrice,
 				cost: pos.cost,
@@ -2441,6 +3610,9 @@ export function createJournal(db: SqlDb) {
 				potentialPct,
 				sameDay,
 				since: pos.since,
+				targetPrice: targetSellPrice(pos.qty, pos.cost, targetPct, org),
+				netValue: saleNet(pos.qty, quote?.price ?? null, org),
+				sellFees: saleBreakdown(pos.qty, quote?.price ?? null, org),
 				recommendation:
 					quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
 			});
@@ -2450,6 +3622,12 @@ export function createJournal(db: SqlDb) {
 		// month, so the panel grows with use instead of fixing a year.
 		const months: TradingMonthRow[] = [];
 		if (orders.length > 0) {
+			// Fees count every order, buys included: the round trip costs
+			// the fee twice, while sales alone feed the exemption ceiling.
+			const feesByMonth = new Map<string, number>();
+			for (const o of orders) {
+				feesByMonth.set(o.month, (feesByMonth.get(o.month) ?? 0) + o.fees);
+			}
 			const sells = diary.filter((d) => d.side === 'SELL');
 			const byMonth = new Map<string, { sales: number; irrf: number; profit: number }>();
 			for (const s of sells) {
@@ -2471,6 +3649,7 @@ export function createJournal(db: SqlDb) {
 					month: key,
 					sales: agg.sales,
 					limit: org.exemptLimit,
+					fees: feesByMonth.get(key) ?? 0,
 					irrf: agg.irrf,
 					profit: agg.profit,
 					exempt: agg.sales <= org.exemptLimit
@@ -2503,7 +3682,7 @@ export function createJournal(db: SqlDb) {
 				const quote = getStoredTradingQuote(ticker);
 				const avgPrice = pos.qty > 0 ? pos.value / pos.qty : 0;
 				const targetPct = targets[ticker] ?? 0.03;
-				const potentialPct = quote && avgPrice > 0 ? ((quote.price - avgPrice) / avgPrice) * 100 : null;
+				const potentialPct = positionPotential(pos.qty, pos.cost, quote?.price ?? null, org);
 				const sameDay = localDayKey(pos.since) === localDayKey(Date.now());
 				const hit = potentialPct !== null && potentialPct >= targetPct * 100;
 				out.push({
@@ -2518,12 +3697,40 @@ export function createJournal(db: SqlDb) {
 					potentialPct,
 					sameDay,
 					since: pos.since,
+					quoteAt: quote?.fetchedAt ?? null,
+					targetPrice: targetSellPrice(pos.qty, pos.cost, targetPct, org),
+					netValue: saleNet(pos.qty, quote?.price ?? null, org),
+					sellFees: saleBreakdown(pos.qty, quote?.price ?? null, org),
 					recommendation:
 						quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
 				});
 			}
 		}
 		return out.sort((a, b) => b.cost - a.cost);
+	}
+
+	function getTradingQuoteHistory(orgId: string, rawTicker: unknown): TradingQuotePoint[] {
+		const t = String(rawTicker ?? '').trim().toUpperCase();
+		if (!/^[A-Z0-9._-]{1,12}$/.test(t)) return [];
+		try {
+			const rows = db
+				.prepare('SELECT day, price FROM trading_quote_history WHERE ticker = ? ORDER BY day ASC')
+				.all(t) as unknown as { day: string; price: number }[];
+			if (rows.length === 0) return [];
+			const orders = listTradingOrders(String(orgId ?? '')).filter((o) => o.ticker === t);
+			const out: TradingQuotePoint[] = [];
+			for (const r of rows) {
+				const cutoff = new Date(`${r.day}T00:00:00`).getTime() + 86400000;
+				if (!Number.isFinite(cutoff)) continue;
+				const open = openTradingPositions(orders.filter((o) => o.date < cutoff)).get(t);
+				const qty = open?.qty ?? 0;
+				if (qty <= 0) continue;
+				out.push({ day: r.day, price: r.price, qty, value: qty * r.price });
+			}
+			return out;
+		} catch {
+			return [];
+		}
 	}
 
 	function cleanStockInput(input: StockItemInput): Omit<StockItem, 'id' | 'hasPhoto' | 'photos' | 'created_at' | 'updated_at' | 'brand' | 'category' | 'group'> | null {
@@ -3721,6 +4928,260 @@ export function createJournal(db: SqlDb) {
 		return db.prepare('DELETE FROM ask_history WHERE id = ?').run(id).changes > 0;
 	}
 
+	// --- Time tracker ----------------------------------------------------
+
+	type TimeRow = {
+		id: string;
+		comment: string;
+		started_at: number;
+		ended_at: number | null;
+		created_at: number;
+		updated_at: number;
+	};
+
+	function tagsByTimeEntry(rows: { id: string }[]): Map<string, string[]> {
+		const map = new Map<string, string[]>();
+		if (rows.length === 0) return map;
+		const ids = [...new Set(rows.map((r) => r.id))];
+		const placeholders = ids.map(() => '?').join(',');
+		const found = db
+			.prepare(`SELECT entry_id, tag FROM time_entry_tags WHERE entry_id IN (${placeholders}) ORDER BY tag`)
+			.all(...ids) as unknown as { entry_id: string; tag: string }[];
+		for (const f of found) {
+			const list = map.get(f.entry_id);
+			if (list) list.push(f.tag);
+			else map.set(f.entry_id, [f.tag]);
+		}
+		return map;
+	}
+
+	function rowToTimeEntry(r: TimeRow, tags: string[] = []): TimeEntry {
+		return {
+			id: r.id,
+			comment: r.comment ?? '',
+			tags,
+			startedAt: r.started_at,
+			endedAt: r.ended_at ?? null,
+			createdAt: r.created_at,
+			updatedAt: r.updated_at
+		};
+	}
+
+	function setTimeEntryTags(entryId: string, tags: string[]): void {
+		db.prepare('DELETE FROM time_entry_tags WHERE entry_id = ?').run(entryId);
+		if (tags.length === 0) return;
+		const ins = db.prepare('INSERT OR IGNORE INTO time_entry_tags (entry_id, tag) VALUES (?, ?)');
+		for (const t of tags) ins.run(entryId, t);
+	}
+
+	function getRunningTimeEntry(): TimeEntry | null {
+		const r = db
+			.prepare(
+				'SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1'
+			)
+			.get() as unknown as TimeRow | undefined;
+		if (!r) return null;
+		const tags = tagsByTimeEntry([r]).get(r.id) ?? [];
+		return rowToTimeEntry(r, tags);
+	}
+
+	function listTimeEntries(limit = 100): TimeEntry[] {
+		const cap = Math.max(1, Math.min(500, Math.trunc(limit) || 100));
+		const rows = db
+			.prepare(
+				`SELECT id, comment, started_at, ended_at, created_at, updated_at
+				 FROM time_entries
+				 ORDER BY CASE WHEN ended_at IS NULL THEN 0 ELSE 1 END, started_at DESC, id DESC
+				 LIMIT ?`
+			)
+			.all(cap) as unknown as TimeRow[];
+		const tagMap = tagsByTimeEntry(rows);
+		return rows.map((r) => rowToTimeEntry(r, tagMap.get(r.id) ?? []));
+	}
+
+	function startTimeEntry(comment: unknown, startedAt?: unknown): { ok: true; entry: TimeEntry } | { ok: false; error: string } {
+		if (getRunningTimeEntry()) return { ok: false, error: 'A timer is already running.' };
+		const now = Date.now();
+		const at = typeof startedAt === 'number' && Number.isFinite(startedAt) ? Math.trunc(startedAt) : now;
+		const raw = String(comment ?? '').trim().slice(0, 500);
+		const split = splitTrailingHashtags(raw);
+		const text = split.content.slice(0, 500);
+		const tags = split.tags;
+		const id = crypto.randomUUID();
+		db.transaction(() => {
+			db.prepare(
+				'INSERT INTO time_entries (id, comment, started_at, ended_at, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)'
+			).run(id, text, at, now, now);
+			setTimeEntryTags(id, tags);
+		});
+		const entry = db
+			.prepare('SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE id = ?')
+			.get(id) as unknown as TimeRow;
+		return { ok: true, entry: rowToTimeEntry(entry, tags) };
+	}
+
+	function stopTimeEntry(id?: unknown, endedAt?: unknown): { ok: true; entry: TimeEntry } | { ok: false; error: string } {
+		const want = typeof id === 'string' ? id.trim() : '';
+		const running = want
+			? (db
+					.prepare(
+						'SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE id = ?'
+					)
+					.get(want) as unknown as TimeRow | undefined)
+			: (db
+					.prepare(
+						'SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE ended_at IS NULL ORDER BY started_at DESC, id DESC LIMIT 1'
+					)
+					.get() as unknown as TimeRow | undefined);
+		if (!running) return { ok: false, error: 'No running timer.' };
+		if (running.ended_at !== null) return { ok: false, error: 'This timer is not running.' };
+		const now = Date.now();
+		const at = typeof endedAt === 'number' && Number.isFinite(endedAt) ? Math.trunc(endedAt) : now;
+		const end = Math.max(at, running.started_at);
+		db.prepare('UPDATE time_entries SET ended_at = ?, updated_at = ? WHERE id = ?').run(end, now, running.id);
+		const entry = db
+			.prepare('SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE id = ?')
+			.get(running.id) as unknown as TimeRow;
+		const tags = tagsByTimeEntry([entry]).get(entry.id) ?? [];
+		return { ok: true, entry: rowToTimeEntry(entry, tags) };
+	}
+
+	/** Delete one entry, running or stopped. Tag rows go with it. */
+	function deleteTimeEntry(id: unknown): { ok: true; entry: TimeEntry } | { ok: false; error: string } {
+		const want = typeof id === 'string' ? id.trim() : '';
+		if (!want) return { ok: false, error: 'Missing id.' };
+		const row = db
+			.prepare('SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE id = ?')
+			.get(want) as unknown as TimeRow | undefined;
+		if (!row) return { ok: false, error: 'Time entry not found.' };
+		const tags = tagsByTimeEntry([row]).get(row.id) ?? [];
+		db.transaction(() => {
+			db.prepare('DELETE FROM time_entry_tags WHERE entry_id = ?').run(row.id);
+			db.prepare('DELETE FROM time_entries WHERE id = ?').run(row.id);
+		});
+		return { ok: true, entry: rowToTimeEntry(row, tags) };
+	}
+
+	function startOfDayLocal(ms: number): number {
+		const d = new Date(ms);
+		d.setHours(0, 0, 0, 0);
+		return d.getTime();
+	}
+
+	function addDays(ms: number, days: number): number {
+		const d = new Date(ms);
+		d.setDate(d.getDate() + days);
+		return d.getTime();
+	}
+
+	function addMonths(ms: number, months: number): number {
+		const d = new Date(ms);
+		d.setMonth(d.getMonth() + months);
+		return d.getTime();
+	}
+
+	function getTimeTrackerStats(periodInput: unknown, atInput?: unknown): TimeTrackerStats {
+		const period: 'month' | 'week' | 'year' =
+			periodInput === 'week' || periodInput === 'year' ? periodInput : 'month';
+		const at =
+			typeof atInput === 'number' && Number.isFinite(atInput)
+				? atInput
+				: typeof atInput === 'string' && atInput
+					? Date.parse(atInput)
+					: NaN;
+		const base = Number.isFinite(at) ? at : Date.now();
+		const now = Date.now();
+		let start = 0;
+		let end = 0;
+		let label = '';
+		const buckets: { key: string; label: string; start: number; end: number }[] = [];
+
+		if (period === 'month') {
+			const d = new Date(base);
+			d.setDate(1);
+			d.setHours(0, 0, 0, 0);
+			start = d.getTime();
+			end = addMonths(start, 1);
+			label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+			const days = Math.round((end - start) / 86400000);
+			for (let i = 0; i < days; i++) {
+				const bs = addDays(start, i);
+				const be = addDays(start, i + 1);
+				const bd = new Date(bs);
+				buckets.push({
+					key: `${bd.getFullYear()}-${String(bd.getMonth() + 1).padStart(2, '0')}-${String(bd.getDate()).padStart(2, '0')}`,
+					label: String(bd.getDate()),
+					start: bs,
+					end: be
+				});
+			}
+		} else if (period === 'week') {
+			const dayStart = startOfDayLocal(base);
+			const wd = new Date(dayStart).getDay(); // 0 Sun
+			const diff = (wd + 6) % 7; // Monday start
+			start = addDays(dayStart, -diff);
+			end = addDays(start, 7);
+			const endLabel = addDays(end, -1);
+			label = `${new Date(start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(endLabel).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+			const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+			for (let i = 0; i < 7; i++) {
+				const bs = addDays(start, i);
+				buckets.push({ key: String(i), label: names[i], start: bs, end: addDays(bs, 1) });
+			}
+		} else {
+			const d = new Date(base);
+			d.setMonth(0, 1);
+			d.setHours(0, 0, 0, 0);
+			start = d.getTime();
+			end = addMonths(start, 12);
+			label = String(d.getFullYear());
+			const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+			for (let i = 0; i < 12; i++) {
+				const bs = addMonths(start, i);
+				buckets.push({ key: String(i), label: names[i], start: bs, end: addMonths(start, i + 1) });
+			}
+		}
+
+		const rows = db
+			.prepare(
+				`SELECT id, comment, started_at, ended_at, created_at, updated_at
+				 FROM time_entries
+				 WHERE started_at < ? AND (ended_at IS NULL OR ended_at > ?)`
+			)
+			.all(end, start) as unknown as TimeRow[];
+		const tagMap = tagsByTimeEntry(rows);
+		const bucketAgg = buckets.map(() => new Map<string, number>());
+		const usedTags = new Set<string>();
+
+		for (const r of rows) {
+			const s = Math.max(r.started_at, start);
+			const e = Math.min(r.ended_at ?? now, end);
+			if (e <= s) continue;
+			const tags = tagMap.get(r.id) ?? [];
+			const primary = tags[0] ?? '';
+			if (primary) usedTags.add(primary);
+			for (let i = 0; i < buckets.length; i++) {
+				const b = buckets[i];
+				const os = Math.max(s, b.start);
+				const oe = Math.min(e, b.end);
+				if (oe <= os) continue;
+				const m = bucketAgg[i];
+				m.set(primary, (m.get(primary) ?? 0) + (oe - os));
+			}
+		}
+
+		const outBuckets: TimeStatsBucket[] = buckets.map((b, i) => {
+			const m = bucketAgg[i];
+			const segments = [...m.entries()]
+				.map(([tag, ms]) => ({ tag, ms }))
+				.sort((a, b) => b.ms - a.ms || a.tag.localeCompare(b.tag));
+			const totalMs = segments.reduce((sum, s) => sum + s.ms, 0);
+			return { ...b, totalMs, segments };
+		});
+
+		return { period, start, end, label, buckets: outBuckets, tags: [...usedTags].sort() };
+	}
+
 	return {
 		db,
 		Schema: SCHEMA,
@@ -3729,12 +5190,17 @@ export function createJournal(db: SqlDb) {
 		updateNote,
 		getNote,
 		listNotesPage,
+		listNotesLinkingTo,
 		countNotesByTag,
 		notesMissingVectors,
 		notesBetween,
 		setNoteTags,
 		removeNoteTag,
 		setNoteFeatured,
+		setNotePublished,
+		setNoteCover,
+		removeNoteCover,
+		getNotePhoto,
 		setNoteVideo,
 		setVector,
 		allVectors,
@@ -3747,6 +5213,34 @@ export function createJournal(db: SqlDb) {
 		insertAsk,
 		listAsks,
 		deleteAsk,
+		getRunningTimeEntry,
+		listTimeEntries,
+		startTimeEntry,
+		stopTimeEntry,
+		deleteTimeEntry,
+		getTimeTrackerStats,
+		getPublicConfig,
+		setPublicConfig,
+		listBooks,
+		getBook,
+		getBookBytes,
+		addBook,
+		setBookPosition,
+		deleteBook,
+		listBookNotes,
+		createBookNote,
+		updateBookNote,
+		deleteBookNote,
+		getApiCredentialStatus,
+		setApiCredential,
+		deleteApiCredential,
+		getNostrProfile,
+		setNostrProfile,
+		deleteNostrProfile,
+		listNostrEvents,
+		addNostrEvent,
+		getNostrStats,
+		getNostrHeatmap,
 		listTodoGroups,
 		createTodoGroup,
 		renameTodoGroup,
@@ -3771,6 +5265,7 @@ export function createJournal(db: SqlDb) {
 		updateNoteComment,
 		deleteNoteComment,
 		listPrinciples,
+		getPrinciple,
 		createPrinciple,
 		updatePrinciple,
 		deletePrinciple,
@@ -3825,8 +5320,13 @@ export function createJournal(db: SqlDb) {
 		deleteTradingOrder,
 		setTradingTarget,
 		refreshTradingQuotes,
+		refreshTickerQuote,
 		getTradingSummary,
 		getTradingStrip,
+		getTradingQuoteHistory,
+		getRipioQuote,
+		getGlobalBtcQuote,
+		refreshMarket,
 		listB3Tickers,
 		addB3Ticker,
 		listTagColors,

@@ -37,7 +37,7 @@
 	});
 
 	function goHome() {
-		window.location.assign('/');
+		window.location.assign('/admin/notes');
 	}
 
 	async function createJournal() {

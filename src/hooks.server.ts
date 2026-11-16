@@ -25,7 +25,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	if (status.state === 'error') {
-		if (path === '/api/status' || path === '/api/journal' || path === '/api/journal/restore') {
+		if (
+			path === '/api/status' ||
+			path === '/api/journal' ||
+			path === '/api/journal/restore' ||
+			path === '/relay'
+		) {
 			return resolve(event);
 		}
 		if (path === '/journal-error') return resolve(event);
@@ -43,6 +48,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (
 		path === '/welcome' ||
 		path === '/diagnostics' ||
+		path === '/relay' ||
 		path === '/api/status' ||
 		path === '/api/journal' ||
 		path === '/api/journal/restore'

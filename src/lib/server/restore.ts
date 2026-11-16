@@ -51,7 +51,10 @@ export interface RestoreCounts {
 	shoppingExtras: number;
 	tradingOrgs: number;
 	tradingOrders: number;
+	tradingQuoteHistory: number;
 	b3Tickers: number;
+	books: number;
+	bookNotes: number;
 }
 
 function sqlString(value: string): string {
@@ -177,6 +180,9 @@ export function copyUploadIntoTarget(
 			'DELETE FROM weekly_recaps',
 			'DELETE FROM ask_history',
 			'DELETE FROM shopping_extras',
+			'DELETE FROM book_notes',
+			'DELETE FROM books',
+			'DELETE FROM api_credentials',
 			// The target is already migrated to the latest schema, so the
 			// stock tables always exist. Clear them even when the backup is
 			// older than them; a replace must not leave rows behind.
@@ -193,15 +199,16 @@ export function copyUploadIntoTarget(
 			'DELETE FROM quote_fetch_log',
 		];
 		if (has('b3_tickers')) statements.push('DELETE FROM b3_tickers');
+		if (has('trading_quote_history')) statements.push('DELETE FROM trading_quote_history');
 		if (hasTodo) statements.push('DELETE FROM todo_items', 'DELETE FROM todo_groups');
 		if (has('principles')) statements.push('DELETE FROM principles');
 		if (has('tag_colors')) statements.push('DELETE FROM tag_colors');
 		if (has('holdings')) statements.push('DELETE FROM holding_value_history', 'DELETE FROM portfolio_value_history', 'DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
 
 		statements.push(
-			`INSERT INTO notes (id, content, created_at, updated_at, featured, video)
+			`INSERT INTO notes (id, content, created_at, updated_at, featured, video, published)
 				SELECT id, content, created_at, updated_at,
-					${column('notes', 'featured', '0')}, ${column('notes', 'video', "''")}
+					${column('notes', 'featured', '0')}, ${column('notes', 'video', "''")}, ${column('notes', 'published', '0')}
 				FROM backup.notes`,
 			'INSERT INTO note_tags (note_id, tag) SELECT note_id, tag FROM backup.note_tags',
 			`INSERT INTO weekly_recaps (week_key, content, created_at, updated_at)
@@ -209,6 +216,13 @@ export function copyUploadIntoTarget(
 			`INSERT INTO ask_history (id, question, answer, sources, created_at)
 				SELECT id, question, answer, sources, created_at FROM backup.ask_history`
 		);
+		if (has('note_photos')) {
+			statements.push(
+				'DELETE FROM note_photos',
+				`INSERT INTO note_photos (id, note_id, photo, mime, created_at)
+					SELECT id, note_id, photo, mime, created_at FROM backup.note_photos`
+			);
+		}
 		if (has('note_vectors')) {
 			statements.push(
 				'INSERT INTO note_vectors (note_id, vector) SELECT note_id, vector FROM backup.note_vectors'
@@ -360,6 +374,49 @@ export function copyUploadIntoTarget(
 				'INSERT INTO shopping_extras (id, text, position, created_at) SELECT id, text, position, created_at FROM backup.shopping_extras'
 			);
 		}
+		if (has('books')) {
+			statements.push(
+				`INSERT INTO books (id, title, author, bytes, size, added_at, last_cfi, last_pct, last_chapter, last_read_at)
+					SELECT id, title, author, bytes, size, added_at, last_cfi, last_pct, last_chapter, last_read_at
+					FROM backup.books`
+			);
+		}
+		if (has('book_notes')) {
+			statements.push(
+				`INSERT INTO book_notes (id, book_id, cfi, excerpt, note, color, created_at, updated_at)
+					SELECT id, book_id, cfi, excerpt, note, color, created_at, updated_at
+					FROM backup.book_notes`
+			);
+		}
+		if (has('nostr_profile')) {
+			statements.push(
+				'DELETE FROM nostr_profile',
+				'INSERT INTO nostr_profile (id, nsec, npub, name, about, picture, relays, updated_at) SELECT id, nsec, npub, name, about, picture, relays, updated_at FROM backup.nostr_profile'
+			);
+		}
+		if (has('nostr_events')) {
+			statements.push(
+				'DELETE FROM nostr_events',
+				'INSERT INTO nostr_events (id, account_id, kind, content, tags, created_at, published_at, source_note_id, is_reply, raw_event) SELECT id, account_id, kind, content, tags, created_at, published_at, source_note_id, is_reply, raw_event FROM backup.nostr_events'
+			);
+		}
+		if (has('api_credentials')) {
+			statements.push(
+				'INSERT INTO api_credentials (service, token, secret, updated_at) SELECT service, token, secret, updated_at FROM backup.api_credentials'
+			);
+		}
+		if (has('public_config')) {
+			statements.push(
+				'DELETE FROM public_config',
+				`INSERT INTO public_config (id, site_title, description, notes_enabled, show_cover_images, updated_at)
+					SELECT 1, ${column('public_config', 'site_title', "'fermentario'")},
+						${column('public_config', 'description', "'Published notes.'")},
+						${column('public_config', 'notes_enabled', '1')},
+						${column('public_config', 'show_cover_images', '1')},
+						${column('public_config', 'updated_at', '0')}
+					FROM backup.public_config WHERE id = 1`
+			);
+		}
 		if (has('trading_orgs')) {
 			statements.push(
 				'INSERT INTO trading_orgs (id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at) SELECT id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at FROM backup.trading_orgs',
@@ -369,6 +426,11 @@ export function copyUploadIntoTarget(
 		if (has('trading_targets')) {
 			statements.push(
 				'INSERT INTO trading_targets (org_id, ticker, target_pct, updated_at) SELECT org_id, ticker, target_pct, updated_at FROM backup.trading_targets'
+			);
+		}
+		if (has('trading_quote_history')) {
+			statements.push(
+				'INSERT INTO trading_quote_history (ticker, day, price, source, recorded_at) SELECT ticker, day, price, source, recorded_at FROM backup.trading_quote_history'
 			);
 		}
 		if (has('b3_tickers')) {
@@ -502,8 +564,11 @@ export function copyUploadIntoTarget(
 		holdingValueHistory: count(target, 'holding_value_history'),
 		portfolioValueHistory: count(target, 'portfolio_value_history'),
 		shoppingExtras: count(target, 'shopping_extras'),
+		books: count(target, 'books'),
+		bookNotes: count(target, 'book_notes'),
 		tradingOrgs: count(target, 'trading_orgs'),
 		tradingOrders: count(target, 'trading_orders'),
+		tradingQuoteHistory: count(target, 'trading_quote_history'),
 		b3Tickers: count(target, 'b3_tickers')
 	};
 }

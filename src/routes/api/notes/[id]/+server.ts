@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { deleteNote, getNote, setNoteTags, setNoteFeatured, setNoteVideo, updateNote } from '$lib/server/db';
+import { deleteNote, getNote, setNoteTags, setNoteFeatured, setNotePublished, setNoteVideo, updateNote } from '$lib/server/db';
 import { indexNote } from '$lib/server/rag';
 import { splitTrailingHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
@@ -11,7 +11,7 @@ export async function GET({ params }) {
 }
 
 export async function PATCH({ params, request }) {
-	let body: { content?: unknown; featured?: unknown; video?: unknown; created_at?: unknown };
+	let body: { content?: unknown; featured?: unknown; published?: unknown; video?: unknown; created_at?: unknown };
 	try {
 		body = await request.json();
 	} catch {
@@ -23,12 +23,13 @@ export async function PATCH({ params, request }) {
 		if (!Number.isFinite(n) || n <= 0) return json({ error: 'invalid date' }, { status: 400 });
 		createdAt = Math.min(n, Date.now());
 	}
-	// Flags and video touch only their own columns: no text, FTS, vector,
+	// Flags touch only their own columns: no text, FTS, vector,
 	// or tag work.
-	if (typeof body?.content !== 'string' && (typeof body?.featured === 'boolean' || typeof body?.video === 'string')) {
+	if (typeof body?.content !== 'string' && (typeof body?.featured === 'boolean' || typeof body?.published === 'boolean' || typeof body?.video === 'string')) {
 		let note = getNote(params.id);
 		if (!note) return json({ error: 'not found' }, { status: 404 });
 		if (typeof body.featured === 'boolean') note = setNoteFeatured(params.id, body.featured) ?? note;
+		if (typeof body.published === 'boolean') note = setNotePublished(params.id, body.published) ?? note;
 		if (typeof body.video === 'string') {
 			const raw = body.video.trim();
 			if (raw) {

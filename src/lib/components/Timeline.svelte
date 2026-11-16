@@ -39,6 +39,7 @@
 
 <script lang="ts">
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Star from '@lucide/svelte/icons/star';
 	import type { Note } from '$lib/types';
@@ -65,6 +66,8 @@
 		onDelete: (id: string) => void;
 		onEdit: (id: string, content: string, video?: string, createdAt?: number) => Promise<void>;
 		onFeature: (note: Note) => void;
+		onPublish: (note: Note) => void;
+		onCover: (note: Note, coverId: string | null) => void;
 		onLoadMore?: () => void;
 		hasMore?: boolean;
 		loadingMore?: boolean;
@@ -77,6 +80,8 @@
 		onDelete,
 		onEdit,
 		onFeature,
+		onPublish,
+		onCover,
 		onLoadMore,
 		hasMore,
 		loadingMore,
@@ -120,15 +125,21 @@
 
 	function measureFoldable() {
 		// Measure unfolded notes only: a persisted fold is trusted as-is
-		// (clamped content cannot be measured reliably in every engine) and
-		// gets re-measured the moment it is expanded.
+		// and gets re-measured the moment it is expanded.
 		for (const n of notes) {
-			if (n.id in collapsed) continue;
-			if (maxHeights[n.id] !== undefined) continue;
 			const el = textEls[n.id];
 			if (!el) continue;
-			// Unfolded: content height over one and a half line = foldable.
 			const lh = parseFloat(getComputedStyle(el).lineHeight) || 20.6;
+			if (n.id in collapsed) {
+				// A reloaded fold carries only the flag; WebKit under-clamps
+				// with the flag alone and shows the card half contracted.
+				// Give it the same one-line cap a manual fold ends with
+				// (`finishFold` keeps it for exactly this reason).
+				if (maxHeights[n.id] === undefined) maxHeights[n.id] = `${Math.ceil(lh)}px`;
+				continue;
+			}
+			if (maxHeights[n.id] !== undefined) continue;
+			// Unfolded: content height over one and a half line = foldable.
 			foldable[n.id] = el.getBoundingClientRect().height > lh * 1.5;
 		}
 	}
@@ -222,6 +233,22 @@
 		// Prefill the URL, not the stored id: the id would fail the API's URL
 		// check on a text-only edit.
 		editVideo = n.video ? youTubeWatchUrl(n.video) : '';
+	}
+
+	async function uploadCover(n: Note, cover: string | null) {
+		if (cover === null) {
+			await loading.track(fetch(`/api/notes/${n.id}/photo`, { method: 'DELETE' }));
+			onCover(n, null);
+			return;
+		}
+		const res = await loading.track(fetch(`/api/notes/${n.id}/photo`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ photo: cover })
+		}));
+		const d = await res.json();
+		if (!res.ok) throw new Error(d?.error ?? 'Could not save the cover image.');
+		onCover(n, d.id as string);
 	}
 
 	function speakNote(id: string, content: string) {
@@ -323,7 +350,7 @@
 						class="relative flex items-start gap-3 rounded-2xl border bg-white/70 dark:bg-stone-900/70 px-4 py-3 max-sm:flex-col max-sm:gap-1 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80 dark:border-stone-800/80'}"
 						aria-busy={n.pending ? 'true' : undefined}
 					>
-						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
+						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.published}<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-1.5 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300" title="Published on the homepage">Public</span>{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/admin/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
 						<div class="flex min-w-0 flex-1 items-start gap-3 max-sm:w-full">
 						<div class="min-w-0 flex-1">
 							{#if (n.linkedNotes?.length ?? 0) > 0}
@@ -332,21 +359,30 @@
 							{#if n.id in collapsed || foldable[n.id]}
 								<div
 									bind:this={foldEls[n.id]}
-									class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeights[n.id] !== undefined ? 'overflow-hidden' : ''}"
+									class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeights[n.id] !== undefined || n.id in collapsed ? 'overflow-hidden' : ''}"
 									style:max-height={maxHeights[n.id]}
 									ontransitionend={(e) => finishFold(n.id, e)}
 								>
-									<button
-										type="button"
-										bind:this={textEls[n.id]}
-										class="w-full text-left whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 block"
-										aria-expanded={n.id in collapsed ? 'false' : 'true'}
-										onclick={(e) => { if ((e.target as HTMLElement).closest('a')) return; void toggleFolded(n.id); }}
-									>
-										<span class="w-full {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : 'block'}">
+									<!-- The fold lives on a small chevron, never on
+										the text: the body must stay selectable and
+										copyable everywhere. The chevron stays under one
+										text line so the one-line max-height cap never
+										clips it. -->
+									<div class="flex items-start">
+										<button
+											type="button"
+											class="-ml-1 mt-px grid h-5 w-5 shrink-0 place-items-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+											aria-label={n.id in collapsed ? 'Expand note' : 'Collapse note'}
+											aria-expanded={n.id in collapsed ? 'false' : 'true'}
+											onclick={() => void toggleFolded(n.id)}
+										><ChevronDown class="h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none {n.id in collapsed ? '-rotate-90' : ''}" /></button>
+										<div
+											bind:this={textEls[n.id]}
+											class="min-w-0 flex-1 whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : ''}"
+										>
 											{@html renderNoteContent(n.content, n.linkedNotes)}
-										</span>
-									</button>
+										</div>
+									</div>
 								</div>
 							{:else}
 								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html renderNoteContent(n.content, n.linkedNotes)}</p>
@@ -426,11 +462,12 @@
 {#if menuNote}
 	<NoteActionsMenu
 		note={menuNote}
-		onOpen={(n) => { const id = n.id; menuNote = null; void goto(`/notes/${id}`); }}
+		onOpen={(n) => { const id = n.id; menuNote = null; void goto(`/admin/notes/${id}`); }}
 		onListen={(n) => { speakNote(n.id, n.content); menuNote = null; }}
 		onEdit={(n) => { openEdit(n); }}
 		onDelete={(n) => { menuNote = null; confirmNote = n; }}
 		onFeature={(n) => { menuNote = null; onFeature(n); }}
+		onPublish={(n) => { menuNote = null; onPublish(n); }}
 		onClose={() => (menuNote = null)}
 	/>
 {/if}
@@ -440,10 +477,12 @@
 		note={editing}
 		content={editContent}
 		video={editVideo}
+		coverId={editing.coverId ?? null}
 		onContent={(v) => (editContent = v)}
 		onVideo={(v) => (editVideo = v)}
-		onSave={async (content, video, createdAt) => {
+		onSave={async (content, video, createdAt, cover) => {
 			await onEdit(editing.id, content, video, createdAt);
+			if (cover !== undefined) await uploadCover(editing, cover);
 			editNote = null;
 		}}
 		onCancel={() => (editNote = null)}

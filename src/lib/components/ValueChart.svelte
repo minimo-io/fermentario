@@ -19,9 +19,14 @@
 	const min = $derived(values.length > 0 ? Math.min(...values) : 0);
 	const max = $derived(values.length > 0 ? Math.max(...values) : 0);
 	const span = $derived(max - min || 1);
+	const dayMs = $derived.by(() => {
+		const times = clean.map((p) => new Date(`${p.day}T12:00:00`).getTime());
+		return times.length > 0 ? times : [0];
+	});
+	const timeSpan = $derived(Math.max(...dayMs) - Math.min(...dayMs) || 1);
 	const coords = $derived(
 		clean.map((p, i) => {
-			const x = clean.length <= 1 ? W / 2 : PAD + (i / (clean.length - 1)) * (W - PAD * 2);
+			const x = PAD + ((dayMs[i]! - Math.min(...dayMs)) / timeSpan) * (W - PAD * 2);
 			const y = H - PAD - ((p.value - min) / span) * (H - PAD * 2);
 			return { x, y };
 		})
@@ -34,6 +39,7 @@
 	);
 	const first = $derived(clean[0]?.day ?? '');
 	const last = $derived(clean[clean.length - 1]?.day ?? '');
+	const firstValue = $derived(clean[0]?.value ?? 0);
 	const lastValue = $derived(clean[clean.length - 1]?.value ?? 0);
 	const change = $derived(
 		clean.length > 1 && clean[0]!.value !== 0
@@ -63,13 +69,16 @@
 	</p>
 {:else}
 	<div class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3">
-		<div class="flex items-baseline justify-between gap-2">
-			<span class="text-xs font-medium text-stone-600 dark:text-stone-300">{money(lastValue)}</span>
-			{#if change !== null}
-				<span class="text-[11px] font-medium tabular-nums {change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
-					{change >= 0 ? '+' : ''}{change.toFixed(1)}% over {spanDays} {spanDays === 1 ? 'day' : 'days'}
-				</span>
-			{/if}
+		<div class="flex items-start justify-between gap-2">
+			<span class="pt-0.5 text-xs tabular-nums text-stone-400 dark:text-stone-500">{money(firstValue)}</span>
+			<span class="text-right">
+				<span class="block text-sm font-semibold tabular-nums text-stone-800 dark:text-stone-200">{money(lastValue)}</span>
+				{#if change !== null}
+					<span class="mt-0.5 block text-[11px] font-medium tabular-nums {change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
+						{change >= 0 ? '+' : ''}{change.toFixed(1)}% over {spanDays} {spanDays === 1 ? 'day' : 'days'}
+					</span>
+				{/if}
+			</span>
 		</div>
 		<svg viewBox="0 0 {W} {H}" class="mt-1 h-24 w-full overflow-visible" role="img" aria-label="Value history">
 			<path d={area} fill="currentColor" class="text-stone-200/70 dark:text-stone-800/70"></path>
@@ -82,9 +91,15 @@
 				stroke-linejoin="round"
 				class="text-stone-700 dark:text-stone-300"
 			></polyline>
-			{#if coords.length > 0}
-				<circle cx={coords[coords.length - 1]!.x} cy={coords[coords.length - 1]!.y} r="2.5" fill="currentColor" class="text-stone-900 dark:text-stone-100"></circle>
-			{/if}
+			{#each coords as c, i (i)}
+				<circle
+					cx={c.x}
+					cy={c.y}
+					r={i === coords.length - 1 ? 3 : 2}
+					fill="currentColor"
+					class={i === coords.length - 1 ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400 dark:text-stone-500'}
+				/>
+			{/each}
 		</svg>
 		<div class="flex justify-between text-[10px] tabular-nums text-stone-400 dark:text-stone-500">
 			<span>{dayLabel(first)}</span>

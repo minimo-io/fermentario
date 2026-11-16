@@ -28,11 +28,11 @@ export const SEARCH_GROUPS: { kind: SearchKind; label: string }[] = [
 export function searchHref(hit: Pick<SearchHit, 'kind' | 'id'>): string | null {
 	switch (hit.kind) {
 		case 'note':
-			return `/notes/${hit.id}`;
+			return `/admin/notes/${hit.id}`;
 		case 'todo':
-			return `/todo/${hit.id}`;
+			return `/admin/todo/${hit.id}`;
 		case 'principle':
-			return `/principles/${hit.id}`;
+			return `/admin/principles/${hit.id}`;
 		default:
 			return null;
 	}

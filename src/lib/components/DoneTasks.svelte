@@ -126,7 +126,7 @@
 									<Check class="h-3 w-3" />
 								</span>
 								<div class="min-w-0 flex-1">
-									<a href={`/todo/${item.id}`} class="block whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 hover:text-stone-950 dark:hover:text-white">{item.content}</a>
+									<a href={`/admin/todo/${item.id}`} class="block whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 hover:text-stone-950 dark:hover:text-white">{item.content}</a>
 									<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-stone-400 dark:text-stone-500">
 										<span class="rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-stone-500 dark:text-stone-400">{item.groupName}</span>
 										{#if item.done_at}

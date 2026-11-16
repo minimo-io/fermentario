@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { parseDecimal } from '$lib/numbers';
 	import { fmtQty, stockDisplayTitle, stockUnit, stockUnitFamily } from '$lib/stock';
 	import type { StockItem } from '$lib/types';
 
@@ -35,7 +36,7 @@
 
 	async function submit() {
 		if (saving) return;
-		const value = Number(amount.trim().replace(',', '.'));
+		const value = parseDecimal(amount);
 		if (!Number.isFinite(value) || value <= 0) {
 			error = 'Amount must be greater than 0.';
 			return;
@@ -96,7 +97,6 @@
 						type="number"
 						min="0"
 						step="0.01"
-						inputmode="decimal"
 						placeholder={nativeUnit}
 						value={amount}
 						oninput={(e) => (amount = e.currentTarget.value)}

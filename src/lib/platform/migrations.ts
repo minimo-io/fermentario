@@ -629,6 +629,217 @@ const b3Tickers: Migration = {
 	}
 };
 
+/** One stored quote per ticker per day: the position's own series. */
+const tradingQuoteHistory: Migration = {
+	version: 25,
+	name: 'trading-quote-history',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS trading_quote_history (
+				ticker     TEXT NOT NULL,
+				day        TEXT NOT NULL,
+				price      REAL NOT NULL,
+				source     TEXT NOT NULL DEFAULT '',
+				recorded_at INTEGER NOT NULL,
+				PRIMARY KEY (ticker, day)
+			);
+		`);
+	}
+};
+
+/** Notes can be published to the public homepage. */
+const notePublished: Migration = {
+	version: 26,
+	name: 'note-published',
+	up(db) {
+		addColumn(db, 'notes', 'published', 'INTEGER NOT NULL DEFAULT 0');
+		db.exec('CREATE INDEX IF NOT EXISTS idx_notes_published ON notes (published, created_at DESC, id DESC)');
+	}
+};
+
+/** One cover photo per note for published articles. */
+const noteCoverPhotos: Migration = {
+	version: 27,
+	name: 'note-cover-photos',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS note_photos (
+				id         TEXT PRIMARY KEY,
+				note_id    TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+				photo      BLOB NOT NULL,
+				mime       TEXT NOT NULL DEFAULT 'image/jpeg',
+				created_at INTEGER NOT NULL
+			);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_note_photos_note ON note_photos (note_id);
+		`);
+	}
+};
+
+/** Public presentation settings. This row is safe to expose to anonymous
+ *  visitors; private admin preferences stay outside it. */
+const publicConfig: Migration = {
+	version: 28,
+	name: 'public-config',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS public_config (
+				id                INTEGER PRIMARY KEY CHECK (id = 1),
+				site_title        TEXT    NOT NULL DEFAULT 'fermentario',
+				description       TEXT    NOT NULL DEFAULT 'Published notes.',
+				notes_enabled     INTEGER NOT NULL DEFAULT 1,
+				show_cover_images INTEGER NOT NULL DEFAULT 1,
+				updated_at        INTEGER NOT NULL DEFAULT 0
+			);
+			INSERT OR IGNORE INTO public_config (
+				id, site_title, description, notes_enabled, show_cover_images, updated_at
+			) VALUES (1, 'fermentario', 'Published notes.', 1, 1, 0);
+		`);
+	}
+};
+
+/** The Library: EPUB bytes live in the journal, so backups and restore carry
+ *  the books themselves, not just their metadata. */
+const libraryBooks: Migration = {
+	version: 29,
+	name: 'library-books',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS books (
+				id           TEXT PRIMARY KEY,
+				title        TEXT NOT NULL,
+				author       TEXT NOT NULL DEFAULT '',
+				bytes        BLOB NOT NULL,
+				size         INTEGER NOT NULL,
+				added_at     INTEGER NOT NULL,
+				last_cfi     TEXT NOT NULL DEFAULT '',
+				last_pct     REAL NOT NULL DEFAULT 0,
+				last_chapter TEXT NOT NULL DEFAULT '',
+				last_read_at INTEGER NOT NULL DEFAULT 0
+			);
+			CREATE TABLE IF NOT EXISTS book_notes (
+				id         TEXT PRIMARY KEY,
+				book_id    TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+				cfi        TEXT NOT NULL,
+				excerpt    TEXT NOT NULL DEFAULT '',
+				note       TEXT NOT NULL DEFAULT '',
+				color      TEXT NOT NULL DEFAULT 'amber',
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_books_last_read ON books (last_read_at DESC, added_at DESC, id DESC);
+			CREATE INDEX IF NOT EXISTS idx_book_notes_book ON book_notes (book_id, created_at DESC);
+		`);
+	}
+};
+
+/** Service API credentials (Ripio Trade today). They live in the journal
+ *  DB because the journal is the app's whole state: backups carry them and
+ *  a restore re-arms the integration. No other code path reads them out —
+ *  the admin API reports only configured/updatedAt. */
+const apiCredentials: Migration = {
+	version: 30,
+	name: 'api-credentials',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS api_credentials (
+				service    TEXT PRIMARY KEY,
+				token      TEXT NOT NULL,
+				secret     TEXT NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+		`);
+	}
+};
+
+/** Nostr profile (nsec stays in the journal, local-first) and the events
+ *  published from it. The relay list is cached here (NIP-65) so publishing
+ *  works offline against the last-known set. */
+const nostrProfile: Migration = {
+	version: 31,
+	name: 'nostr-profile',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS nostr_profile (
+				id        INTEGER PRIMARY KEY CHECK (id = 1),
+				nsec      TEXT NOT NULL DEFAULT '',
+				npub      TEXT NOT NULL DEFAULT '',
+				name      TEXT NOT NULL DEFAULT '',
+				about     TEXT NOT NULL DEFAULT '',
+				picture   TEXT NOT NULL DEFAULT '',
+				relays    TEXT NOT NULL DEFAULT '[]',
+				updated_at INTEGER NOT NULL DEFAULT 0
+			);
+			INSERT OR IGNORE INTO nostr_profile (id) VALUES (1);
+			CREATE TABLE IF NOT EXISTS nostr_events (
+				id          TEXT PRIMARY KEY,
+				account_id  TEXT NOT NULL DEFAULT '',
+				kind        INTEGER NOT NULL,
+				content     TEXT NOT NULL DEFAULT '',
+				tags        TEXT NOT NULL DEFAULT '[]',
+				created_at  INTEGER NOT NULL,
+				published_at INTEGER NOT NULL,
+				source_note_id TEXT,
+				is_reply    INTEGER NOT NULL DEFAULT 0,
+				raw_event   TEXT NOT NULL DEFAULT ''
+			);
+			CREATE INDEX IF NOT EXISTS idx_nostr_events_created ON nostr_events (created_at DESC, id DESC);
+			CREATE INDEX IF NOT EXISTS idx_nostr_events_reply ON nostr_events (is_reply, created_at DESC);
+		`);
+	}
+};
+
+/** The embedded relay serves and filters by author, so the stored events need
+ *  their pubkey as a column. Backfill from the raw event JSON. */
+const nostrEventPubkey: Migration = {
+	version: 32,
+	name: 'nostr-event-pubkey',
+	up(db) {
+		db.exec(`
+			ALTER TABLE nostr_events ADD COLUMN pubkey TEXT NOT NULL DEFAULT '';
+			CREATE INDEX IF NOT EXISTS idx_nostr_events_pubkey ON nostr_events (pubkey, kind, created_at DESC);
+			UPDATE nostr_events
+				SET pubkey = COALESCE(json_extract(raw_event, '$.pubkey'), '')
+				WHERE pubkey = '';
+		`);
+	}
+};
+
+/** Manual time tracking: one running entry at a time, with history. */
+const timeTracker: Migration = {
+	version: 33,
+	name: 'time-tracker',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS time_entries (
+				id         TEXT PRIMARY KEY,
+				comment    TEXT NOT NULL DEFAULT '',
+				started_at INTEGER NOT NULL,
+				ended_at   INTEGER,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS time_entries_state
+				ON time_entries(ended_at, started_at DESC);
+		`);
+	}
+};
+
+/** Project/tag association for time entries. */
+const timeEntryTags: Migration = {
+	version: 34,
+	name: 'time-entry-tags',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS time_entry_tags (
+				entry_id TEXT NOT NULL REFERENCES time_entries(id) ON DELETE CASCADE,
+				tag      TEXT NOT NULL,
+				PRIMARY KEY (entry_id, tag)
+			);
+			CREATE INDEX IF NOT EXISTS time_entry_tags_tag ON time_entry_tags(tag);
+		`);
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -653,7 +864,17 @@ export const MIGRATIONS: Migration[] = [
 	holdingValueHistory,
 	shoppingExtras,
 	trading,
-	b3Tickers
+	b3Tickers,
+	tradingQuoteHistory,
+	notePublished,
+	noteCoverPhotos,
+	publicConfig,
+	libraryBooks,
+	apiCredentials,
+	nostrProfile,
+	nostrEventPubkey,
+	timeTracker,
+	timeEntryTags
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

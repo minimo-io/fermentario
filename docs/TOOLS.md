@@ -3,11 +3,16 @@
 ## `pnpm test` — web app regression gate
 `node scripts/web-smoke.mjs`
 
-Boots the production build (`node build`) on a temporary port against a copy of
-the frozen fixture, exercises every page and every API route, and compares the
-result with `tests/baseline/web.json`. 47 checks. The export/import round trip
-creates one row in every section, restores the exported file, and reads every
-section back through the API.
+Boots the production entry (`node scripts/start.mjs`, which runs `build/index.js`
+and attaches the Nostr relay) on a temporary port against a copy of the frozen
+fixture, exercises every page and every API route, and compares the result with
+`tests/baseline/web.json`. 203 checks. The export/import round trip creates one
+row in every section, restores the exported file, and reads every section back
+through the API. The Nostr block uses a throwaway key, publishes through the
+API, reads the result over a WebSocket from `/relay`, refuses a foreign author,
+and accepts an owner write over the socket — all against the local relay. It
+then stops the relay, proves the handshake is refused (while NIP-11 still
+answers), and starts it again.
 
 | Command | What it does |
 | --- | --- |
@@ -20,17 +25,24 @@ Rules that keep it a real gate:
 - It downloads nothing. `scripts/offline-guard.mjs` rejects the Hugging Face hosts, so the background `ensureIndexed()` pass fails fast instead of pulling 22 MB of weights.
 - `TZ=UTC` fixes the heatmap day keys, which are computed with `localtime`.
 - The model cache is an empty temp directory, so no 488 MB model loads.
+- `FERMENTARIO_NOSTR_RELAYS` points discovery and publish at the run's own
+  `/relay`, so the Nostr checks never reach a public relay.
 - Runtime values — fresh UUIDs, fresh timestamps, the temp path — are masked once at serialization time.
 - A changed set of check names is a failure. The golden is not silently rewritten.
 
 ## `pnpm start` — production server
 `node scripts/start.mjs`
 
-Sets `BODY_SIZE_LIMIT=110M` (unless the deployment already sets it) and then
-loads `build/index.js`. adapter-node's 512 KB default rejects a real database
-restore before the route can run. `ORIGIN` is still deployment-specific: set it
-when the app runs over plain HTTP behind a proxy, or the import form fails the
-CSRF origin check.
+Sets `BODY_SIZE_LIMIT=110M` (unless the deployment already sets it), loads
+`build/index.js`, then attaches the Nostr relay (`scripts/relay.mjs`) to the
+HTTP server adapter-node created. adapter-node's 512 KB default rejects a real
+database restore before the route can run. `ORIGIN` is still
+deployment-specific: set it when the app runs over plain HTTP behind a proxy, or
+the import form fails the CSRF origin check.
+
+A reverse proxy in front of the app must forward `Upgrade` and `Connection` for
+`/relay`, or the WebSocket handshake fails. `GET /relay` returns the NIP-11
+document; `wss://<domain>/relay` is the address other clients add.
 
 On first boot, if `data/registry.db` has no journal and `data/fermentario.db`
 exists, the server copies the old file into `data/journals/<id>/journal.db`,
@@ -38,6 +50,44 @@ migrates it, activates it, and removes the old file. The copy is kept under
 `data/backups/<id>/pre-migration-v0.db`. Stop the old server before this boot;
 the import assumes one writer. If the import fails, the app shows
 `/journal-error` and leaves the old file untouched.
+
+## `scripts/relay.mjs` — embedded Nostr relay
+There is no separate command. `scripts/start.mjs` attaches it to the production
+HTTP server; `vite.config.ts` attaches the same module to the dev server, with
+`strictPaths: false` so Vite's HMR socket keeps working. It handles the
+`upgrade` for `/relay` and speaks a NIP-01 subset: `EVENT`, `REQ` (one or more
+filters, `ids`, `authors`, `kinds`, `since`, `until`, `limit`, `#tags`),
+`CLOSE`, with `OK` / `EOSE` / `CLOSED` / `NOTICE` replies.
+
+- Writes are restricted to the account's pubkey (`nostr_profile` in the active
+  journal), verified with `verifyEvent`. Everything else gets `OK false`
+  `restricted`. There is no AUTH; reads are open.
+- Events land in the active journal's `nostr_events` table (`INSERT OR IGNORE`
+  by id), so the admin section and a `REQ` read the same rows. `account_id`
+  and `pubkey` both hold the author's hex key. The relay keeps
+  its own `better-sqlite3` connection and reopens it when the registry's active
+  journal changes.
+- Limits: 64 KB per message, 20 subscriptions per connection, `limit` capped at
+  500, 2000 events per `REQ`.
+- `FERMENTARIO_DATA_DIR` locates `registry.db`; `GET /relay` serves the NIP-11
+  document from `src/routes/relay/+server.ts`.
+- `GET /api/nostr/relay` reports `{ running, url }`; `POST` with
+  `{ running: boolean }` flips the `relay_enabled` key in the registry's
+  `app_state`. The upgrade listener reads that key on every connection and
+  destroys the socket when the relay is stopped. The Nostr section's dot and
+  `Start relay` / `Stop relay` button use this pair. The flag survives a
+  restart, so stop it in production before a port move if needed.
+- `POST /api/nostr/sync` is one page of the backup, not the whole thing. Body
+  `{ until?: number, limit?: number }` (`until` in unix seconds, `limit`
+  capped at 500). It returns `{ imported, fetched, hasMore, nextCursor,
+  stats, lastSyncAt }`: `nextCursor` is the oldest `created_at` of the page,
+  and `hasMore` is true when the page added something new, so older events may
+  exist. The section loops with a 2 s pause until `hasMore` is false; the
+  newest batch first, which is also how new posts arrive. A second concurrent
+  call gets `409` from an in-process guard. `lastSyncAt` is stored in the
+  registry (`nostr_last_sync_at`) and also returned by
+  `GET /api/nostr/profile`. Duplicates across relays are dropped by event id
+  (`nostr_events.id` is the primary key, `INSERT OR IGNORE`).
 
 ## `pnpm run db:migrate:all` — migrate every journal
 `node --experimental-strip-types scripts/migrate-all.ts`
@@ -92,7 +142,38 @@ real `fetch`, so SvelteKit's own server-side fetch is unaffected. Without it,
 every test run downloads model weights, because `GET /api/notes` starts the
 background indexing pass.
 
+## scripts/reader-webkit-check.mjs
+End-to-end EPUB reader check on the REAL WebKit engine (the iPhone Safari
+engine) via `playwright-core` and the cached Playwright WebKit browser.
+Boots `build/index.js` against a throwaway copy of the fixture, uploads a
+Gutenberg EPUB through `POST /api/books`, opens `/admin/book/[id]`, makes a
+programmatic selection inside the content iframe, and asserts: the
+selection toolbar appears from the capture poll, the highlight saves with a
+`epubcfi(...)` range, the SVG mark renders, and the toolbar does not ghost
+back, and a trusted mouse drag inside the sandboxed iframe reaches the
+parent capture (the same native-delivery path a finger takes).
+
+    pnpm run build
+    curl -L -o /tmp/pg84.epub https://www.gutenberg.org/cache/epub/84/pg84.epub   # once
+    node scripts/reader-webkit-check.mjs [path/to/book.epub]
+
+Exits non-zero with the server/browser diagnostics on the first failed
+step. If Playwright updates its browser revision:
+`node node_modules/playwright-core/cli.js install webkit`.
+
 ## Future: engine parity tests
 Task 020. Will run the real DDL and every query against both better-sqlite3 and
 `@sqlite.org/sqlite-wasm` using the same fixture, and compare rows, ordering,
 BM25 results and the vector blobs byte for byte.
+
+## Market quotes
+
+- `POST /api/quotes/refresh` body `{ ticker }` refreshes one ticker: its auto-priced holdings rows (`price_auto = 1`; never cash and never a hand-set price) and its trading quote, then returns `{ ticker, ok, price, previousClose, source, error, summary }`. A missing ticker is 400; an upstream failure is a 200 with `ok: false`, like `/api/market/refresh`.
+- `POST /api/market/refresh` is the global Update and is unchanged: one forced holdings refresh plus every open trading ticker.
+- The client dispatches `trading:changed` after a single-ticker refresh so the trading strip and the Trading page reload their quotes.
+
+## Time tracker
+
+- Routes: `GET /api/time-tracker` returns `{ running, entries }`; `POST /api/time-tracker/start` body `{ comment }` creates a running entry (409 if one is already running); `POST /api/time-tracker/stop` body `{ id? }` stops the running entry (409 if none running); `DELETE /api/time-tracker/<id>` deletes one entry, running or stopped (404 if missing), and its tag rows; `GET /api/time-tracker/stats?period=month|week|year&at=<iso>` returns aggregated buckets/segments for the period chart.
+- Tags/projects: trailing hashtags in the start comment are parsed with `splitTrailingHashtags` (like notes). The comment is stored without the trailing tag run and tags are stored in `time_entry_tags` (migration 34). Stats attribute each entry's duration to its first tag (primary project); untagged time is a neutral segment.
+- Journal tables: `time_entries` (migration 33, `time-tracker`), `time_entry_tags` (migration 34, `time-entry-tags`). One running timer at a time (`ended_at IS NULL`).

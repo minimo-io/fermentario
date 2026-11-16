@@ -1,6 +1,34 @@
+<script module lang="ts">
+	// Fold state is module-shared on purpose: the same principle can render in
+	// the list and in search/tag views, and the storage key must not clobber.
+	let collapsed = $state<Record<string, boolean>>({});
+	let foldedLoaded = false;
+	const COLLAPSED_KEY = 'ferm:collapsed-principles';
+	function loadFoldedOnce() {
+		if (foldedLoaded) return;
+		foldedLoaded = true;
+		try {
+			const raw = localStorage.getItem(COLLAPSED_KEY);
+			if (!raw) return;
+			const parsed = JSON.parse(raw) as unknown;
+			if (!Array.isArray(parsed)) return;
+			for (const id of parsed) if (typeof id === 'string') collapsed[id] = true;
+		} catch {
+			// Bad storage never breaks the principles list.
+		}
+	}
+	function persistFolded() {
+		try {
+			localStorage.setItem(COLLAPSED_KEY, JSON.stringify(Object.keys(collapsed)));
+		} catch {
+			// Storage full/blocked: the fold still works for the session.
+		}
+	}
+</script>
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import type { Principle } from '$lib/types';
+	import { tick } from 'svelte';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 	import Kbd from '$lib/components/Kbd.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
@@ -29,8 +57,8 @@
 
 	// Add-principle shortcut: desktop pointers only. ⌘⇧A on Mac, Ctrl+Shift+A
 	// elsewhere — none of these is reserved by browsers or the OS shell.
-	const isMac = navigator.userAgent.includes('Mac');
-	const canKeyShortcut = matchMedia('(hover: hover) and (pointer: fine)').matches;
+	const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
+	const canKeyShortcut = typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 	const addShortcutKeys = isMac ? ['⌘', '⇧', 'A'] : ['Ctrl', 'Shift', 'A'];
 
 	function handleAddShortcut(e: KeyboardEvent) {
@@ -66,22 +94,17 @@
 
 	// A leading `(name)` token groups a principle, exactly like To-Do
 	// subgroups. The prefix stays in the stored text, so the split is a list
-	// view only: /principles/[id], tag pages, search and the RAG text keep
-	// the full line. Groups render first, then the ungrouped principles, and
-	// numbers follow that display order.
+	// view only: /admin/principles/[id], tag pages, search and the RAG text
+	// keep the full line. Groups render first, then the ungrouped principles
+	// as a plain list (no "Ungrouped" header). Only ungrouped principles
+	// carry the display number; grouped ones read in their stored order.
 	type PrincipleRow = { p: Principle; content: string; subgroup: string };
 	const rows = $derived.by<PrincipleRow[]>(() =>
 		principles.map((p) => ({ p, ...splitLeadingSubgroup(p.content) }))
 	);
 	const ungrouped = $derived(rows.filter((r) => !r.subgroup));
 	const groupNames = $derived([...new Set(rows.map((r) => r.subgroup).filter(Boolean))]);
-	const displayNum = $derived.by(() => {
-		const ordered = [
-			...groupNames.flatMap((sg) => rows.filter((r) => r.subgroup === sg)),
-			...ungrouped
-		];
-		return new Map(ordered.map((r, i) => [r.p.id, i + 1] as const));
-	});
+	const displayNum = $derived(new Map(ungrouped.map((r, i) => [r.p.id, i + 1] as const)));
 	let collapsedGroups = $state<Record<string, boolean>>({});
 
 	let dragId = $state<string | null>(null);
@@ -89,6 +112,90 @@
 	let suppressClick = false;
 	let dragEl: HTMLElement | null = null;
 	let pending: { id: string; x: number; y: number; timer: ReturnType<typeof setTimeout> | null; el: HTMLElement } | null = null;
+
+	// Fold machinery — same rules as the notes timeline, so a long
+	// principle collapses to one clamped line on a chevron tap and the
+	// body stays selectable/copyable everywhere. Persisted folds reload
+	// with the one-line max-height cap (WebKit under-clamps without it).
+	let foldable = $state<Record<string, boolean>>({});
+	let maxHeights = $state<Record<string, string>>({});
+	let unclamped = $state<Record<string, boolean>>({});
+	let textEls: Record<string, HTMLElement | null> = {};
+	let foldEls: Record<string, HTMLElement | null> = {};
+
+	$effect(() => {
+		loadFoldedOnce();
+	});
+
+	$effect(() => {
+		void principles.length;
+		const onResize = () => void measureFoldable();
+		onResize();
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	});
+
+	function measureFoldable() {
+		for (const p of principles) {
+			const el = textEls[p.id];
+			if (!el) continue;
+			const lh = parseFloat(getComputedStyle(el).lineHeight) || 20.6;
+			if (p.id in collapsed) {
+				if (maxHeights[p.id] === undefined) maxHeights[p.id] = `${Math.ceil(lh)}px`;
+				continue;
+			}
+			if (maxHeights[p.id] !== undefined) continue;
+			foldable[p.id] = el.getBoundingClientRect().height > lh * 1.5;
+		}
+	}
+
+	function finishFold(id: string, e: TransitionEvent) {
+		if (e.target !== e.currentTarget || e.propertyName !== 'max-height') return;
+		if (id in collapsed) {
+			delete unclamped[id];
+			return;
+		}
+		delete maxHeights[id];
+		delete unclamped[id];
+		measureFoldable();
+	}
+
+	async function toggleFolded(id: string) {
+		const wrapper = foldEls[id];
+		const duration = motionMs(180);
+		if (!wrapper || !duration) {
+			if (id in collapsed) {
+				foldable[id] = true;
+				delete collapsed[id];
+			} else {
+				collapsed[id] = true;
+			}
+			persistFolded();
+			delete maxHeights[id];
+			delete unclamped[id];
+			return;
+		}
+		const start = wrapper.getBoundingClientRect().height;
+		if (id in collapsed) {
+			foldable[id] = true;
+			delete collapsed[id];
+			persistFolded();
+			maxHeights[id] = `${start}px`;
+			await tick();
+			void wrapper.getBoundingClientRect();
+			const full = Math.max(wrapper.scrollHeight, textEls[id]?.getBoundingClientRect().height ?? 0);
+			maxHeights[id] = `${full}px`;
+		} else {
+			collapsed[id] = true;
+			persistFolded();
+			unclamped[id] = true;
+			maxHeights[id] = `${start}px`;
+			await tick();
+			void wrapper.getBoundingClientRect();
+			const line = parseFloat(getComputedStyle(textEls[id] ?? wrapper).lineHeight) || 20.6;
+			maxHeights[id] = `${Math.ceil(line)}px`;
+		}
+	}
 
 	async function load() {
 		try {
@@ -315,13 +422,21 @@
 {#snippet principleRow(row: PrincipleRow)}
 	<li
 		data-principle={row.p.id}
-		class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 select-none {dragId === row.p.id ? 'opacity-40' : ''} {dragId && overId === row.p.id && dragId !== row.p.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
+		class="relative rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 select-none {dragId === row.p.id ? 'opacity-40' : ''} {dragId && overId === row.p.id && dragId !== row.p.id ? 'ring-1 ring-stone-900 dark:ring-stone-100' : ''}"
 		style={dragId ? 'touch-action: none' : ''}
 		onpointerdown={(e) => onDown(e, row.p.id)}
 		onpointermove={onMove}
 		onpointerup={() => endDrag(true)}
 		onpointercancel={() => endDrag(false)}
 	>
+		<!-- The comment pill floats in the top-right corner, clearing the ⋮,
+			as on note cards. -->
+		<div class="absolute top-2 right-12 z-10">{@render commentPill(row.p)}</div>
+		<!-- The ordinal rides the card's top edge instead of taking a fixed
+			column beside every row, so the text starts next to the grip. -->
+		<span
+			class="pointer-events-none absolute -top-2 left-3 z-10 rounded-full bg-white px-1.5 text-[10px] font-semibold tabular-nums text-stone-400 dark:bg-stone-900 dark:text-stone-500"
+			aria-hidden="true">{displayNum.get(row.p.id) ?? ''}</span>
 		<div class="flex items-start gap-3 sm:items-center">
 			<span
 				role="button"
@@ -336,16 +451,39 @@
 					moveWithinGroup(row.p.id, e.key === 'ArrowUp' ? -1 : 1);
 				}}
 			><GripVertical class="h-4 w-4" /></span>
-			<span class="sm:mt-0 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-400 dark:text-stone-500">{displayNum.get(row.p.id) ?? ''}</span>
 			<div class="min-w-0 flex-1">
 				{#if (row.p.linkedNotes?.length ?? 0) > 0}
 					<div class="mb-1"><NoteLinkPills links={row.p.linkedNotes ?? []} /></div>
 				{/if}
-				<button
-					type="button"
-					class="block w-full text-left text-[15px] text-stone-800 dark:text-stone-200"
-					onclick={(e) => { if ((e.target as HTMLElement).closest('a')) return; if (suppressClick) { suppressClick = false; return; } if (!dragId) openEdit(row.p); }}
-				>{@html renderPlainLinks(row.content, row.p.linkedNotes)}</button>
+				{#if row.p.id in collapsed || foldable[row.p.id]}
+					<div
+						bind:this={foldEls[row.p.id]}
+						class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeights[row.p.id] !== undefined || row.p.id in collapsed ? 'overflow-hidden' : ''}"
+						style:max-height={maxHeights[row.p.id]}
+						ontransitionend={(e) => finishFold(row.p.id, e)}
+					>
+						<!-- Fold lives on a small chevron so the body stays
+							selectable/copyable and links remain clickable. -->
+						<div class="flex items-start">
+							<button
+								type="button"
+								class="-ml-1 mt-px grid h-5 w-5 shrink-0 place-items-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+								onpointerdown={(e) => e.stopPropagation()}
+								aria-label={row.p.id in collapsed ? 'Expand principle' : 'Collapse principle'}
+								aria-expanded={row.p.id in collapsed ? 'false' : 'true'}
+								onclick={() => void toggleFolded(row.p.id)}
+							><ChevronDown class="h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none {row.p.id in collapsed ? '-rotate-90' : ''}" /></button>
+							<div
+								bind:this={textEls[row.p.id]}
+								class="min-w-0 flex-1 text-[15px] text-stone-800 dark:text-stone-200 {row.p.id in collapsed && !unclamped[row.p.id] ? 'line-clamp-1' : ''}"
+							>
+								{@html renderPlainLinks(row.content, row.p.linkedNotes)}
+							</div>
+						</div>
+					</div>
+				{:else}
+					<p bind:this={textEls[row.p.id]} class="text-[15px] text-stone-800 dark:text-stone-200">{@html renderPlainLinks(row.content, row.p.linkedNotes)}</p>
+				{/if}
 				<time
 					class="mt-0.5 block text-[11px] tabular-nums text-stone-400 dark:text-stone-500"
 					datetime={new Date(row.p.created_at).toISOString()}
@@ -362,26 +500,22 @@
 					year: 'numeric'
 				})}</time>
 			</div>
-			<!-- sm+: tags and the comment pill share the title line, right-aligned before the ⋮ -->
+			<!-- sm+: tags share the title line, right-aligned before the ⋮; the
+			comment pill floats in the card corner instead. -->
 			<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 				{#each row.p.tags as t (t)}
 					<TagChip tag={t} />
 				{/each}
-				{@render commentPill(row.p)}
 			</div>
 			<button type="button" aria-label="Principle actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuPrinciple = row.p)}><EllipsisVertical class="h-4 w-4" /></button>
 		</div>
 		{#if row.p.tags.length > 0}
-			<!-- Mobile: tags keep their right-aligned row, pill rides at its end. -->
+			<!-- Mobile: tags keep their right-aligned row. -->
 			<div class="mt-1.5 flex flex-wrap items-center justify-end gap-1 sm:hidden">
 				{#each row.p.tags as t (t)}
 					<TagChip tag={t} />
 				{/each}
-				{@render commentPill(row.p)}
 			</div>
-		{:else}
-			<!-- Mobile, bare card: pill alone is right-aligned on its own line. -->
-			<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(row.p)}</div>
 		{/if}
 		{#if row.p.video}
 			<div class="mt-2 text-left sm:text-right"><VideoPill id={row.p.video} /></div>
@@ -407,10 +541,9 @@
 		</div>
 	{/each}
 	{#if ungrouped.length > 0}
+		<!-- Ungrouped principles sit in a plain list: no section header, no
+			numbers on grouped rows. -->
 		<div class={groupNames.length > 0 ? 'mt-3' : ''}>
-			{#if groupNames.length > 0}
-				<p class="mb-2 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Ungrouped</p>
-			{/if}
 			<ol class="space-y-2">
 				{#each ungrouped as row (row.p.id)}{@render principleRow(row)}{/each}
 			</ol>
@@ -506,7 +639,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={(e) => { const q = menuPrinciple; menuPrinciple = null; if (q) void goto(`/principles/${q.id}`); }}
+					onclick={(e) => { const q = menuPrinciple; menuPrinciple = null; if (q) void goto(`/admin/principles/${q.id}`); }}
 				>Open</button>
 				<button
 					type="button"

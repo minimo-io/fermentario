@@ -2,6 +2,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { parseDecimal } from '$lib/numbers';
 	import StockRegistryField from '$lib/components/StockRegistryField.svelte';
 	import { stockUnitFamily } from '$lib/stock';
 	import { uniqueKey } from '$lib/unique';
@@ -97,7 +98,7 @@
 	});
 
 	function num(raw: string): number {
-		return Number(raw.trim().replace(',', '.'));
+		return parseDecimal(raw);
 	}
 
 	function addRow() {
@@ -266,7 +267,6 @@
 									type="number"
 									min="0"
 									step="0.01"
-									inputmode="decimal"
 									placeholder="200"
 									value={row.amount}
 									oninput={(e) => (row.amount = e.currentTarget.value)}

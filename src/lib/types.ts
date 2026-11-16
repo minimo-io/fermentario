@@ -1,13 +1,25 @@
 import type { LinkRef } from './platform/journal';
 export type {
+	Book,
+	BookNote,
+	BookNotesPage,
+	ApiCredentialStatus,
+	NostrProfile,
+	NostrEvent,
+	TimeEntry,
+	TimeTrackerStats,
+	TimeStatsBucket,
+	TimeStatsSegment,
 	QuoteFetchEntry,
+	PublicConfig,
 	TradingOrg,
 	TradingOrder,
 	TradingDiaryLine,
 	TradingPosition,
 	TradingMonthRow,
 	TradingSummary,
-	TradingStripItem
+	TradingStripItem,
+	TradingQuotePoint
 } from './platform/journal';
 
 export interface Note {
@@ -19,6 +31,8 @@ export interface Note {
 	pending?: boolean;
 	featured?: boolean;
 	video?: string;
+	published?: boolean;
+	coverId?: string | null;
 	commentCount?: number;
 	linkedNotes?: LinkRef[];
 }
@@ -313,9 +327,32 @@ export interface StockItem {
 	photos: StockItemPhoto[];
 	created_at: number;
 	updated_at: number;
-}export interface TodoDonePage {
+}
+
+export interface TodoDonePage {
 	items: TodoProgressItem[];
 	count: number;
 	hasMore: boolean;
 	nextCursor: TodoDoneCursor | null;
+}
+
+/** Status-only view of the Nostr account. The nsec is never part of it. */
+export interface NostrStatus {
+	configured: boolean;
+	npub: string;
+	name: string;
+	about: string;
+	picture: string;
+	relays: string[];
+	relayUrl: string;
+	updatedAt: number;
+	/** When the last backup batch finished, 0 until one runs. */
+	lastSyncAt: number;
+	stats: {
+		notes: number;
+		replies: number;
+		total: number;
+		lastAt: number;
+		lastStoredAt: number;
+	};
 }

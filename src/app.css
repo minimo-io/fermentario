@@ -28,6 +28,18 @@ body {
 	button:disabled {
 		cursor: not-allowed;
 	}
+
+	/* Number fields take values, never spinners: the parser behind them
+	   accepts one comma or dot, so the up/down affordance only adds noise. */
+	input[type='number'] {
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+	input[type='number']::-webkit-outer-spin-button,
+	input[type='number']::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
 }
 
 @layer utilities {

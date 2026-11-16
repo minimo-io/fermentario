@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { parseDecimal } from '$lib/numbers';
 	import type { HoldingsSummary, HoldingCategory } from '$lib/types';
 
 	// Goals editor. Allocation percentages stay a three-way split that must
@@ -46,7 +47,7 @@
 		'w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600';
 
 	function num(raw: string): number {
-		return Number(raw.trim().replace(',', '.'));
+		return parseDecimal(raw);
 	}
 
 	async function submit() {
@@ -137,7 +138,7 @@
 									aria-label="{c.label} allocation percent"
 									value={pctDraft[c.key]}
 									oninput={(e) => (pctDraft = { ...pctDraft, [c.key]: e.currentTarget.value })}
-									inputmode="decimal"
+									type="number" step="any"
 									autocomplete="off"
 								/>
 								<span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 dark:text-stone-500">%</span>
@@ -162,7 +163,7 @@
 									placeholder="No target"
 									value={valueDraft[c.key]}
 									oninput={(e) => (valueDraft = { ...valueDraft, [c.key]: e.currentTarget.value })}
-									inputmode="decimal"
+									type="number" step="any"
 									autocomplete="off"
 								/>
 							</div>

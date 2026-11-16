@@ -34,6 +34,7 @@
 
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Pin from '@lucide/svelte/icons/pin';
@@ -46,9 +47,9 @@
 		content: string;
 		date: string;
 		pinned: boolean;
-		onPin: () => void;
-		onEdit: () => void;
-		onDelete: () => void;
+		onPin?: () => void;
+		onEdit?: () => void;
+		onDelete?: () => void;
 	};
 	let { id, content, date, pinned, onPin, onEdit, onDelete }: Props = $props();
 
@@ -99,6 +100,10 @@
 			return;
 		}
 		collapsed = !(id in expanded);
+		// Same rule as the timeline: a folded comment needs the one-line cap
+		// beside the clamp — WebKit under-clamps with the clamp alone, so a
+		// reload would show the comment half contracted.
+		if (collapsed && maxHeight === undefined) maxHeight = `${Math.ceil(line)}px`;
 	}
 
 	function finishFold(e: TransitionEvent) {
@@ -152,22 +157,26 @@
 <li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
 	<div
 		bind:this={foldEl}
-		class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeight !== undefined ? 'overflow-hidden' : ''}"
+		class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeight !== undefined || (foldable && collapsed && !unclamped) ? 'overflow-hidden' : ''}"
 		style:max-height={maxHeight}
 		ontransitionend={finishFold}
 	>
 		{#if foldable}
-			<button
-				type="button"
-				class="block w-full text-left whitespace-pre-wrap text-xs leading-snug text-stone-800 dark:text-stone-200"
-				aria-expanded={!collapsed}
-				onclick={() => void toggleFolded()}
-			>
-				<span
+			<!-- Fold lives on a small chevron so the text stays selectable
+				and copyable, identical to the note cards. -->
+			<div class="flex items-start">
+				<button
+					type="button"
+					class="-ml-1 mt-px grid h-4 w-4 shrink-0 place-items-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+					aria-label={collapsed ? 'Expand comment' : 'Collapse comment'}
+					aria-expanded={!collapsed}
+					onclick={() => void toggleFolded()}
+				><ChevronDown class="h-3 w-3 transition-transform duration-200 motion-reduce:transition-none {collapsed ? '-rotate-90' : ''}" /></button>
+				<div
 					bind:this={textEl}
-					class="w-full {collapsed && !unclamped ? 'line-clamp-1' : 'block'}"
-				>{content}</span>
-			</button>
+					class="min-w-0 flex-1 whitespace-pre-wrap text-xs leading-snug text-stone-800 dark:text-stone-200 {collapsed && !unclamped ? 'line-clamp-1' : ''}"
+				>{content}</div>
+			</div>
 		{:else}
 			<p
 				bind:this={textEl}
@@ -187,32 +196,38 @@
 			>
 				{#if copied}<Check class="h-3.5 w-3.5" />{:else}<Copy class="h-3.5 w-3.5" />{/if}
 			</button>
-			<button
-				type="button"
-				class="grid h-7 w-7 place-items-center rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 {pinned ? 'text-amber-500 dark:text-amber-400' : 'text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300'}"
-				aria-label={pinned ? 'Unpin comment' : 'Pin comment'}
-				title={pinned ? 'Unpin comment' : 'Pin comment'}
-				aria-pressed={pinned}
-				onclick={onPin}
-			>
-				<Pin class="h-3.5 w-3.5 {pinned ? 'fill-current' : ''}" />
-			</button>
-			<button
-				type="button"
-				class="grid h-7 w-7 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
-				aria-label="Edit comment"
-				title="Edit comment"
-				onclick={onEdit}
-			>
-				<Pencil class="h-3.5 w-3.5" />
-			</button>
-			<button
-				type="button"
-				class="grid h-7 w-7 place-items-center rounded-full text-base leading-none text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-rose-600 dark:hover:text-rose-400"
-				aria-label="Delete comment"
-				title="Delete comment"
-				onclick={onDelete}
-			>&times;</button>
+			{#if onPin}
+				<button
+					type="button"
+					class="grid h-7 w-7 place-items-center rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 {pinned ? 'text-amber-500 dark:text-amber-400' : 'text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300'}"
+					aria-label={pinned ? 'Unpin comment' : 'Pin comment'}
+					title={pinned ? 'Unpin comment' : 'Pin comment'}
+					aria-pressed={pinned}
+					onclick={onPin}
+				>
+					<Pin class="h-3.5 w-3.5 {pinned ? 'fill-current' : ''}" />
+				</button>
+			{/if}
+			{#if onEdit}
+				<button
+					type="button"
+					class="grid h-7 w-7 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
+					aria-label="Edit comment"
+					title="Edit comment"
+					onclick={onEdit}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+				</button>
+			{/if}
+			{#if onDelete}
+				<button
+					type="button"
+					class="grid h-7 w-7 place-items-center rounded-full text-base leading-none text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-rose-600 dark:hover:text-rose-400"
+					aria-label="Delete comment"
+					title="Delete comment"
+					onclick={onDelete}
+				>&times;</button>
+			{/if}
 		</div>
 	</div>
 </li>

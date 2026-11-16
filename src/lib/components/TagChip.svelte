@@ -16,7 +16,7 @@
 	class="group relative inline-flex items-center overflow-hidden rounded-full py-0.5 pl-2 pr-0.5 text-[11px] transition-colors {tagColors.chip(tag)}"
 >
 	<a
-		href="/tags/{encodeURIComponent(tag)}"
+		href="/admin/tags/{encodeURIComponent(tag)}"
 		title="See every note tagged #{tag}"
 		class="hover:opacity-80"
 	>#{tag}</a>

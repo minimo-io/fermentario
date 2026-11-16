@@ -26,19 +26,21 @@ export async function GET({ url }) {
 	const rawTag = (url.searchParams.get('tag') ?? '').trim().toLowerCase();
 	const rawFeatured = url.searchParams.get('featured');
 	const featured = rawFeatured === 'only' || rawFeatured === 'exclude' ? rawFeatured : undefined;
+	const rawPublished = url.searchParams.get('published');
+	const published = rawPublished === 'only' || rawPublished === 'exclude' ? rawPublished : undefined;
 
 	if (rawTag) {
 		// A tag page is already filtered: the background embedding pass would
 		// only burn CPU, and every page of the cursor is filtered on the server.
 		const tag = rawTag.slice(0, MAX_TAG_FILTER);
-		const page = listNotesPage({ limit, before, beforeId, tag, featured });
+		const page = listNotesPage({ limit, before, beforeId, tag, featured, published });
 		return json({ ...page, count: countNotesByTag(tag), tag });
 	}
 
 	// Indexing must not delay the list: it runs in the background and lands in
 	// the next response.
 	void ensureIndexed().catch(() => {});
-	const page = listNotesPage({ limit, before, beforeId, featured });
+	const page = listNotesPage({ limit, before, beforeId, featured, published });
 	return json({ ...page, count: countNotes(), tag: null });
 }
 

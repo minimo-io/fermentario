@@ -9,9 +9,8 @@
 	import { slide } from 'svelte/transition';
 	import { motionMs } from '$lib/motion';
 	import { fmtCurrency } from '$lib/currency';
-	import HoldingModal, { blankHoldingDraft } from '$lib/components/HoldingModal.svelte';
-	import type { HoldingDraft } from '$lib/components/HoldingModal.svelte';
-	import HoldingActionsModal from '$lib/components/HoldingActionsModal.svelte';
+	import HoldingDialog, { blankHoldingDraft } from '$lib/components/HoldingDialog.svelte';
+	import type { HoldingDraft, ParsedHolding } from '$lib/components/HoldingDialog.svelte';
 	import HoldingsHistoryModal from '$lib/components/HoldingsHistoryModal.svelte';
 	import AllocationModal from '$lib/components/AllocationModal.svelte';
 	import GoalsModal from '$lib/components/GoalsModal.svelte';
@@ -23,22 +22,26 @@
 	// All fields use 16px inputs so iOS never auto-zooms on focus.
 	type Props = {
 		summary: HoldingsSummary | null;
-		refreshing: boolean;
+		bare?: boolean;
 		onCreate: (h: { ticker: string; amount: number; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }) => Promise<boolean>;
 		onUpdate: (id: string, patch: { ticker: string; avgPrice: number | null; currency: string; category: HoldingCategory; bank: string; country: string }) => Promise<boolean>;
 		onDelete: (h: Holding) => void;
 		onLoadActions: (id: string) => Promise<HoldingAction[] | null>;
 		onRecordAction: (id: string, kind: 'buy' | 'sell', amount: number, price: number | null) => Promise<{ ok: boolean; error?: string; actions?: HoldingAction[] }>;
-		onRefresh: () => void;
 		onGoals: (
 			pct: { btc: number; fii: number; cash: number },
 			values: { btc: number | null; fii: number | null; cash: number | null }
 		) => Promise<boolean>;
+		/** Refresh one ticker. Cash and a hand-priced holding show no icon. */
+		onRefresh?: (ticker: string) => void;
+		refreshingTicker?: string | null;
 	};
-	let { summary, refreshing, onCreate, onUpdate, onDelete, onLoadActions, onRecordAction, onRefresh, onGoals }: Props = $props();
+	let { summary, bare = false, onCreate, onUpdate, onDelete, onLoadActions, onRecordAction, onGoals, onRefresh, refreshingTicker = null }: Props = $props();
 
-	let modal: { mode: 'add'; initial: HoldingDraft } | { mode: 'edit'; holding: Holding } | null = $state(null);
-	let acting = $state<Holding | null>(null);
+	type DialogTarget =
+		| { mode: 'add'; initial: HoldingDraft }
+		| { mode: 'holding'; holding: Holding; tab: 'trade' | 'config' };
+	let dialog = $state<DialogTarget | null>(null);
 	let goalsOpen = $state(false);
 	let allocating = $state(false);
 	let historyOpen = $state(false);
@@ -74,16 +77,15 @@
 	});
 
 	function openAdd(preset?: Partial<HoldingDraft>) {
-		modal = { mode: 'add', initial: { ...blankHoldingDraft(), ...preset } };
+		dialog = { mode: 'add', initial: { ...blankHoldingDraft(), ...preset } };
 	}
 
 	function openEdit(h: Holding) {
-		modal = { mode: 'edit', holding: h };
+		dialog = { mode: 'holding', holding: h, tab: 'config' };
 	}
 
 	function openActions(h: Holding) {
-		modal = null;
-		acting = h;
+		dialog = { mode: 'holding', holding: h, tab: 'trade' };
 	}
 
 	function toDraft(h: Holding): HoldingDraft {
@@ -98,32 +100,13 @@
 		};
 	}
 
-	async function submitAdd(parsed: {
-		ticker: string;
-		amount: number;
-		avgPrice: number | null;
-		currency: string;
-		category: HoldingCategory;
-		bank: string;
-		country: string;
-	}): Promise<boolean> {
+	async function submitAdd(parsed: ParsedHolding): Promise<boolean> {
 		const ok = await onCreate(parsed);
-		if (ok) modal = null;
+		if (ok) dialog = null;
 		return ok;
 	}
 
-	async function submitEdit(
-		id: string,
-		parsed: {
-			ticker: string;
-			amount: number;
-			avgPrice: number | null;
-			currency: string;
-			category: HoldingCategory;
-			bank: string;
-			country: string;
-		}
-	): Promise<boolean> {
+	async function submitEdit(id: string, parsed: ParsedHolding): Promise<boolean> {
 		const ok = await onUpdate(id, {
 			ticker: parsed.ticker,
 			avgPrice: parsed.avgPrice,
@@ -132,7 +115,7 @@
 			bank: parsed.bank,
 			country: parsed.country
 		});
-		if (ok) modal = null;
+		if (ok) dialog = null;
 		return ok;
 	}
 
@@ -208,6 +191,7 @@
 	{#snippet holdingCard(h: Holding)}
 		{@const rawTrend = h.changePct ?? null}
 		{@const trend = rawTrend === null || Math.abs(rawTrend) < 0.05 ? 0 : rawTrend}
+		{@const stale = h.price !== null && Date.now() - (h.price_updated_at ?? 0) > 86400000}
 		<div role="listitem" class="flex w-40 shrink-0 snap-start">
 			<div class="relative flex flex-1 flex-col overflow-hidden rounded-2xl border p-3 {h.category === 'cash' ? 'border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/70 dark:bg-emerald-950/40' : 'border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70'}">
 				<button
@@ -216,7 +200,7 @@
 					aria-label="Edit {h.ticker}"
 					onclick={() => openEdit(h)}
 				>
-					<p class="flex items-center gap-1 pr-6 text-[11px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+					<p class="flex items-center gap-1 pr-12 text-[11px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
 						{#if h.category === 'btc'}{@render btcMark()}{/if}
 						<span class="truncate">{h.category === 'cash' ? h.bank || h.ticker : h.ticker}{h.category === 'cash' && h.country ? ` · ${h.country}` : ''}</span>
 						{#if summary.goals !== null}
@@ -230,18 +214,22 @@
 					<p class="mt-1 truncate text-xl font-semibold tabular-nums text-stone-800 dark:text-stone-200">
 						{h.price === null ? '—' : fmtMoney(h.amount * h.price, h.currency)}
 					</p>
-					<span class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums {trend === 0 ? 'text-stone-400 dark:text-stone-500' : trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}" title={rawTrend === null ? 'No previous day yet' : 'Since the previous day'}>
-						{#if trend === 0}
-							<Minus class="h-3 w-3" />
-						{:else if trend > 0}
-							<TrendingUp class="h-3 w-3" />
+					<span class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums {trend === 0 ? 'text-stone-400 dark:text-stone-500' : trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}" title={rawTrend === null ? 'No previous day yet' : stale ? `Quote from ${fmtDate(h.price_updated_at)}` : 'Since the previous day'}>
+						{#if rawTrend === null}
+							<Minus class="h-3 w-3" />—
 						{:else}
-							<TrendingDown class="h-3 w-3" />
+							{#if trend === 0}
+								<Minus class="h-3 w-3" />
+							{:else if trend > 0}
+								<TrendingUp class="h-3 w-3" />
+							{:else}
+								<TrendingDown class="h-3 w-3" />
+							{/if}
+							{trend === 0 ? '0.0%' : `${trend > 0 ? '+' : ''}${trend.toFixed(1)}%`}{#if stale} · stale{/if}
 						{/if}
-						{trend === 0 ? '0.0%' : `${trend > 0 ? '+' : ''}${trend.toFixed(1)}%`}
 					</span>
 					<p class="truncate text-sm tabular-nums text-stone-600 dark:text-stone-300">
-						{#if h.category !== 'cash'}{fmtAmount(h.amount)} {h.category === 'btc' ? 'BTC' : 'shares'}{:else}&nbsp;{/if}
+						{#if h.category !== 'cash'}{fmtAmount(h.amount)} {h.category === 'btc' ? 'BTC' : 'shares'}{#if h.price !== null} <span class="text-stone-400 dark:text-stone-500">@ {fmtMoney(h.price, h.currency)}</span>{/if}{:else}&nbsp;{/if}
 					</p>
 					{#if h.category === 'cash'}
 						{#each cashEstimates(h) as estimate (estimate.code)}
@@ -262,13 +250,25 @@
 						<p class="truncate text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{(((h.valueUsd ?? 0) / summary.totalUsd) * 100).toFixed(1)}% of total</p>
 					{/if}
 				</button>
-				<button
-					type="button"
-					class="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full text-stone-300 opacity-70 transition hover:bg-stone-100 hover:text-stone-600 hover:opacity-100 dark:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
-					aria-label="Record buy or sell for {h.ticker}"
-					title="Buy / sell"
-					onclick={() => openActions(h)}
-				><Plus class="h-3.5 w-3.5" /></button>
+				<div class="absolute right-1.5 top-1.5 flex items-center gap-0.5">
+					{#if onRefresh && h.category !== 'cash' && h.priceAuto}
+						<button
+							type="button"
+							class="grid h-6 w-6 place-items-center rounded-full text-stone-300 opacity-70 transition hover:bg-stone-100 hover:text-stone-600 hover:opacity-100 disabled:opacity-40 dark:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+							aria-label="Refresh {h.ticker} price"
+							title="Refresh {h.ticker} price"
+							disabled={refreshingTicker !== null}
+							onclick={(e) => { e.stopPropagation(); onRefresh(h.ticker); }}
+						><RefreshCw class="h-3.5 w-3.5 {refreshingTicker === h.ticker ? 'animate-spin motion-reduce:animate-none' : ''}" /></button>
+					{/if}
+					<button
+						type="button"
+						class="grid h-6 w-6 place-items-center rounded-full text-stone-300 opacity-70 transition hover:bg-stone-100 hover:text-stone-600 hover:opacity-100 dark:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+						aria-label="Record buy or sell for {h.ticker}"
+						title="Buy / sell"
+						onclick={() => openActions(h)}
+					><Plus class="h-3.5 w-3.5" /></button>
+				</div>
 				<div class="mt-1 flex justify-end">
 					<button
 						type="button"
@@ -281,6 +281,7 @@
 		</div>
 	{/snippet}
 
+	{#if !bare}
 	<div class="mb-1 flex items-center gap-1">
 		<button
 			type="button"
@@ -301,18 +302,9 @@
 				</span>
 			{/if}
 		</button>
-		{#if collapsed}
-			<button
-				type="button"
-				class="grid h-6 w-6 shrink-0 place-items-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 disabled:opacity-50 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
-				aria-label="Refresh prices"
-				title="Refresh prices"
-				disabled={refreshing}
-				onclick={onRefresh}
-			><RefreshCw class="h-3.5 w-3.5 {refreshing ? 'animate-spin' : ''}" /></button>
-		{/if}
 	</div>
-	{#if !collapsed}
+	{/if}
+	{#if bare || !collapsed}
 		<div
 			class="flex snap-x items-stretch gap-2 overflow-x-auto no-scrollbar pb-1"
 			role="list"
@@ -358,14 +350,6 @@
 					{:else}
 						<span class="text-[11px] text-stone-400">cash basis</span>
 					{/if}
-					<button
-						type="button"
-						class="grid h-6 w-6 place-items-center rounded-full text-stone-400 hover:bg-white/10 hover:text-stone-200 disabled:opacity-50"
-						aria-label="Refresh prices"
-						title="Refresh prices"
-						disabled={refreshing}
-						onclick={onRefresh}
-					><RefreshCw class="h-3.5 w-3.5 {refreshing ? 'animate-spin' : ''}" /></button>
 					<button
 						type="button"
 						class="grid h-6 w-6 place-items-center rounded-full text-stone-400 hover:bg-white/10 hover:text-stone-200"
@@ -418,34 +402,33 @@
 	{/if}
 {/if}
 
-{#if modal?.mode === 'add'}
-	<HoldingModal
-		title="Add holding"
-		submitLabel="Add"
-		mode="add"
-		initial={modal.initial}
-		onSubmit={submitAdd}
-		onClose={() => (modal = null)}
-	/>
-{:else if modal?.mode === 'edit'}
-	{@const h = modal.holding}
-	<HoldingModal
-		title="Edit {h.ticker}"
-		submitLabel="Save"
-		mode="edit"
-		initial={toDraft(h)}
-		updatedAt={h.price_updated_at}
-		onSubmit={(parsed) => submitEdit(h.id, parsed)}
-		onClose={() => (modal = null)}
-	/>
-{/if}
-{#if acting}
-	<HoldingActionsModal
-		holding={acting}
-		onLoad={onLoadActions}
-		onRecord={onRecordAction}
-		onClose={() => (acting = null)}
-	/>
+{#if dialog}
+	{@const d = dialog}
+	{#if d.mode === 'add'}
+		<HoldingDialog
+			mode="add"
+			tab="config"
+			initial={d.initial}
+			onSaveAdd={submitAdd}
+			onSaveEdit={submitEdit}
+			onLoadActions={onLoadActions}
+			onRecordAction={onRecordAction}
+			onClose={() => (dialog = null)}
+		/>
+	{:else}
+		<HoldingDialog
+			mode="holding"
+			holding={d.holding}
+			tab={d.tab}
+			initial={toDraft(d.holding)}
+			updatedAt={d.holding.price_updated_at}
+			onSaveAdd={submitAdd}
+			onSaveEdit={submitEdit}
+			onLoadActions={onLoadActions}
+			onRecordAction={onRecordAction}
+			onClose={() => (dialog = null)}
+		/>
+	{/if}
 {/if}
 {#if allocating && summary}
 	<AllocationModal summary={summary} onClose={() => (allocating = false)} />

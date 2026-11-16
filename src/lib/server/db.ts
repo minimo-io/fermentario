@@ -20,12 +20,17 @@ export const deleteNote = bind('deleteNote');
 export const updateNote = bind('updateNote');
 export const getNote = bind('getNote');
 export const listNotesPage = bind('listNotesPage');
+export const listNotesLinkingTo = bind('listNotesLinkingTo');
 export const countNotesByTag = bind('countNotesByTag');
 export const notesMissingVectors = bind('notesMissingVectors');
 export const notesBetween = bind('notesBetween');
 export const setNoteTags = bind('setNoteTags');
 export const removeNoteTag = bind('removeNoteTag');
 export const setNoteFeatured = bind('setNoteFeatured');
+export const setNotePublished = bind('setNotePublished');
+export const setNoteCover = bind('setNoteCover');
+export const removeNoteCover = bind('removeNoteCover');
+export const getNotePhoto = bind('getNotePhoto');
 export const setNoteVideo = bind('setNoteVideo');
 export const setVector = bind('setVector');
 export const allVectors = bind('allVectors');
@@ -38,6 +43,33 @@ export const saveWeeklyRecap = bind('saveWeeklyRecap');
 export const insertAsk = bind('insertAsk');
 export const listAsks = bind('listAsks');
 export const deleteAsk = bind('deleteAsk');
+export const getRunningTimeEntry = bind('getRunningTimeEntry');
+export const listTimeEntries = bind('listTimeEntries');
+export const startTimeEntry = bind('startTimeEntry');
+export const stopTimeEntry = bind('stopTimeEntry');
+export const deleteTimeEntry = bind('deleteTimeEntry');
+export const getTimeTrackerStats = bind('getTimeTrackerStats');
+export const getPublicConfig = bind('getPublicConfig');
+export const setPublicConfig = bind('setPublicConfig');
+export const listBooks = bind('listBooks');
+export const getBook = bind('getBook');
+export const getBookBytes = bind('getBookBytes');
+export const addBook = bind('addBook');
+export const setBookPosition = bind('setBookPosition');
+export const deleteBook = bind('deleteBook');
+export const listBookNotes = bind('listBookNotes');
+export const createBookNote = bind('createBookNote');
+export const updateBookNote = bind('updateBookNote');
+export const deleteBookNote = bind('deleteBookNote');
+export const getApiCredentialStatus = bind('getApiCredentialStatus');
+export const setApiCredential = bind('setApiCredential');
+export const deleteApiCredential = bind('deleteApiCredential');
+export const getNostrProfile = bind('getNostrProfile');
+export const setNostrProfile = bind('setNostrProfile');
+export const listNostrEvents = bind('listNostrEvents');
+export const addNostrEvent = bind('addNostrEvent');
+export const getNostrStats = bind('getNostrStats');
+export const getNostrHeatmap = bind('getNostrHeatmap');
 export const listTodoGroups = bind('listTodoGroups');
 export const createTodoGroup = bind('createTodoGroup');
 export const renameTodoGroup = bind('renameTodoGroup');
@@ -62,6 +94,7 @@ export const createNoteComment = bind('createNoteComment');
 export const updateNoteComment = bind('updateNoteComment');
 export const deleteNoteComment = bind('deleteNoteComment');
 export const listPrinciples = bind('listPrinciples');
+export const getPrinciple = bind('getPrinciple');
 export const createPrinciple = bind('createPrinciple');
 export const updatePrinciple = bind('updatePrinciple');
 export const deletePrinciple = bind('deletePrinciple');
@@ -121,6 +154,11 @@ export const setTradingTarget = bind('setTradingTarget');
 export const refreshTradingQuotes = bind('refreshTradingQuotes');
 export const getTradingSummary = bind('getTradingSummary');
 export const getTradingStrip = bind('getTradingStrip');
+export const getTradingQuoteHistory = bind('getTradingQuoteHistory');
+export const getRipioQuote = bind('getRipioQuote');
+export const getGlobalBtcQuote = bind('getGlobalBtcQuote');
+export const refreshMarket = bind('refreshMarket');
+export const refreshTickerQuote = bind('refreshTickerQuote');
 export const listB3Tickers = bind('listB3Tickers');
 export const addB3Ticker = bind('addB3Ticker');
 
@@ -151,6 +189,7 @@ export type {
 	TradingMonthRow,
 	TradingSummary,
 	TradingStripItem,
+	TradingQuotePoint,
 	StockItem,
 	StockKind,
 	StockItemInput,

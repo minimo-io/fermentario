@@ -3,6 +3,25 @@
 The single source of truth for layout, spacing, color, typography and component
 sizing. Consult this before changing any of them.
 
+## Navigation
+
+- Private sections live under `/admin` (`/admin/notes`, `/admin/todo`,
+  `/admin/library`, `/admin/principles`, `/admin/influences`,
+  `/admin/stocks`, `/admin/ask`, `/admin/businesses/cubiq`,
+  `/admin/businesses/trading`); old section URLs `307` to their `/admin`
+  twin. `/` is the public homepage: published notes grouped by year then
+  month, both toggleable. `/notes/[id]` is the public note view (drafts
+  `404`); the private note editor lives at `/admin/notes/[id]`. Public
+  presentation lives in DB `public_config` and is fetched by the server for
+  public routes; it is separate from browser-only admin preferences.
+  `GET /api/public/config` is safe for anonymous visitors, while
+  `PATCH /api/config/public` belongs to the admin API namespace.
+  The URL is
+  the section state — no session storage, no `?from=` return links. Detail
+  pages go back with browser history, falling back to their section root.
+  The admin shell (header, Market card, section pills, composer, settings)
+  lives in the `admin` layout; route pages only render their section.
+
 ## Layout
 
 - **Page container** (every route): `mx-auto max-w-2xl px-6 pt-14 pb-24`.
@@ -58,12 +77,17 @@ sizing. Consult this before changing any of them.
   the monetary value big; below it the share count
   (`146 shares`, `0,1 BTC` — never a currency, shares are not money),
   the share of the total in percent, and an approximation in the other
-  currency (`≈ R$ …` for USD holdings, `≈ $…` otherwise). Cash cards keep
+  currency (`≈ R$ …` for USD holdings, `≈ $…` otherwise). The trend shows
+  `—` with no previous day, `0.0%` when flat, otherwise the day-over-day
+  percent; a quote older than a day appends `stale` with its date in the
+  tooltip. Cash cards keep
   the account-currency total and show one `≈` line for every other known
   currency — BRL → USD and UYU, USD → BRL and UYU, UYU → USD and BRL —
   skipping a line when that rate is missing.
   Tap a box edits ticker, 3-letter currency, category, bank, country and the
-  average cost; the amount only appears when adding. A small grey `+` at the
+  average cost; the amount only appears when adding. One `HoldingDialog`
+  serves both: card taps open its Config tab, the card `+` opens its Trade
+  tab (buy/sell form, market price, value graph, action ledger). A small grey `+` at the
   top-right corner opens the buy/sell modal instead of the edit form.
   Delete is confirmed. The modal states when the price was last written
   (`price_updated_at`), so a stale quote is visible before editing. There is no
@@ -104,7 +128,11 @@ sizing. Consult this before changing any of them.
   Every quote attempt is logged to `quote_fetch_log` (ticker, source,
   success, price, error). The **Quote fetches** button in Settings →
   Database opens the shared history, newest first — the single place for
-  every stock, FII and BTC fetch attempt. A
+  every stock, FII, BTC and Ripio fetch attempt. Ripio's venue price is
+  `BTC_USDC` from the public `trade/public/tickers` endpoint (no key,
+  60-second cache, stale served on throttle), shown as USD; it never
+  touches the holdings BTC price (Coinbase), and the venue stays disabled
+  until its trading rules exist. A
   full exchange
   API and a scheduled refresh are future work; the schema (`price`,
   `price_auto`, `currency`, `fx_rates`) already carries them, so no migration
@@ -172,7 +200,9 @@ sizing. Consult this before changing any of them.
   optional goal. Empty amount saves only the group and clears the goal.
   Each group block is a
   toggle with a chevron and `N` categories; collapsed state persists in
-  `ferm:stocks-groups-collapsed`. Stock adds `quantity × package_size` in the goal
+  `ferm:stocks-groups-collapsed`. The card header carries **Collapse all**
+  and **Expand all** text buttons that set or clear that same key, so the
+  status card and the item lists below it stay in sync. Stock adds `quantity × package_size` in the goal
   unit (`kg → g`, `L → ml`); mass items never count toward volume goals and
   vice versa. The category modal shows which units a category uses and defaults
   a new goal to that family's base unit (`g` or `L`); the header names the
@@ -234,42 +264,257 @@ sizing. Consult this before changing any of them.
   pushed to the card's bottom-right edge with `ml-auto` (a bare row right-aligns
   it on its own line). On desktop the same pills move inline into the title
   line, right-aligned just before the `⋮` actions button (`hidden sm:flex` on
-  the inline group, `sm:hidden` on the stacked row). Principle cards follow the
-  same rule (their chips row is right-aligned; `px-4` padding). Existing pills
+  the inline group, `sm:hidden` on the stacked row). Principle cards do not
+  follow this: their comment pill floats absolutely in the card's top-right
+  corner (see **Principles** below) and only their chips row is right-aligned
+  (`px-4` padding). Existing pills
   render twice in the DOM, once per breakpoint; do not re-stack them on
   desktop. The title line is `items-start sm:items-center`: mobile keeps
   first-line alignment, on desktop every element shares the ⋮ button's vertical
   centre. Right-align by flex (`ml-auto`), never `position: absolute` — an
   absolute pill overlays the open thread's Add form. Clicking a task title
-  opens `/todo/[id]`; it never opens the editor. Edit lives in the row `⋮`
+  opens `/admin/todo/[id]`; it never opens the editor. Edit lives in the row `⋮`
   menu and as a text button on the task page, and both use the same
   `TaskEditModal` (text, video URL, and the group selector when more than one
-  group exists). To-Do remembers In progress or the selected group in
-  `sessionStorage` (`fermentario.todoView`); task links carry `?from=` and the
-  detail Back button returns to that subview instead of resetting to In
-  progress.
-- **Businesses**: `Cubiq` and `Trading` sub-tabs, remembered in
-  `sessionStorage`. Cubiq is a Soon placeholder only. Trading is the
-  swing-trade admin panel: one org at a time (B3 active, Ripio disabled with
-  a Soon badge), open positions with live quotes and targets, the diary, and
+  group exists). Detail pages link back with browser history, falling back
+  to their section root.
+ - **Nostr**: `/admin/nostr` — publishing plus a backup relay for one
+   account. A status row at the very top carries a green dot (relay running)
+   or a red dot (relay stopped) and the `Start relay` / `Stop relay` button;
+   the page polls it every five seconds. Then, top to bottom: the two-color
+   heatmap (published notes amber, replies blue), the **Backup relay** card
+   (relay address + copy, notes and replies counts, last backup,
+   `Sync now`), the account relay list (NIP-65 kind 10002, read-only), and the
+   latest **five** notes. The only publishing action is the bottom bar's
+   `Publish a note`; there is no list, delete,
+   edit or wipe, because Nostr events are immutable and the local table is
+   a cache of them. With no account the page says to add an nsec in
+   Settings → Nostr instead of showing an empty "Nothing published yet".
+   The publish modal has an account selector, a textarea, and a search that
+   loads a Fermentario note's text as an editable draft. It never
+   auto-publishes: only the Publish button signs and sends. Signing uses the
+   nsec stored in Settings → Nostr; the nsec stays in the journal DB,
+   backups carry it, and no response ever returns it.
+
+   **Settings → Nostr** has one writable field, the nsec. The npub is
+   derived; name, about and picture come from the account's kind 0 metadata;
+   the relay list comes from kind 10002. All three are fetched from the
+   account's relays on save and on `Refresh from relays`, shown read-only,
+   and cached in the journal so publishing works offline.
+
+   **Backup relay policy** (`/relay`): the relay stores the account's own
+   kind-1 notes and replies in the active journal's `nostr_events` table. It
+   writes only events signed by the configured pubkey and refuses every
+   other author with `OK false` `restricted`; there is no AUTH handshake.
+   Reads are open, because the notes are public. Backup means *pull*: the
+   app imports the account's history from the relays that carry it. The
+   admin shell starts the import on every page load when an account is
+   configured, and reactively when an account is saved in Settings, so the
+   section never owns the trigger. With no account, nothing runs. The client
+   pages in the background (`until` cursor, 500 events per batch, 2 s
+   between batches) so it never depends on a click and never bursts a relay.
+   The newest batch always comes first, so new posts are picked up on every
+   run even when the history is already stored; older pages stop at the
+   first full batch that adds nothing new. The Nostr section shows the live
+   count while it runs and the last check time. Events are deduplicated by
+   id across relays by `INSERT OR IGNORE`. The only write to the network is
+   the Publish button. Remove a relay address from another client and the
+   events stay here.
+
+   The import does **not** require this relay to be configured in another
+   client: it pulls from every relay in the account's NIP-65 list plus the
+   defaults. Adding `wss://<domain>/relay` as a write relay in Primal only
+   makes new notes arrive by push instead of on the next visit.
+
+   The WebSocket lives on the same HTTP server as the app. Production
+   attaches it in `scripts/start.mjs`; development attaches the same module to
+   Vite's server, so `/relay` works on `:4173` too. `Start relay` /
+   `Stop relay` flips a `relay_enabled` flag in `data/registry.db`; a stopped
+   relay destroys the handshake, and the flag survives a restart.
+   `GET /relay` serves the NIP-11 document in both states. A reverse
+   proxy in front must forward `Upgrade` and `Connection` for that path, or
+   the handshake fails. In Primal, add the address the card shows
+   (`wss://<domain>/relay` once the app is on its domain, or
+   `ws://<lan-ip>:<port>/relay` locally) as a write relay for the account;
+   `FERMENTARIO_NOSTR_RELAYS` (comma separated) replaces the fallback
+   discovery relays for a self-hosted setup.
+ - **Library (EPUB reader)**: `/admin/library` lists books as cards (title,
+   author · size · progress · last read, `Read` pill, trash behind the
+   standard confirm); the section bottom bar is one `Upload EPUB` button on
+   a hidden file input. EPUB bytes live in the journal DB (`books.bytes`);
+   uploads are multipart `POST /api/books` and title/author are parsed from
+   the file **in the browser** (epub.js), so the server stores bytes
+   verbatim and never unzips. DRM (a zip carrying `encryption.xml`) is
+   rejected with a clear error. Reading opens `/admin/book/[id]`: the admin
+   layout renders it **bare** (no shell, Market, pills or composer — the
+   `bareReader` branch), because epub.js measures its container at mount and
+   the page needs a definite `h-dvh` height chain (`min-h-dvh` resolves
+   `height: 100%` to 0 and renders nothing). The bytes are fetched and
+   handed to epub.js as an **ArrayBuffer**: an extension-less URL is treated
+   as an unpacked directory — epub.js requests `META-INF/container.xml`,
+   gets a 404 and hangs without ever rejecting. While opening, a soft
+   `Opening book…` pill shows until the first view renders; a real failure
+   gets the rose overlay, never a black void.
+   TAPPING A MARK: one tap on a highlight opens its action sheet —
+   `Highlight` + excerpt, then Add note / Edit note and Delete highlight
+   — the same dialog standard as the list menus (backdrop fade, panel fly,
+   Escape/backdrop close). It opens through the annotation click callback
+   plus a parent-side hit-test fallback (marks-pane binds its proxy to the
+   iframe document that existed when the pane was born; that document can
+   be replaced, and a tap that misses the proxy must still open the sheet)
+   . A mark tap is a dead gesture for chrome-toggling and paging. The reader shows only the book
+   plus floating controls: back (history, falling back to Library), text
+   size `A− A+`, `Index` (TOC) and `Notes` in a top-right glass cluster, a
+   right-side drawer for both lists, and prev/next chapter pills docked in
+   the bottom corners (safe-area aware, lighter glass than the content,
+   hidden while the selection toolbar or note editor is open). SWIPE: a
+   fast, mostly-horizontal touch drag pages the book — left = next, right
+   = previous (< 600 ms, |dx| > 60 px, |dx| > 2|dy|), read from the touch
+   events epub.js forwards out of the content iframe plus a direct
+   parent-realm listener on each section document; a timeStamp gate makes
+   the double delivery handle exactly once. CONTROLS
+   TOGGLE: an `eye-off` button in the cluster hides the whole chrome (back,
+   cluster, corner pills) and leaves only a faint eye pill at the top-right;
+   a short unmoved tap on the page toggles the same way — guarded by touch
+   time/distance, the touch-then-synthetic-click dedupe, taps landing on
+   marks/links/buttons, and an open drawer (its first tap only closes it).
+   The last CFI position, percentage
+   and chapter save throttled (1.2 s), on tab
+   hide and on `pagehide` with `keepalive`; opening restores from the CFI.
+   Selecting text raises the bottom toolbar (Highlight / + Note); an empty
+   window selection (iOS timing) falls back to
+   `rendition.getRange(cfi).toString()` before the toolbar is dismissed.
+   WebKit NEVER fires `selectionchange` inside the content iframes, so the
+   engine's `selected` event stays silent on iOS: capture also runs 220 ms
+   after every forwarded `touchend`/`mouseup`, reading the live selection
+   and building the CFI with `new EpubCFI(range, contents.cfiBase)` — the
+   same call the library makes internally. Both paths feed one
+   `applySelection`, deduped by CFI so multi-path delivery is a no-op; the
+   capture is scheduled BEFORE the tap-toggle tests, because the long-press
+   gesture that selects always fails the tap path. iOS needs a second read
+   (~500 ms later — the selection settles after touchend) and a per-section
+   belt: `rendition.hooks.content.register` attaches the same capture to
+   each section's own Contents, so no hop in epub.js event passing can
+   silence it. A selection found WITHOUT the EpubCFI constructor is a
+   broken import and must toast, never fail silently.
+   `rendition.getContents()` returns an ARRAY (one Contents per
+   view) — treating it as one object was enough to kill the whole capture;
+   the poll loops over every view.
+   FULLSCREEN: the cluster renders its button ONLY where the platform
+   truly supports element fullscreen (capability check on
+   `Element.prototype.requestFullscreen/webkitRequestFullscreen` plus
+   `document.fullscreenEnabled`): desktop Safari/Chrome and Android.
+   iPhone Safari has no element Fullscreen in a browser tab OR in PWA
+   standalone — there the button simply does not exist; no toast
+   explaining other features, no dead controls. `fullscreenchange` keeps
+   the icon in sync. The hidden-chrome eye pill keeps a LIGHT surface
+   with a dark icon in both themes: the book paper is always light.
+   Highlights are amber marks stored in `book_notes` as CFI ranges +
+   excerpt + optional note, tappable to jump, listed strictly newest-first
+   — no client re-sort, which would fight the drawer's PAGING: the API
+   pages by `(created_at, id)` cursor (`?limit=50`), the drawer loads on
+   scroll with the shared TradeHistory sentinel + IntersectionObserver
+   pattern rooted at its own scroll box, and the badge/header count comes
+   from the response `total`, not the loaded rows. epub.js paints marks in
+   an SVG pane: the styles argument is SVG ATTRIBUTES (`fill`,
+   `fill-opacity`) — CSS properties like `background-color` are silently
+   ignored. Text
+   size persists in `ferm:reader-scale` (device preference, not journal
+   data). No DRM, no search/RAG indexing of book text yet.
+- **Businesses**: `/admin/businesses/cubiq` and `/admin/businesses/trading` routes, with
+  the sub-tab pills linking between them. Cubiq is a Soon placeholder only. Trading is the
+  swing-trade admin panel: one org at a time (B3 active; Ripio trades the
+  same once enabled, prices in USD, and shows a Watch badge while off), open
+  positions with live quotes and targets, the diary, and
   the rolling monthly exemption panel. Orders are raw events; a sale always
   closes the full position and only the latest order can be deleted. The
   venue rules (fee %, dedo-duro %, fixed fee, monthly limit) are editable;
-  new orders use them, past orders keep theirs. The ticker field suggests
+  new orders use them, past orders keep theirs. Ripio quotes use the
+  signed Market ticker (`GET /trade/ticker/{pair}`) when API credentials
+  are saved in Settings → Trading — real time, and `Test quote` labels the
+  source. Without credentials, or after a 401/403 from a bad key, the
+  public endpoint still answers (it lags up to 30 s); a key problem logs
+  and never empties the cards. Credentials live in the journal DB
+  (`api_credentials`; backups carry them), the admin endpoints report only
+  `{configured, updatedAt}` — token and secret never leave the server —
+  and read-only keys are the documented advice. The Ripio venue shows
+  two cards side by side — `BTC · Ripio` (its footer names the source:
+  `API key (live)`, `public`, or `public (API key rejected)`) and
+  `BTC · Global` (Coinbase, `GET /api/quotes/btc-global`, which serves the
+  same stored fx_rates BTC row Holdings prices with, under a day old; it
+  deliberately never writes the quote log, since refreshRates already logs
+  the Coinbase line) — with the gap under them in value and percent
+  (`Ripio vs Coinbase: +$261.50 (+0.40%)`, emerald up, rose down). When the
+  quote carries bid/ask — the PUBLIC ticker answers with them too, so no key
+  is needed for this — the gap becomes side-aware: `Ripio spread buy−sell`,
+  `Buy pays {ask} · ±$ (±%) vs Coinbase` (rose when the ask is above
+  global), `Sell gets {bid} · …` (rose when the bid is below). `Refresh`
+  bypasses every cache (Ripio `force=1`, Coinbase `force=1`, panel summary
+  `refresh+force`). Disabled venues show a Watch badge and one `Enable`
+  button — trading is live for both orgs. The
+  forward call and the
+  potential percent are net-based through one shared helper: a sale repays
+  fees, dedo-duro and the fixed fee from the current rules, so `Sell`
+  means the net profit clears the target. The ticker field suggests
   from the B3 universe in `b3_tickers` (seeded liquid names, custom rows for
   the future admin, 24-hour server cache); free text still saves any
   well-formed ticker. SELL mode ranks open tickers first. A sale past target
   shows green `Sell` only when the position is older than today; a position
   opened today shows a soft red `Day trade` pill instead. Diary lines show
-  the exact date plus the relative age (`bought 3 days ago`, `sold 2 hours
-  ago`); position cards show `open X ago` from the earliest open buy. The
+  the exact date plus the bare duration (`12 Nov · 7 days`) — no verb, so
+  no language can leak through; position cards show the localized open age
+  (`open 7 days ago`, `abierta hace 7 días`). Featured notes sit in the
+  shared toggleable section, like every collapsible group. The
   home page carries a trading strip below the holdings carousel, always
   visible once loaded: same card rail, one card per open ticker with its
   swing call
-  (`Sell`, `Day trade`, `Hold`, `No quote`), plus an empty state that opens
+  (`Sell`, `Day trade`, `Hold`, `No quote`) with the current price, goal
+  price, average buy with the `Δ to goal` gap (red below the goal, green
+  once reached), and trend, plus an empty state that opens
   Businesses → Trading; the strip reloads on every diary change, every 60
-  seconds, and when the tab becomes visible again. Section order is
-  positions → monthly panel → diary.
+  seconds, and when the tab becomes visible again. One collapsible Market
+  card groups the holdings rail, the trading rail and a single action line:
+  global `Update` (one forced refresh for holdings plus every open trading
+  ticker via `POST /api/market/refresh`, button spinner only, never the
+  global loader) and `Logs` (the shared quote history, grouped by day).
+  The action line renders only while Market is expanded
+  (`CollapsibleSection` prop `actionsOnExpandOnly`): Update and Logs act
+  on hidden content otherwise. Update is the only global refresh. A card
+  refreshes its own ticker instead: on a holding card the refresh icon sits
+  top-right, left of the buy/sell `+`; on a trading position card it sits
+  immediately right of the Info icon. Cash and a hand-priced holding
+  (`priceAuto` false) show no refresh icon.
+  On every strip read a position whose live
+  quote reaches or passes its target (`recommendation` `sell` or
+  `daytrade`) alerts once through a success toast **with sound**
+  (`showToast(text, 'success', true)`): edge-triggered per `orgId:ticker`,
+  remembered in `localStorage` (`ferm:trading-goal-alerts`) so reloads and
+  the 60-second reload never repeat it; dropping below target or closing
+  the position forgets the key. Simultaneous crossings share one toast.
+  One shared `CollapsibleSection`
+  implements the toggle pattern (chevron, `slide` over `motionMs(180)`,
+  `localStorage` memory) so all collapsibles animate identically. Tapping any position card
+  opens its detail modal: free TradingView chart (`BMFBOVESPA:TICKER`, daily — the widget resolves B3 under `BMFBOVESPA`, not `BVMF`),
+  average buy, latest market price with fetch time, current total, and the
+  goal price with its distance from the market. From the home strip the
+  modal also offers `Open in Trading`. Card and modal totals are net: the
+  quote value minus the sell fee, dedo-duro and fixed fee — what a sale
+  would actually yield. The monthly panel counts sales, buy-plus-sell fees,
+  dedo-duro and realized profit per month; the R$ 20,000 ceiling sees sales
+  only, and months without sales say so instead of printing zeros. Section
+  order is positions → monthly panel → diary. Every collapsible group —
+  Market, Holdings, Trading, open positions, Featured — is one shared
+  `CollapsibleSection` (chevron, `slide` over `motionMs(180)`, remembered
+  state read synchronously at init so remounts never flash open-then-shut).
+  The tab root and page wrapper guard horizontal overflow with
+  `overflow-x: hidden` (universal support — `clip` silently does nothing on
+  older engines, which reads exactly like a fix that never landed); the
+  diary table keeps its own internal scroll, grid items carry `min-w-0`, and
+  the header action row wraps down to 320 px screens. The diary is a table
+  (`Date | Operation | Qty | Unit | Value | B3 fee | Dedo-duro | Net |
+  Profit | delete`): the two levies stay in their own columns, dedo-duro
+  shows `—` on buys. `+ Buy` (emerald) and `− Sell` (rose) live in the
+  Trading header row; the cost rules open from the `Fees` button.
 - **To-Do group row**: the new-group `+`, the in-progress filter and every
   group pill share ONE line at every width. The row is a horizontal carousel
   (`overflow-x-auto no-scrollbar snap-x`) and never wraps on desktop; extra
@@ -284,7 +529,7 @@ sizing. Consult this before changing any of them.
   Add button below the textarea right-aligned like every form dialog) and
   closes itself after the comment is stored — it never shows a thread and never deletes.
   The comment list lives ONLY on the single item page
-  (`/todo/[id]`, `/notes/[id]`, `/principles/[id]`): rows with date and four
+  (`/admin/todo/[id]`, `/notes/[id]` public, `/admin/notes/[id]` private, `/admin/principles/[id]`): rows with date and four
   actions — copy, pin, edit and a confirmed `×` delete (danger
   `ConfirmDialog`, `aria-label="Delete comment"`) — plus an "Add comment"
   button that opens the same modal. Edit reuses `CommentModal` with the
@@ -322,7 +567,11 @@ sizing. Consult this before changing any of them.
   to one clamped line (native `line-clamp` ellipsis) when you tap the note
   text, and expands on tap again — long paragraphs without newlines are
   foldable too (foldability is measured from the rendered height, not
-  counted from newlines). A persisted fold is trusted without re-measuring.
+  counted from newlines). A persisted fold is trusted without re-measuring
+  its length, but a reloaded fold must also carry the one-line `max-height`
+  cap beside the clamp — WebKit under-clamps with the clamp alone and shows
+  the card half contracted — so the measure pass gives every collapsed id
+  without a cap the same `ceil(lineHeight)` value a manual fold ends with.
   Short notes stay plain, non-tappable text. Tags, video pill, featured
   star and amber border stay visible while folded. The fold animates over
   180 ms by measuring the full text height: the one-line clamp comes off before
@@ -387,9 +636,13 @@ sizing. Consult this before changing any of them.
   registry. The `StockCategoryModal` group dropdown lists existing names and
   gives each one an `×`; deleting a group clears it from every category using
   it after a confirmation, and the categories stay.
-- **Note card gestures**: tapping the note text only folds/unfolds —
-  opening a note lives in the ⋮ menu ("Open note"; not offered by the ⋮
-  menu on the note's own page). The hour stamp is a label, not a link. On
+- **Note card gestures**: the fold toggles only from a small chevron at
+  the text's left edge (rotating `ChevronDown`, 20 px so it stays under
+  the one-line cap, `aria-expanded`) — the note body itself is plain
+  selectable text and must never swallow drag-selection, so copying from
+  the list works everywhere. Opening a note lives in the ⋮ menu ("Open
+  note"; not offered by the ⋮ menu on the note's own page). Comments use
+  the identical chevron pattern. The hour stamp is a label, not a link. On
   mobile the ⋮ floats absolute in the top-right corner (translucent white
   circle so overlapped text stays readable) and the note text spans the
   full card width; on desktop the ⋮ stays inline after the text. The
@@ -433,7 +686,7 @@ Do not introduce a new spacing value without checking this table first.
   `red-600` pill (the brand red — the one deliberate exception to the palette).
   The pill toggles the click-to-load embed below it. On a principle card and a
   task card the
-  pill sits at the right edge from `sm` up, matching the tags and comment pill;
+  pill sits at the right edge from `sm` up, matching the tags row;
   on mobile it stays left (tasks indent it with the text). On a principle's
   own page the block starts open without autoplay; the pill still toggles it,
   and the iframe stays click-to-load.
@@ -456,6 +709,12 @@ Do not introduce a new spacing value without checking this table first.
   when a field is smaller, and it ignores `maximum-scale`/`user-scalable=no`,
   so the viewport stays zoomable and every `input`, `textarea` and `select`
   that takes text uses `text-base`. Display text keeps the scale above.
+- Number entry uses `type="number" step="any"` (spinners hidden globally) for
+  the numeric keyboard and letter blocking; parsing still goes through the
+  single `parseDecimal` in `src/lib/numbers.ts` (one comma or dot accepted,
+  everything else rejected), because browser locales disagree on what a
+  comma key produces. Never parse money with a bare `Number(...)` plus a
+  comma replace.
 - Section headers: `text-xs font-medium uppercase tracking-widest text-stone-400`.
 - Day headers in the timeline are the exception: normal case, because they read
   as words ("Today", "Yesterday").
@@ -501,6 +760,14 @@ column and the textarea takes the remaining height. `Escape` collapses the panel
 before it closes the dialog. The toggle animates height, max-width, corner
 radius and backdrop padding over 200 ms; reduced motion turns the animation off.
 
+`ConfigModal`'s tab pills are a horizontal snap carousel, the same pattern as
+the section bar (`no-scrollbar -mx-1 flex min-w-0 flex-1 snap-x gap-2
+overflow-x-auto px-1 pb-1`). They scroll sideways; they never wrap. The body has
+a fixed height and `overflow: hidden`, so the `ResizeObserver` that publishes
+that height must observe the **first child** (the panel content), never the
+clipped container: observing the container reports the height it is supposed to
+decide, and late content (status chips, test results) gets clipped.
+
 ## Onboarding
 
 - `/welcome` is the first-run screen. It uses no app chrome: a centered
@@ -531,7 +798,7 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   `CommentModal`, the edit-principle dialog) offer a header toggle that expands
   the panel to the viewport; `Escape` then collapses it first, and the other
   fields and buttons stay fixed while the textarea scrolls.
-- **Single note edit** (`/notes/[id]`): Edit replaces the bold note text in the
+- **Single note edit** (`/admin/notes/[id]` private, `/notes/[id]` public read-only): Edit replaces the bold note text in the
   same card with a textarea, the optional YouTube URL and a date/time field,
   plus Cancel/Save below. No backdrop and no full-screen toggle. `Escape`
   cancels, `Cmd/Ctrl+Enter` saves. The textarea prefills stored tags as a
@@ -540,15 +807,29 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   multi-word tag from an older note) stays out of the text. The timeline
   `EditNoteDialog` follows the same rule and carries the same date field.
 - **Principles** (`PrinciplesTab`): cards show the creation date under the
-  text. A leading `(name)` token groups a principle exactly like To-Do
+  text. The position number is a small badge on the card's top edge
+  (`absolute -top-2 left-3`, `pointer-events-none`), not a fixed column beside
+  the text: the number stays at a glance without narrowing every row. A
+  leading `(name)` token groups a principle exactly like To-Do
   subgroups: one collapsible pill per group (`▾ v2 (3)`), in first-appearance
-  order, then an `Ungrouped` section when ungrouped principles exist. Names
+  order; ungrouped principles follow as a plain list with **no** `Ungrouped`
+  header. Names
   accept letters and
   digits in any script (accents included), spaces, dots and dashes, up to 31
   characters, normalized to lowercase. The split is view-only — the
   prefix stays in the stored text, so the principle page, tag pages, search
-  and RAG keep the full line. Numbers follow the display order, not the
-  stored index. Drag and `↑/↓` reorder only
+  and RAG keep the full line. The card folds exactly like notes: a small
+  chevron beside selectable text (the body is no longer a button, so the
+  text is copyable everywhere); `ferm:collapsed-principles` persists the
+  fold and a reloaded fold keeps the one-line `max-height` cap. Edit
+  opens from the ⋮ menu, not from the text. The single principle page adds a `Mentioned
+  in N` section: the notes whose `[[id]]` tokens point at it, newest first,
+  each row one plain-text excerpt line, its date, and an `Open` pill linking
+  to `/admin/notes/[id]` — never a card wrapping the whole note. The API
+  carries it as `GET /api/principles/[id]` → `{ principle, mentionedIn }`. Only ungrouped principles carry the display
+  number (list order); grouped rows leave the number slot blank. The comment
+  pill floats absolutely in the card's top-right corner, clearing the `⋮`,
+  like the notes standard — never inline in the title row. Drag and `↑/↓` reorder only
   within a group; a cross-group drop cancels. The Add button carries the same
   desktop shortcut as the To-Do Add
   button: `⌘⇧A` on Mac, `Ctrl+Shift+A` elsewhere. The hint is hidden on touch,
@@ -560,13 +841,32 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   as Notes, To-Do and Principles, up to ten per kind; `library` and `influences`
   are reserved until those sections have data. `↑/↓` select, `Enter` opens,
   `Escape` and the backdrop close. The input placeholder is plain text; the
-  `Kbd` chip sits at the right edge of the field.
+  `Kbd` chip sits at the right edge of the field. Before a query is typed, the
+  palette shows featured mini apps as pre-search options.
+- **Mini apps**: a floating action button at the bottom right opens the mini
+  apps modal. Apps are ordered by usage; the last opened app shows a
+  `Latest used` pill and a running app shows a `Running` badge. Usage is stored
+  in local storage. **Time tracker** (`/admin/time-tracker`) starts one timer
+  with an optional comment and stops it later. Trailing hashtags in the comment
+  become project tags (stored in `time_entry_tags`, first tag is the primary
+  project for stats). Entries live in the journal. While a timer runs, a compact
+  counter bar stays visible at the top of admin pages and on the public
+  homepage, and links to the time tracker. The time tracker page shows a
+  period chart (month/day bars, week/day bars, or year/month bars) with stacked
+  segments per project and a period dropdown. Each history row has a delete
+  button, and a running timer can be stopped or discarded from the page and
+  from the top bar. Both actions confirm through `ConfirmDialog`.
 - **Toasts** come from `$lib/toast.svelte` and render once from the root layout
   (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
   never for progress or background work. Auto-clear: 4 s error, 8 s success.
   Publishing a note confirms with a success toast (`Note saved.`); a backdated
   note outside the loaded cursor adds the scroll hint. `showToast` defaults to
-  error, so success messages must pass the tone explicitly.
+  error, so success messages must pass the tone explicitly. The third argument,
+  `showToast(text, tone, true)`, asks for the attention **ping**: the sound is
+  played only by the global `Toasts` mount via `$lib/sound.ts` (WebAudio, no
+  files), so no caller writes its own audio. Autoplay policy means iOS/Safari
+  stays silent until the first user gesture unlocks the `AudioContext`; the
+  toast itself always shows.
 - **Loading feedback**: a static pill in `app.html` covers hydration no Svelte
   code can see. `NavigationLoader` removes it on mount and takes over: the first
   tracked wait shows at once, later route changes and data waits keep the 120 ms
@@ -603,9 +903,11 @@ radius and backdrop padding over 200 ms; reduced motion turns the animation off.
   hand-written translations).
 - The heatmap packs the year backwards, seven per column from 31 December, so
   the newest days sit at the top left and any slack is at the bottom right.
-- The heatmap has two tabs. **Notes & tasks** keeps the amber note-intensity
-  grid and the Done tasks list. **Investments** has its own grid and trade
-  history. One square cannot carry note, buy and sell intensities at once,
+- The heatmap has three tabs. **Notes & tasks** keeps the amber
+  note-intensity grid and the Done tasks list. **Investments** has its own
+  grid and trade history. **Nostr** shows the two-color heatmap (published
+  notes in amber, replies in blue) that also sits at the top of the Nostr
+  section. One square cannot carry note, buy and sell intensities at once,
   so the views never share a cell. The tab choice is stored in
   `fermentario.heatmapView`; the selected year is shared.
 - Investments colours: buys use an emerald scale, sells a rose scale. Each

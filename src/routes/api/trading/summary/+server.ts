@@ -9,7 +9,7 @@ export async function GET({ url }) {
 	if (url.searchParams.get('refresh') === '1') {
 		try {
 			const tickers = [...new Set(listTradingOrders(org).map((o) => o.ticker))];
-			await refreshTradingQuotes(tickers);
+			await refreshTradingQuotes(tickers, url.searchParams.get('force') === '1');
 		} catch (e) {
 			const summary = getTradingSummary(org);
 			if (!summary) return json({ error: 'unknown organization' }, { status: 404 });

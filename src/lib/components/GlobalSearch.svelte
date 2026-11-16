@@ -4,6 +4,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { miniApps } from '$lib/mini-apps.svelte';
 	import { search } from '$lib/search.svelte';
 	import { SEARCH_GROUPS, searchHref, type SearchHit, type SearchKind } from '$lib/search';
 	import { isAppleDevice } from '$lib/platform';
@@ -66,6 +67,7 @@
 	$effect(() => {
 		if (search.open) {
 			restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			miniApps.loadUsage();
 			query = '';
 			results = [];
 			error = '';
@@ -124,6 +126,12 @@
 	function openHit(hit: SearchHit) {
 		const href = searchHref(hit);
 		if (!href) return;
+		close();
+		void goto(href);
+	}
+
+	function openMiniApp(id: string, href: string) {
+		miniApps.recordUse(id);
 		close();
 		void goto(href);
 	}
@@ -247,9 +255,28 @@
 			</p>
 
 			{#if query.trim().length < 2}
-				<p class="px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400">
-					Type at least 2 characters to search notes, tasks and principles.
-				</p>
+				<div class="py-2">
+					<div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-stone-400 dark:text-stone-500">Mini apps</div>
+					{#each miniApps.orderedApps() as app (app.id)}
+						{@const Icon = app.icon}
+						<button
+							type="button"
+							class="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-stone-100 dark:hover:bg-stone-800"
+							onclick={() => openMiniApp(app.id, app.href)}
+						>
+							<span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+								<Icon class="h-4 w-4" />
+							</span>
+							<span class="min-w-0 flex-1">
+								<span class="block text-sm font-medium text-stone-900 dark:text-stone-100">{app.label}</span>
+								<span class="block truncate text-xs text-stone-500 dark:text-stone-400">{app.description}</span>
+							</span>
+						</button>
+					{/each}
+					<p class="px-4 pb-4 pt-3 text-center text-sm text-stone-500 dark:text-stone-400">
+						Type at least 2 characters to search notes, tasks and principles.
+					</p>
+				</div>
 			{:else if loading && flat.length === 0}
 				<p class="px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400">Searching…</p>
 			{:else if error}

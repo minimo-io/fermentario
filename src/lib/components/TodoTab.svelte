@@ -23,30 +23,6 @@
 
 	const locale = $derived(lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US');
 
-	// To-Do keeps its own subview across detail-page navigation: In progress or
-	// one specific group. The root page restores the section; this restores the
-	// list you were actually reading.
-	const TODO_VIEW_KEY = 'fermentario.todoView';
-
-	function storedView(): string {
-		try {
-			return sessionStorage.getItem(TODO_VIEW_KEY) ?? '';
-		} catch {
-			return '';
-		}
-	}
-
-	function rememberView(value: string) {
-		try {
-			sessionStorage.setItem(TODO_VIEW_KEY, value);
-		} catch {}
-	}
-
-	function taskHref(id: string): string {
-		const from = progressView ? 'progress' : activeGroup ? `group:${activeGroup}` : 'progress';
-		return `/todo/${id}?from=${encodeURIComponent(from)}`;
-	}
-
 	let groups = $state<TodoGroup[]>([]);
 	let activeGroup = $state<string | null>(null);
 	let items = $state<TodoItem[]>([]);
@@ -80,8 +56,8 @@
 
 	// Add-task shortcut: desktop pointers only. ⌘⇧A on Mac, Ctrl+Shift+A
 	// elsewhere — none of these is reserved by browsers or the OS shell.
-	const isMac = navigator.userAgent.includes('Mac');
-	const canKeyShortcut = matchMedia('(hover: hover) and (pointer: fine)').matches;
+	const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
+	const canKeyShortcut = typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 	const addShortcutKeys = isMac ? ['⌘', '⇧', 'A'] : ['Ctrl', 'Shift', 'A'];
 
 	function handleAddShortcut(e: KeyboardEvent) {
@@ -181,34 +157,8 @@
 		try {
 			const d = await (await loading.track(fetch('/api/todo/groups'))).json();
 			groups = Array.isArray(d.groups) ? d.groups : [];
-			const stored = select ? '' : storedView();
-			if (select && groups.some((g) => g.id === select)) {
-				// A group just created: open it and remember it.
-				progressView = false;
-				activeGroup = select;
-				rememberView(`group:${select}`);
-			} else if (stored === 'progress') {
-				progressView = true;
-				const want = activeGroup;
-				activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
-			} else if (stored.startsWith('group:')) {
-				const id = stored.slice(6);
-				if (groups.some((g) => g.id === id)) {
-					progressView = false;
-					activeGroup = id;
-				} else {
-					// The remembered group is gone; In progress is the safe fallback.
-					progressView = true;
-					const want = activeGroup;
-					activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
-					rememberView('progress');
-				}
-			} else {
-				// No remembered subview: follow the active group, or the default
-				// In progress view.
-				const want = activeGroup;
-				activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
-			}
+			const want = select ?? activeGroup;
+			activeGroup = groups.some((g) => g.id === want) ? want : (groups[0]?.id ?? null);
 			if (activeGroup) await loadItems(activeGroup);
 			else items = [];
 			await loadProgress();
@@ -228,14 +178,12 @@
 
 	function openProgress() {
 		progressView = true;
-		rememberView('progress');
 		void loadProgress();
 	}
 
 	function openGroup(id: string) {
 		progressView = false;
 		activeGroup = id;
-		rememberView(`group:${id}`);
 		void loadItems(id);
 	}
 
@@ -682,7 +630,7 @@
 							class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 							onclick={() => requestDone(item)}
 						><span class="text-[11px] leading-none">✓</span></button>
-						<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800 dark:text-stone-200" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) void goto(taskHref(item.id)); }}>{item.content}</button>
+						<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-800 dark:text-stone-200" onclick={() => { if (suppressClick) { suppressClick = false; return; } if (!dragId) void goto(`/admin/todo/${item.id}`); }}>{item.content}</button>
 							<!-- sm+: pills share the title line, right-aligned before the ⋮ -->
 							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 								{#if item.inProgress}
@@ -785,7 +733,7 @@
 								class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border {item.done ? 'border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white' : 'border-stone-300 dark:border-stone-700 text-transparent'}"
 								onclick={() => requestDone(item)}
 							><span class="text-[11px] leading-none">✓</span></button>
-							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(taskHref(item.id))}>{item.content}</button>
+							<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] {item.done ? 'text-stone-400 dark:text-stone-500 line-through' : 'text-stone-800 dark:text-stone-200'}" onclick={() => void goto(`/admin/todo/${item.id}`)}>{item.content}</button>
 							<!-- sm+: group, status and tags share the title line, right-aligned before the ⋮ -->
 							<div class="hidden min-w-0 shrink flex-wrap items-center justify-end gap-1 sm:flex">
 								<span class="shrink-0 rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[11px] text-stone-500 dark:text-stone-400">{item.groupName}</span>
@@ -854,7 +802,7 @@
 										class="sm:mt-0 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-stone-900 dark:border-stone-700 bg-stone-900 dark:bg-stone-700 text-white"
 										onclick={() => void toggleItem(item)}
 									><span class="text-[11px] leading-none">✓</span></button>
-									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 dark:text-stone-500 line-through" onclick={() => void goto(taskHref(item.id))}>{item.content}</button>
+									<button type="button" class="min-w-0 flex-1 text-left whitespace-pre-wrap text-[15px] text-stone-400 dark:text-stone-500 line-through" onclick={() => void goto(`/admin/todo/${item.id}`)}>{item.content}</button>
 									<button type="button" aria-label="Item actions" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300" onclick={() => (menuItem = item)}><EllipsisVertical class="h-4 w-4" /></button>
 								</div>
 								{#if item.done_at}
@@ -894,7 +842,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void goto(taskHref(item.id)); }}
+					onclick={() => { const item = menuProgressItem; menuProgressItem = null; if (item) void goto(`/admin/todo/${item.id}`); }}
 				>Open details</button>
 				<button
 					type="button"
@@ -937,7 +885,7 @@
 				<button
 					type="button"
 					class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => { const item = menuItem; menuItem = null; if (item) void goto(taskHref(item.id)); }}
+					onclick={() => { const item = menuItem; menuItem = null; if (item) void goto(`/admin/todo/${item.id}`); }}
 				>Open details</button>
 				<button
 					type="button"

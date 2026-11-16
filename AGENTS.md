@@ -36,6 +36,7 @@
 - Read the installed source before asserting how a dependency behaves. `node_modules/@sveltejs/kit/src/core/config/options.js` settled a question that three wrong assumptions could not.
 - If you have trouble solving a problem, check `docs/lessons-learned.md`.
 - Never run any destructive action (`git reset --hard`, `git clean`, force-push, deleting files or branches, dropping changes) without asking the user first.
+- Never use `window.confirm`. Use `src/lib/components/ConfirmDialog.svelte` for every destructive confirmation.
 
 ## Database schema changes
 - Add a new numbered migration to `src/lib/platform/migrations.ts`. Never edit a migration that has already run on a journal.

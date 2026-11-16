@@ -1,7 +1,14 @@
 import { json } from '@sveltejs/kit';
-import { updatePrinciple, deletePrinciple, setPrincipleTags, setPrincipleVideo } from '$lib/server/db';
+import { getPrinciple, listNotesLinkingTo, updatePrinciple, deletePrinciple, setPrincipleTags, setPrincipleVideo } from '$lib/server/db';
 import { splitTrailingHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
+
+/** The principle plus the notes that cross-mention it through `[[id]]`. */
+export async function GET({ params }) {
+	const principle = getPrinciple(params.id);
+	if (!principle) return json({ error: 'not found' }, { status: 404 });
+	return json({ principle, mentionedIn: listNotesLinkingTo(params.id) });
+}
 
 export async function PATCH({ params, request }) {
 	const body = await request.json();

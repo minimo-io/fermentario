@@ -6,20 +6,24 @@
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { youTubeWatchUrl } from '$lib/youtube';
+	import { fileToPhotoUrl } from '$lib/stock-photo';
 	import NoteFinder from '$lib/components/NoteFinder.svelte';
 	import TagFinder from '$lib/components/TagFinder.svelte';
+	import ImagePlus from '@lucide/svelte/icons/image-plus';
+	import X from '@lucide/svelte/icons/x';
 	import type { Note } from '$lib/types';
 
 	type Props = {
 		note: Note;
 		content: string;
 		video: string;
+		coverId: string | null;
 		onContent: (value: string) => void;
 		onVideo: (value: string) => void;
-		onSave: (content: string, video: string, createdAt: number) => Promise<void>;
+		onSave: (content: string, video: string, createdAt: number, cover: string | null | undefined) => Promise<void>;
 		onCancel: () => void;
 	};
-	let { note, content, video, onContent, onVideo, onSave, onCancel }: Props = $props();
+	let { note, content, video, coverId, onContent, onVideo, onSave, onCancel }: Props = $props();
 
 	let saving = $state(false);
 	let err = $state('');
@@ -27,13 +31,36 @@
 	let editField = $state<HTMLTextAreaElement | null>(null);
 	let finder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
 	let tagFinder = $state<{ handleKey: (e: KeyboardEvent) => boolean } | null>(null);
+	// Cover state: undefined keeps the stored cover, a data URL replaces it,
+	// null removes it. The client downsizes to JPEG before upload.
+	// svelte-ignore state_referenced_locally
+	let coverPreview = $state<string | null>(coverId ? `/api/notes/photos/${coverId}` : null);
+	let coverData = $state<string | null | undefined>(undefined);
 	// svelte-ignore state_referenced_locally
 	let noteDate = $state(datetimeLocalValue(note.created_at));
 	const maxNoteDate = datetimeLocalValue(Date.now());
 
 	const originalDate = $derived(datetimeLocalValue(note.created_at));
-	const unchanged = $derived(content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : '') && noteDate === originalDate);
+	const unchanged = $derived(content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : '') && noteDate === originalDate && coverData === undefined);
 	const empty = $derived(splitTrailingHashtags(content).content.trim().length === 0);
+
+	async function pickCover(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		try {
+			coverData = await fileToPhotoUrl(file);
+			coverPreview = coverData;
+		} catch {
+			err = 'Could not read the image.';
+		}
+	}
+
+	function removeCover() {
+		coverData = null;
+		coverPreview = null;
+	}
 
 	async function save() {
 		if (saving || empty || unchanged) return;
@@ -43,7 +70,7 @@
 			const at = noteDate === originalDate
 				? note.created_at
 				: Math.min(datetimeLocalTimestamp(noteDate) ?? Date.now(), Date.now());
-			await onSave(content.trim(), video.trim(), at);
+			await onSave(content.trim(), video.trim(), at, coverData);
 		} catch (e) {
 			err = (e as Error)?.message ?? 'Could not save the note.';
 		} finally {
@@ -122,6 +149,25 @@
 				placeholder="https://www.youtube.com/watch?v=…"
 				inputmode="url"
 			/>
+			<div class="mt-3">
+				<span class="block text-xs font-medium text-stone-500 dark:text-stone-400">Cover image (optional)</span>
+				{#if coverPreview}
+					<div class="mt-1 flex items-start gap-2">
+						<img src={coverPreview} alt="Note cover preview" class="h-20 w-32 rounded-xl object-cover" />
+						<button
+							type="button"
+							class="grid h-7 w-7 shrink-0 place-items-center rounded-full text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-rose-600 dark:hover:text-rose-400"
+							aria-label="Remove cover image"
+							onclick={removeCover}
+						><X class="h-4 w-4" /></button>
+					</div>
+				{:else}
+					<label class="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 px-3 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800">
+						<ImagePlus class="h-3.5 w-3.5" /> Choose image
+						<input type="file" accept="image/*" class="sr-only" onchange={pickCover} />
+					</label>
+				{/if}
+			</div>
 			{#if err}
 				<p class="mt-2 text-xs text-rose-500 dark:text-rose-400">{err}</p>
 			{/if}

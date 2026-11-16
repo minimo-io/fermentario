@@ -6,10 +6,12 @@
 	import type { Theme } from '$lib/theme';
 	import LanguagePanel from '$lib/components/LanguagePanel.svelte';
 	import ModelsPanel from '$lib/components/ModelsPanel.svelte';
+	import RipioPanel from '$lib/components/RipioPanel.svelte';
+	import NostrPanel from '$lib/components/NostrPanel.svelte';
 	import DatabasePanel from '$lib/components/DatabasePanel.svelte';
 
 	type Lang = 'en' | 'es' | 'pt';
-	type Tab = 'general' | 'models' | 'database';
+	type Tab = 'general' | 'models' | 'trading' | 'nostr' | 'database';
 
 	type Props = {
 		modelLang: Lang;
@@ -45,16 +47,28 @@
 	const TABS: { id: Tab; label: string }[] = [
 		{ id: 'general', label: 'General' },
 		{ id: 'models', label: 'Models' },
+		{ id: 'trading', label: 'Trading' },
+		{ id: 'nostr', label: 'Nostr' },
 		{ id: 'database', label: 'Database' }
 	];
 
 	// The tabs differ in height. Auto height cannot transition, so the
 	// measured pixel height drives a CSS height transition on every switch.
+	// A ResizeObserver keeps the box honest when a panel grows AFTER mount
+	// (async status chips, result lines) — measuring only on tab change
+	// clipped that late content inside the fixed height.
 	let bodyEl = $state<HTMLDivElement | null>(null);
 	let bodyH = $state<number | null>(null);
 	$effect(() => {
 		void tab;
 		if (bodyEl) bodyH = bodyEl.scrollHeight;
+	});
+	$effect(() => {
+		if (!bodyEl || typeof ResizeObserver === 'undefined') return;
+		const target = bodyEl.firstElementChild ?? bodyEl;
+		const ro = new ResizeObserver(() => (bodyH = bodyEl!.scrollHeight));
+		ro.observe(target);
+		return () => ro.disconnect();
 	});
 </script>
 
@@ -73,12 +87,12 @@
 			<button class="text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300" aria-label="Close" onclick={onClose}>&times;</button>
 		</div>
 
-		<div class="mb-4 inline-flex items-center rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-0.5 shadow-sm" role="tablist" aria-label="Settings">
+		<div class="no-scrollbar -mx-1 mb-4 flex min-w-0 flex-1 snap-x gap-2 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Settings">
 			{#each TABS as t (t.id)}
 				<button
 					role="tab"
 					aria-selected={tab === t.id}
-					class="rounded-full px-4 py-1.5 text-sm font-medium {tab === t.id ? 'bg-stone-900 dark:bg-stone-700 text-white' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+					class="inline-flex shrink-0 snap-start items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium select-none {tab === t.id ? 'bg-stone-900 dark:bg-stone-700 text-white' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'}"
 					onclick={() => onTab(t.id)}
 				>{t.label}</button>
 			{/each}
@@ -93,6 +107,10 @@
 					<LanguagePanel {entriesLang} {contentWidth} {theme} {sections} onSave={onSaveLanguages} {onWidth} {onSections} {onTheme} />
 				{:else if tab === 'models'}
 					<ModelsPanel {summaryLoading} {week} {model} {models} {modelLang} {prompt} {onRerun} {onModelChange} {onModelLang} {onPromptChange} />
+				{:else if tab === 'trading'}
+					<RipioPanel />
+				{:else if tab === 'nostr'}
+					<NostrPanel />
 				{:else}
 					<DatabasePanel {onRestoreStart} />
 				{/if}

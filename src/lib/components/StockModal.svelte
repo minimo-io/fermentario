@@ -38,6 +38,7 @@
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import ImagePlus from '@lucide/svelte/icons/image-plus';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
+	import { parseDecimal } from '$lib/numbers';
 	import { dateLocalValue, dateLocalTimestamp } from '$lib/datetime';
 	import { fileToPhotoUrl } from '$lib/stock-photo';
 	import Info from '@lucide/svelte/icons/info';
@@ -182,15 +183,15 @@
 		const expires_at = kind === 'consumable' && draft.expires.trim() ? (dateLocalTimestamp(draft.expires.trim()) ?? NaN) : null;
 		if (expires_at !== null && !Number.isFinite(expires_at)) return null;
 		if (kind === 'consumable' && !name && !brand && !category) return null;
-		const priceRaw = draft.price.trim().replace(',', '.');
-		const price = priceRaw === '' ? null : Number(priceRaw);
+		const priceRaw = draft.price.trim();
+		const price = priceRaw === '' ? null : parseDecimal(priceRaw);
 		if (price !== null && (!Number.isFinite(price) || price < 0)) return null;
 		const currency = (draft.currency.trim().toUpperCase() || 'BRL').slice(0, 3);
 		if (!/^[A-Z]{3}$/.test(currency)) return null;
 		if (kind === 'consumable') {
-			const quantity = Number(String(draft.quantity).replace(',', '.'));
-			const sizeRaw = draft.size.trim().replace(',', '.');
-			const size = sizeRaw === '' ? NaN : Number(sizeRaw);
+			const quantity = parseDecimal(draft.quantity);
+			const sizeRaw = draft.size.trim();
+			const size = sizeRaw === '' ? NaN : parseDecimal(sizeRaw);
 			if (!Number.isFinite(quantity) || quantity < 0) return null;
 			if (!Number.isFinite(size) || size <= 0) return null;
 			const sizeUnit = ['g', 'kg', 'ml', 'l'].includes(draft.sizeUnit) ? draft.sizeUnit : 'g';
@@ -342,7 +343,7 @@
 							value={draft.quantity}
 							oninput={(e) => (draft = { ...draft, quantity: e.currentTarget.value })}
 							placeholder="2"
-							inputmode="decimal"
+							type="number" step="any"
 						/>
 					</div>
 					<div class="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -358,7 +359,7 @@
 								value={draft.size}
 								oninput={(e) => (draft = { ...draft, size: e.currentTarget.value })}
 								placeholder="180"
-								inputmode="decimal"
+								type="number" step="any"
 							/>
 						</div>
 						<div>
@@ -412,7 +413,7 @@
 								value={draft.price}
 								oninput={(e) => (draft = { ...draft, price: e.currentTarget.value })}
 								placeholder="2500"
-								inputmode="decimal"
+								type="number" step="any"
 							/>
 						</div>
 						<div>

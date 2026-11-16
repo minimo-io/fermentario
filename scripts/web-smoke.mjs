@@ -26,6 +26,8 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, ex
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import Database from 'better-sqlite3';
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import * as nip19 from 'nostr-tools/nip19';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const GOLDEN = join(ROOT, 'tests/baseline/web.json');
@@ -62,10 +64,22 @@ const rememberActions = (r) => {
 const mask = (value) => {
 	if (typeof value === 'string') {
 		if (volatile.has(value)) return '<runtime>';
-		// The temp directory leaks into /api/status as the model cache path.
-		return value.split(work).join('<workdir>');
+		// The temp directory leaks into /api/status as the model cache path,
+		// and the random test port leaks into absolute URLs (canonical,
+		// og:url, embedded server data). Both are runtime details. The
+		// homepage record is raw SSR HTML, so the build's content-hashed
+		// asset names and the SvelteKit nonce leak there too — all four are
+		// artifacts of this build, not app behaviour.
+		return value
+			.split(work).join('<workdir>')
+			.split(base).join('<base>')
+			.split(base.replace('http://', 'ws://')).join('<base>')
+			.replace(/__sveltekit_[A-Za-z0-9_]+/g, '__sveltekit_<nonce>')
+			.replace(/\.[A-Za-z0-9_-]{8}\.(js|css)/g, '.<hashed>.$2');
 	}
-	if (typeof value === 'number') return volatile.has(value) ? '<runtime>' : value;
+	// Zero is a real value — a count, a reading position index — never a fresh
+	// id or timestamp, so masking it would hide a legitimate number.
+	if (typeof value === 'number') return value !== 0 && volatile.has(value) ? '<runtime>' : value;
 	if (Array.isArray(value)) return value.map(mask);
 	if (value && typeof value === 'object') {
 		return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mask(v)]));
@@ -87,7 +101,7 @@ function freePort() {
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 
-const child = spawn(process.execPath, ['--unhandled-rejections=warn', join(ROOT, 'build/index.js')], {
+const child = spawn(process.execPath, ['--unhandled-rejections=warn', join(ROOT, 'scripts/start.mjs')], {
 	cwd: ROOT,
 	stdio: ['ignore', 'pipe', 'pipe'],
 	env: {
@@ -102,6 +116,9 @@ const child = spawn(process.execPath, ['--unhandled-rejections=warn', join(ROOT,
 		TZ: 'UTC',
 		FERMENTARIO_DATA_DIR: dataDir,
 		FERMENTARIO_MODEL_CACHE: modelCache,
+		// The relay is on this same server. Discovery and publish talk to it
+		// instead of the public relays, so the test never touches the network.
+		FERMENTARIO_NOSTR_RELAYS: `ws://127.0.0.1:${port}/relay`,
 		// A build-time flag, not app code: the guard only exists in the child.
 		FERMENTARIO_TEST_OFFLINE: '1',
 		NODE_OPTIONS: `--import ${join(ROOT, 'scripts/offline-guard.mjs')}`
@@ -148,8 +165,8 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 24) {
-		console.error('The legacy import did not register an active v24 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 34) {
+		console.error('The legacy import did not register an active v34 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -190,7 +207,11 @@ async function page(name, path, probes) {
 			hasNoteText: html.includes('kayaking'),
 			hasTagName: html.includes('>garden<') || html.includes('/tags/garden'),
 			// The single page width from task 017.
-			hasPageWidth: html.includes('max-w-2xl')
+			hasPageWidth: html.includes('max-w-2xl'),
+			// Chrome that must match the route. A mini app under /admin is not a
+			// section: it must show no selected section pill and no composer.
+			hasComposer: html.includes('composer-field'),
+			selectedSections: [...html.matchAll(/data-section="([^"]+)"[^>]*aria-selected="true"/g)].map((m) => m[1])
 		}
 	]);
 	return res.status;
@@ -215,14 +236,44 @@ function must(name, res, predicate, what) {
 }
 
 // --- Pages -----------------------------------------------------------------
+// `/` is the public homepage now (200, published feed). Old section URLs
+// 307 to their `/admin` twins.
+const rootPage = await api('GET / homepage', '/');
+must('GET / homepage', rootPage, (r) => r.status === 200, '200 with the public feed');
 await page('page:/', '/');
-await page('page:/heatmap', '/heatmap');
-await page('page:/tags/garden', '/tags/garden');
-await page('page:/tags/missing', '/tags/does-not-exist');
+const notesRedirect = await api('GET /notes redirect', '/notes', { redirect: 'manual' });
+must(
+	'GET /notes redirect',
+	notesRedirect,
+	(r) => r.status === 307 && r.headers.get('location') === '/admin/notes',
+	'307 to /admin/notes'
+);
+await page('page:/admin/notes', '/admin/notes');
+await page('page:/admin/todo', '/admin/todo');
+await page('page:/admin/time-tracker', '/admin/time-tracker');
+await page('page:/admin/stocks', '/admin/stocks');
+const bizRedirect = await api('GET /businesses redirect', '/businesses', { redirect: 'manual' });
+must(
+	'GET /businesses redirect',
+	bizRedirect,
+	(r) => r.status === 307 && r.headers.get('location') === '/admin/businesses/trading/b3',
+	'307 to /admin/businesses/trading/b3'
+);
+const bizTradingRedirect = await api('GET /businesses/trading redirect', '/businesses/trading', { redirect: 'manual' });
+must(
+	'GET /businesses/trading redirect',
+	bizTradingRedirect,
+	(r) => r.status === 307 && r.headers.get('location') === '/admin/businesses/trading/b3',
+	'307 to /admin/businesses/trading/b3'
+);
+await page('page:/admin/businesses/trading/b3', '/admin/businesses/trading/b3');
+await page('page:/admin/heatmap', '/admin/heatmap');
+await page('page:/admin/tags/garden', '/admin/tags/garden');
+await page('page:/admin/tags/missing', '/admin/tags/does-not-exist');
 // The diagnostics page is client-rendered but must still return 200 from the
 // server. A page that touches `window` at component init 500s here, which is
 // exactly the bug this check was added for.
-await page('page:/diagnostics', '/diagnostics');
+await page('page:/admin/diagnostics', '/admin/diagnostics');
 
 // --- Read routes -----------------------------------------------------------
 const status = await api('GET /api/status', '/api/status');
@@ -274,7 +325,114 @@ const edited = await api(
 );
 must('PATCH /api/notes/[id]', edited, (r) => r.status === 200 && !!r.body.note, '200 with a note');
 volatile.add(edited.body.note.updated_at);
+
+const published = await api(
+	'PATCH /api/notes/[id] published',
+	`/api/notes/${id}`,
+	json({ published: true }, 'PATCH')
+);
+must(
+	'PATCH /api/notes/[id] published',
+	published,
+	(r) => r.status === 200 && r.body.note?.published === true,
+	'200 with a published note'
+);
+await api('GET /api/public/notes', '/api/public/notes');
+await api('GET /api/public/notes/[id]', `/api/public/notes/${id}`);
 await page('page:/notes/[id]', `/notes/${id}`);
+await page('page:/admin/notes/[id]', `/admin/notes/${id}`);
+
+// Public config is a separate, safe namespace. Exercise write/read/disable,
+// then reset it so the remaining public checks keep the default shape.
+const publicConfigPatch = await api(
+	'PATCH /api/config/public',
+	'/api/config/public',
+	json(
+		{ siteTitle: 'Smoke Config', description: 'Smoke public description', notesEnabled: false, showCoverImages: false },
+		'PATCH'
+	)
+);
+must(
+	'PATCH /api/config/public',
+	publicConfigPatch,
+	(r) =>
+		r.status === 200 &&
+		r.body.publicConfig?.siteTitle === 'Smoke Config' &&
+		r.body.publicConfig?.description === 'Smoke public description' &&
+		r.body.publicConfig?.notesEnabled === false &&
+		r.body.publicConfig?.showCoverImages === false,
+	'200 with the sanitized public config'
+);
+volatile.add(publicConfigPatch.body.publicConfig.updatedAt);
+const publicConfigRead = await api('GET /api/public/config', '/api/public/config');
+must(
+	'GET /api/public/config',
+	publicConfigRead,
+	(r) => r.status === 200 && r.body.publicConfig?.siteTitle === 'Smoke Config' && r.body.publicConfig?.notesEnabled === false,
+	'200 with the public config'
+);
+const disabledPublicNotes = await api('GET /api/public/notes disabled', '/api/public/notes');
+must(
+	'GET /api/public/notes disabled',
+	disabledPublicNotes,
+	(r) => r.status === 200 && r.body.notes?.length === 0 && r.body.hasMore === false,
+	'200 with an empty public feed while notes are disabled'
+);
+const disabledPublicNote = await api('GET /api/public/notes/[id] disabled', `/api/public/notes/${id}`);
+must(
+	'GET /api/public/notes/[id] disabled',
+	disabledPublicNote,
+	(r) => r.status === 404,
+	'404 while public notes are disabled'
+);
+const disabledHome = await fetch(`${base}/`);
+must('GET / disabled', { status: disabledHome.status }, (r) => r.status === 200, '200 homepage while disabled');
+await disabledHome.arrayBuffer();
+const publicConfigReset = await api(
+	'PATCH /api/config/public reset',
+	'/api/config/public',
+	json(
+		{ siteTitle: 'fermentario', description: 'Published notes.', notesEnabled: true, showCoverImages: true },
+		'PATCH'
+	)
+);
+must(
+	'PATCH /api/config/public reset',
+	publicConfigReset,
+	(r) => r.status === 200 && r.body.publicConfig?.siteTitle === 'fermentario' && r.body.publicConfig?.notesEnabled === true,
+	'200 with the default public config restored'
+);
+volatile.add(publicConfigReset.body.publicConfig.updatedAt);
+
+// Covers ride with the note: upload, serve bytes, then reference by id.
+const TINY_COVER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const cover = await api(
+	'POST /api/notes/[id]/photo',
+	`/api/notes/${id}/photo`,
+	json({ photo: TINY_COVER })
+);
+must('POST /api/notes/[id]/photo', cover, (r) => r.status === 201 && !!r.body.id, '201 with a cover id');
+volatile.add(cover.body.id);
+volatile.add(cover.body.created_at);
+const coverPhoto = await fetch(`${base}/api/notes/photos/${cover.body.id}`);
+const coverBytes = new Uint8Array(await coverPhoto.arrayBuffer());
+results.push([
+	'GET /api/notes/photos/[photoId]',
+	{ status: coverPhoto.status, contentType: coverPhoto.headers.get('content-type'), bytes: coverBytes.length }
+]);
+must(
+	'GET /api/notes/photos/[photoId]',
+	{ status: coverPhoto.status, body: { contentType: coverPhoto.headers.get('content-type'), bytes: coverBytes.length } },
+	(r) => r.status === 200 && r.body.contentType === 'image/png' && r.body.bytes > 0,
+	'200 with the stored cover bytes'
+);
+await api('GET /api/notes/[id] cover', `/api/notes/${id}`);
+
+// Server-rendered public pages carry the published text as HTML.
+const homeHtml = await (await fetch(`${base}/`)).text();
+must('GET / SSR feed', { body: homeHtml }, (r) => r.body.includes('kayaking'), 'homepage HTML contains the published note');
+const noteHtml = await (await fetch(`${base}/notes/${id}`)).text();
+must('GET /notes/[id] SSR', { body: noteHtml }, (r) => r.body.includes('kayaking'), 'note HTML contains its content');
 
 await api('DELETE /api/notes/[id]/tags/[tag]', `/api/notes/${id}/tags/work`);
 await api('DELETE /api/notes/[id]/tags/[missing]', `/api/notes/${id}/tags/nosuch`);
@@ -754,6 +912,148 @@ must(
 		r.body.note.linkedNotes.some((l) => l.id === linkTargetId && l.kind === 'note' && l.label === 'Link target note about kayaking trips') &&
 		r.body.note.linkedNotes.some((l) => l.id === principleId && l.kind === 'principle' && l.label === 'Principle that must survive a restore'),
 	'the outgoing links with live labels and kinds'
+);
+
+const backlinks = await api('GET /api/principles/[id] backlinks', `/api/principles/${principleId}`);
+must(
+	'GET /api/principles/[id] backlinks',
+	backlinks,
+	(r) => r.status === 200 && r.body.principle?.id === principleId && r.body.mentionedIn?.some((n) => n.id === linkSourceId),
+	'200 with the principle plus the note that mentions it'
+);
+
+// --- Library ---------------------------------------------------------------
+// The API validates the zip magic and rejects a DRM marker, then stores the
+// bytes verbatim. The EPUB parse itself is browser-only (epub.js), so a
+// synthetic byte string is the honest smoke payload.
+const epubBytes = new Uint8Array([...Buffer.from('PK\x03\x04'), ...Buffer.from(' smoke library book bytes')]);
+const epubForm = new FormData();
+epubForm.append('file', new Blob([epubBytes], { type: 'application/epub+zip' }), 'smoke.epub');
+epubForm.append('title', 'Smoke Library Book');
+epubForm.append('author', 'A. Tester');
+const bookAdd = await api('POST /api/books', '/api/books', {
+	method: 'POST',
+	headers: { origin: base },
+	body: epubForm
+});
+must('POST /api/books', bookAdd, (r) => r.status === 201 && !!r.body.book, '201 with the stored book');
+const bookId = bookAdd.body.book.id;
+volatile.add(bookId);
+volatile.add(bookAdd.body.book.added_at);
+
+const drmForm = new FormData();
+drmForm.append(
+	'file',
+	new Blob([new Uint8Array([...Buffer.from('PK\x03\x04'), ...Buffer.from('encryption.xml')])], { type: 'application/epub+zip' }),
+	'drm.epub'
+);
+drmForm.append('title', 'DRM book');
+const drmAdd = await api('POST /api/books drm rejected', '/api/books', {
+	method: 'POST',
+	headers: { origin: base },
+	body: drmForm
+});
+must('POST /api/books drm rejected', drmAdd, (r) => r.status === 400, '400 for a DRM-protected EPUB');
+
+const booksList = await api('GET /api/books', '/api/books');
+must(
+	'GET /api/books',
+	booksList,
+	(r) =>
+		r.status === 200 &&
+		r.body.books?.some((b) => b.id === bookId && b.title === 'Smoke Library Book' && b.bytes === undefined),
+	'200 listing the book without its bytes'
+);
+
+const bookFile = await fetch(`${base}/api/books/${bookId}/file`);
+const bookFileBytes = new Uint8Array(await bookFile.arrayBuffer());
+results.push(['GET /api/books/[id]/file', { status: bookFile.status, bytes: bookFileBytes.length }]);
+must(
+	'GET /api/books/[id]/file',
+	{ status: bookFile.status, body: { bytes: bookFileBytes.length } },
+	(r) => r.status === 200 && r.body.bytes === epubBytes.length,
+	'200 with the exact stored bytes'
+);
+
+const bookPos = await api(
+	'PUT /api/books/[id]/position',
+	`/api/books/${bookId}/position`,
+	json({ cfi: 'epubcfi(/6/4[xhtml]!/4/2/1:8)', pct: 0.42, chapter: 'Chapter One' }, 'PUT')
+);
+must(
+	'PUT /api/books/[id]/position',
+	bookPos,
+	(r) => r.status === 200 && r.body.book?.lastPct === 0.42,
+	'200 with the saved position'
+);
+volatile.add(bookPos.body.book.lastReadAt);
+
+const bookNote = await api(
+	'POST /api/books/[id]/notes',
+	`/api/books/${bookId}/notes`,
+	json({ cfi: 'epubcfi(/6/4[xhtml]!/4/2/1:8,/4/2/1:24)', excerpt: 'a highlighted sentence', note: 'first note' })
+);
+must('POST /api/books/[id]/notes', bookNote, (r) => r.status === 201 && !!r.body.note, '201 with the note');
+const bookNoteId = bookNote.body.note.id;
+volatile.add(bookNoteId);
+volatile.add(bookNote.body.note.created_at);
+volatile.add(bookNote.body.note.updated_at);
+
+const noteEdit = await api(
+	'PATCH /api/books/[id]/notes/[noteId]',
+	`/api/books/${bookId}/notes/${bookNoteId}`,
+	json({ note: 'edited note' }, 'PATCH')
+);
+must(
+	'PATCH /api/books/[id]/notes/[noteId]',
+	noteEdit,
+	(r) => r.status === 200 && r.body.note?.note === 'edited note',
+	'200 with the edited note'
+);
+volatile.add(noteEdit.body.note.updated_at);
+
+const notesList = await api('GET /api/books/[id]/notes', `/api/books/${bookId}/notes`);
+must(
+	'GET /api/books/[id]/notes',
+	notesList,
+	(r) => r.status === 200 && r.body.notes?.length === 1 && r.body.notes[0].note === 'edited note' && r.body.total === 1,
+	'200 with the one edited note and its total'
+);
+
+// A second note lets the cursor page walk; limit=1 must hand back exactly
+// one row plus a nextCursor, then the tail.
+const bookNote2 = await api(
+	'POST /api/books/[id]/notes 2',
+	`/api/books/${bookId}/notes`,
+	json({ cfi: 'epubcfi(/6/6[xhtml2]!/4/2/1:8)', excerpt: 'second highlight', note: '' })
+);
+must('POST /api/books/[id]/notes 2', bookNote2, (r) => r.status === 201 && !!r.body.note, '201 with the second note');
+volatile.add(bookNote2.body.note.id);
+volatile.add(bookNote2.body.note.created_at);
+volatile.add(bookNote2.body.note.updated_at);
+
+const notesPage1 = await api('GET /api/books/[id]/notes page 1', `/api/books/${bookId}/notes?limit=1`);
+must(
+	'GET /api/books/[id]/notes page 1',
+	notesPage1,
+	(r) =>
+		r.status === 200 &&
+		r.body.notes?.length === 1 &&
+		r.body.hasMore === true &&
+		r.body.total === 2 &&
+		r.body.nextCursor !== null,
+	'200 with one note, hasMore and a cursor'
+);
+const notesCursor = notesPage1.body.nextCursor;
+const notesPage2 = await api(
+	'GET /api/books/[id]/notes page 2',
+	`/api/books/${bookId}/notes?limit=1&before=${notesCursor.created_at}&before_id=${encodeURIComponent(notesCursor.id)}`
+);
+must(
+	'GET /api/books/[id]/notes page 2',
+	notesPage2,
+	(r) => r.status === 200 && r.body.notes?.length === 1 && r.body.hasMore === false && r.body.notes[0].id !== notesPage1.body.notes[0].id,
+	'200 with the second page and nothing after it'
 );
 
 // --- Holdings ---------------------------------------------------------------
@@ -1332,6 +1632,13 @@ must(
 const badTicker = await api('POST /api/trading/tickers bad', '/api/trading/tickers', json({ ticker: 'NOPE' }));
 must('POST /api/trading/tickers bad', badTicker, (r) => r.status === 400, '400 for a non-B3 ticker');
 
+const badTradePrice = await api(
+	'POST /api/trading/orders bad price',
+	'/api/trading/orders',
+	json({ orgId: 'b3', ticker: 'PETR4', side: 'BUY', qty: 2, unitPrice: '44.0.1' })
+);
+must('POST /api/trading/orders bad price', badTradePrice, (r) => r.status === 400, '400 for a malformed price');
+
 const tradingOrgs = await api('GET /api/trading/orgs', '/api/trading/orgs');
 must(
 	'GET /api/trading/orgs',
@@ -1357,6 +1664,112 @@ const badOrg = await api(
 	json({ exemptLimit: 20000 }, 'PATCH')
 );
 must('PATCH /api/trading/orgs/ripio', badOrg, (r) => r.status === 400, '400 while the venue is disabled');
+
+const enableRipio = await api(
+	'PATCH /api/trading/orgs/ripio enable',
+	'/api/trading/orgs/ripio',
+	json({ enabled: true }, 'PATCH')
+);
+must(
+	'PATCH /api/trading/orgs/ripio enable',
+	enableRipio,
+	(r) => r.status === 200 && r.body.org?.enabled === true,
+	'200 with the venue enabled for preview'
+);
+
+// Ripio now trades like B3: one openable BUY, a position that waits for a
+// quote, and a clean delete before the venue goes back to disabled.
+const ripioBuy = await api(
+	'POST /api/trading/orders ripio',
+	'/api/trading/orders',
+	json({ orgId: 'ripio', ticker: 'BTC_USDC', side: 'BUY', qty: 0.01, unitPrice: 64000, date: Date.parse('2026-11-12T12:00:00') })
+);
+must('POST /api/trading/orders ripio', ripioBuy, (r) => r.status === 201 && r.body.order?.ticker === 'BTC_USDC', '201 with the ripio order');
+const ripioOrderId = ripioBuy.body.order.id;
+volatile.add(ripioOrderId);
+volatile.add(ripioBuy.body.order.created_at);
+
+const ripioSummary = await api('GET /api/trading/summary ripio', '/api/trading/summary?org=ripio');
+must(
+	'GET /api/trading/summary ripio',
+	ripioSummary,
+	(r) => {
+		const pos = r.body.summary?.positions ?? [];
+		return r.status === 200 && pos.length === 1 && pos[0].ticker === 'BTC_USDC' && pos[0].recommendation === 'waiting';
+	},
+	'the open ripio position waits for its quote'
+);
+for (const o of ripioSummary.body.summary?.orders ?? []) {
+	volatile.add(o.id);
+	volatile.add(o.created_at);
+}
+for (const d of ripioSummary.body.summary?.diary ?? []) {
+	volatile.add(d.id);
+	volatile.add(d.created_at);
+}
+
+const ripioOrderDel = await api('DELETE /api/trading/orders ripio', `/api/trading/orders/${ripioOrderId}`, { method: 'DELETE' });
+must('DELETE /api/trading/orders ripio', ripioOrderDel, (r) => r.status === 200, '200 deleting the latest ripio order');
+const ripioSummaryEmpty = await api('GET /api/trading/summary ripio empty', '/api/trading/summary?org=ripio');
+must(
+	'GET /api/trading/summary ripio empty',
+	ripioSummaryEmpty,
+	(r) => r.status === 200 && (r.body.summary?.positions?.length ?? 1) === 0,
+	'no open ripio positions after the delete'
+);
+
+const disableRipio = await api(
+	'PATCH /api/trading/orgs/ripio disable',
+	'/api/trading/orgs/ripio',
+	json({ enabled: false }, 'PATCH')
+);
+must(
+	'PATCH /api/trading/orgs/ripio disable',
+	disableRipio,
+	(r) => r.status === 200 && r.body.org?.enabled === false,
+	'200 with the venue disabled again'
+);
+volatile.add(enableRipio.body.org?.created_at);
+volatile.add(disableRipio.body.org?.created_at);
+
+// Live quote, offline-safe: the test child may block the network, so the
+// shape (price or typed error) is asserted live but the entry never
+// reaches the golden.
+const ripioQuote = await api('GET /api/quotes/ripio', '/api/quotes/ripio?pair=BTC_USDC');
+must(
+	'GET /api/quotes/ripio',
+	ripioQuote,
+	(r) =>
+		r.status === 200 &&
+		((typeof r.body.priceUsd === 'number' && r.body.priceUsd > 0) || typeof r.body.error === 'string'),
+	'200 with a BTC price or a typed error'
+);
+results.pop();
+
+const badRipioPair = await api('GET /api/quotes/ripio bad pair', '/api/quotes/ripio?pair=NOPE');
+must(
+	'GET /api/quotes/ripio bad pair',
+	badRipioPair,
+	(r) => r.status === 200 && r.body.error === 'bad pair',
+	'200 with a typed error, no network touched'
+);
+results.pop();
+
+// The Coinbase comparison source: serves the stored daily fx_rates BTC row
+// (refreshed by the holdings steps above), so this is the number the
+// holdings card prices BTC with. Live drift means the golden keeps the
+// shape only.
+const globalBtc = await api('GET /api/quotes/btc-global', '/api/quotes/btc-global');
+must(
+	'GET /api/quotes/btc-global',
+	globalBtc,
+	(r) =>
+		r.status === 200 &&
+		((typeof r.body.priceUsd === 'number' && r.body.priceUsd > 0 && typeof r.body.fetchedAt === 'number') ||
+			typeof r.body.error === 'string'),
+	'200 with a Coinbase BTC price or a typed error'
+);
+results.pop();
 
 const tradeBuy = await api(
 	'POST /api/trading/orders buy',
@@ -1411,8 +1824,10 @@ must(
 		r.status === 200 &&
 		r.body.summary?.positions?.length === 0 &&
 		Math.abs((r.body.summary?.orders?.find((o) => o.side === 'SELL')?.profit ?? 0) - 2.9489) < 1e-6 &&
-		r.body.summary?.months?.some((m) => m.month === '11/2026' && m.sales === 80 && m.exempt === true),
-	'the sale profits 2.9489 and November stays exempt'
+		r.body.summary?.months?.some(
+			(m) => m.month === '11/2026' && m.sales === 80 && Math.abs(m.fees - 0.0471) < 1e-9 && m.exempt === true
+		),
+	'the sale profits 2.9489, November pays 0.0471 in round-trip fees and stays exempt'
 );
 
 	const delSell = await api('DELETE /api/trading/orders/[id] latest', `/api/trading/orders/${tradeSell.body.order.id}`, {
@@ -1465,8 +1880,9 @@ must(
 		r.body.summary?.positions?.length === 1 &&
 		r.body.summary.positions[0].ticker === 'VALE3' &&
 		r.body.summary.positions[0].sameDay === true &&
-		r.body.summary.positions[0].recommendation === 'waiting',
-	'the same-day position waits, never sells'
+		r.body.summary.positions[0].recommendation === 'waiting' &&
+		Math.abs((r.body.summary.positions[0].targetPrice ?? 0) - 61.84) < 0.01,
+	'the same-day position waits, never sells, and prices the 3% goal'
 );
 
 const delToday = await api('DELETE /api/trading/orders/[id] same-day', `/api/trading/orders/${todayBuy.body.order.id}`, {
@@ -1482,13 +1898,28 @@ must(
 	'200 with the open-ticker strip'
 );
 
+const tradeHistoryEmpty = await api('GET /api/trading/quotes/history empty', '/api/trading/quotes/history?org=b3&ticker=VALE3');
+must(
+	'GET /api/trading/quotes/history empty',
+	tradeHistoryEmpty,
+	(r) => r.status === 200 && Array.isArray(r.body.points),
+	'200 with an array (no snapshots yet in the fixture)'
+);
+
 const quoteLog = await api('GET /api/quotes/log', '/api/quotes/log?limit=50');
 must(
 	'GET /api/quotes/log',
 	quoteLog,
-	(r) => r.status === 200 && Array.isArray(r.body.entries),
-	'200 with the quote fetch history'
+	(r) =>
+		r.status === 200 &&
+		Array.isArray(r.body.entries) &&
+		r.body.entries.some((e) => e.ticker === 'BTC_USDC' && e.source === 'ripio'),
+	'200 with the quote fetch history including the Ripio attempt'
 );
+for (const e of quoteLog.body.entries ?? []) {
+	volatile.add(e.fetched_at);
+	if (typeof e.price === 'number') volatile.add(e.price);
+}
 
 // --- Export / import round trip -------------------------------------------
 const exported = await fetch(`${base}/api/export`);
@@ -1531,6 +1962,7 @@ try {
 		shoppingExtras: count('shopping_extras'),
 		tradingOrgs: count('trading_orgs'),
 		tradingOrders: count('trading_orders'),
+		tradingQuoteHistory: count('trading_quote_history'),
 		b3Tickers: count('b3_tickers')
 	};
 	d.close();
@@ -1602,9 +2034,11 @@ must(
 		r.body.done?.shoppingExtras === 1 &&
 		r.body.done?.tradingOrgs === 2 &&
 		r.body.done?.tradingOrders === 2 &&
+		r.body.done?.tradingQuoteHistory === 0 &&
 		r.body.done?.b3Tickers >= 100 &&
 		r.body.done?.stocks === 2 &&
-		r.body.done?.stockGoal === 1,
+		r.body.done?.stockGoal === 1 &&
+		r.body.done?.books === 1,
 	'200 with a count for every restored section'
 );
 
@@ -1875,6 +2309,386 @@ must(
 		r.body.note.linkedNotes.some((l) => l.id === principleId && l.kind === 'principle'),
 	'the note and principle links resolve after restore'
 );
+
+const restoredBookFile = await fetch(`${base}/api/books/${bookId}/file`);
+const restoredBookBytes = new Uint8Array(await restoredBookFile.arrayBuffer());
+results.push(['GET /api/books/[id]/file after restore', { status: restoredBookFile.status, bytes: restoredBookBytes.length }]);
+must(
+	'GET /api/books/[id]/file after restore',
+	{ status: restoredBookFile.status, body: { bytes: restoredBookBytes.length } },
+	(r) => r.status === 200 && r.body.bytes === epubBytes.length,
+	'the EPUB bytes survive the export/import round trip unchanged'
+);
+const restoredBook = await api('GET /api/books/[id] after restore', `/api/books/${bookId}`);
+must(
+	'GET /api/books/[id] after restore',
+	restoredBook,
+	(r) => r.status === 200 && r.body.book?.lastPct === 0.42 && r.body.book?.lastChapter === 'Chapter One',
+	'the saved reading position survives the restore'
+);
+
+// Last: the global update runs against live markets after every fixture
+// assertion, so its real rates and snapshots never pollute the export.
+const marketRefresh = await api('POST /api/market/refresh', '/api/market/refresh', { method: 'POST' });
+must(
+	'POST /api/market/refresh',
+	marketRefresh,
+	(r) => r.status === 200 && r.body.summary !== null && Array.isArray(r.body.tickers) && Array.isArray(r.body.errors) && Array.isArray(r.body.quotes),
+	'200 with the holdings summary, refreshed tickers, per-ticker quote results and errors'
+);
+// Live rates drift between runs, so the golden keeps the shape only:
+// status, refreshed tickers and holding tickers. Quotes themselves are
+// covered structurally, never byte-compared.
+{
+	const entry = results.find(([n]) => n === 'POST /api/market/refresh');
+	if (entry) {
+		entry[1] = {
+			status: marketRefresh.status,
+			tickers: marketRefresh.body.tickers,
+			holdings: (marketRefresh.body.summary?.holdings ?? []).map((h) => h.ticker)
+		};
+	}
+}
+
+// --- Ripio API credentials -------------------------------------------------
+// The keys live in the journal but the endpoints only ever report status:
+// a token or secret must never make the round trip. Nothing here fetches a
+// quote, so the log recorded above stays exactly as the public path wrote it.
+const credSave = await api(
+	'PUT /api/config/credentials/ripio',
+	'/api/config/credentials/ripio',
+	json({ token: 'smoke-token-123', secret: 'smoke-secret-456' }, 'PUT')
+);
+must(
+	'PUT /api/config/credentials/ripio',
+	credSave,
+	(r) =>
+		r.status === 200 &&
+		r.body.configured === true &&
+		r.body.updatedAt > 0 &&
+		r.body.token === undefined &&
+		r.body.secret === undefined,
+	'200 configured status with no secret fields'
+);
+volatile.add(credSave.body.updatedAt);
+const credBad = await api('PUT /api/config/credentials/ripio bad', '/api/config/credentials/ripio', json({ token: 'only-token' }, 'PUT'));
+must('PUT /api/config/credentials/ripio bad', credBad, (r) => r.status === 400, '400 when either half is missing');
+const credRead = await api('GET /api/config/credentials/ripio', '/api/config/credentials/ripio');
+must(
+	'GET /api/config/credentials/ripio',
+	credRead,
+	(r) => r.status === 200 && r.body.configured === true && !('token' in r.body) && !('secret' in r.body),
+	'200 status only, never the stored values'
+);
+const credDel = await api('DELETE /api/config/credentials/ripio', '/api/config/credentials/ripio', { method: 'DELETE' });
+must('DELETE /api/config/credentials/ripio', credDel, (r) => r.status === 200 && r.body.configured === false, '200 not configured after delete');
+
+// --- Nostr -------------------------------------------------------------
+// The nsec never leaves the server. The embedded relay is the backup store:
+// the HTTP publish path signs and stores, a WebSocket REQ reads it back, and
+// a foreign author is refused.
+const nostrProfile = await api('GET /api/nostr/profile', '/api/nostr/profile');
+must(
+	'GET /api/nostr/profile',
+	nostrProfile,
+	(r) =>
+		r.status === 200 &&
+		r.body.configured === false &&
+		!('nsec' in r.body) &&
+		typeof r.body.relayUrl === 'string' &&
+		r.body.relayUrl.endsWith('/relay'),
+	'200 status only, no nsec, and a relay address'
+);
+const nostrPublishNoAccount = await api('POST /api/nostr/publish (no account)', '/api/nostr/publish', json({ content: 'hello' }));
+must('POST /api/nostr/publish (no account)', nostrPublishNoAccount, (r) => r.status === 400, '400 without a configured account');
+const nostrNoKey = await api('PUT /api/nostr/profile (no nsec)', '/api/nostr/profile', json({ name: 'Smoke' }, 'PUT'));
+must('PUT /api/nostr/profile (no nsec)', nostrNoKey, (r) => r.status === 400, '400 without an nsec');
+const nostrBadKey = await api('PUT /api/nostr/profile (bad nsec)', '/api/nostr/profile', json({ nsec: 'nsec1notakey' }, 'PUT'));
+must('PUT /api/nostr/profile (bad nsec)', nostrBadKey, (r) => r.status === 400, '400 for an invalid nsec');
+
+// NIP-11: what a client reads before adding the relay.
+const nip11Res = await fetch(`${base}/relay`, { headers: { accept: 'application/nostr+json' } });
+const nip11 = await nip11Res.json();
+must(
+	'GET /relay (NIP-11)',
+	{ status: nip11Res.status, body: nip11 },
+	(r) => r.status === 200 && Array.isArray(r.body.supported_nips) && r.body.supported_nips.includes(1),
+	'200 with a NIP-11 document'
+);
+results.push([
+	'GET /relay (NIP-11)',
+	{
+		status: nip11Res.status,
+		body: {
+			name: nip11.name,
+			supported_nips: nip11.supported_nips,
+			restricted_writes: nip11.limitation?.restricted_writes
+		}
+	}
+]);
+
+// A throwaway account: generated here, never written to a real relay.
+const ownerSecret = generateSecretKey();
+const ownerPubkey = getPublicKey(ownerSecret);
+const ownerNsec = nip19.nsecEncode(ownerSecret);
+const nostrAccount = await api('PUT /api/nostr/profile (owner)', '/api/nostr/profile', json({ nsec: ownerNsec }, 'PUT'));
+must(
+	'PUT /api/nostr/profile (owner)',
+	nostrAccount,
+	(r) => r.status === 200 && r.body.configured === true && r.body.npub.length > 0 && !('nsec' in r.body),
+	'200 with the derived npub and no nsec'
+);
+volatile.add(nostrAccount.body.npub);
+volatile.add(nostrAccount.body.updatedAt);
+volatile.add(nostrAccount.body.stats?.lastStoredAt);
+
+// Publish through the app: signs, stores, and sends to the account relays
+// (which the test points at this same relay).
+const publishRes = await fetch(`${base}/api/nostr/publish`, json({ content: 'smoke note from fermentario' }));
+const publishBody = await publishRes.json();
+must(
+	'POST /api/nostr/publish',
+	{ status: publishRes.status, body: publishBody },
+	(r) => r.status === 200 && typeof r.body.event?.id === 'string' && r.body.publishedTo.length >= 1,
+	'200 with a signed event and at least one relay'
+);
+volatile.add(publishBody.event.id);
+volatile.add(publishBody.event.created_at);
+volatile.add(publishBody.event.sig);
+volatile.add(publishBody.stats?.lastStoredAt);
+results.push([
+	'POST /api/nostr/publish',
+	{ status: publishRes.status, body: { signed: true, relayCount: publishBody.publishedTo.length, notes: publishBody.stats.notes } }
+]);
+
+// WebSocket client against the embedded relay.
+function openRelay() {
+	const socket = new WebSocket(`ws://127.0.0.1:${port}/relay`);
+	const inbox = [];
+	const used = new Set();
+	const waiters = new Set();
+	const flush = () => {
+		for (const waiter of [...waiters]) {
+			const index = inbox.findIndex((message, i) => !used.has(i) && waiter.predicate(message));
+			if (index < 0) continue;
+			used.add(index);
+			waiters.delete(waiter);
+			clearTimeout(waiter.timer);
+			waiter.resolve(inbox[index]);
+		}
+	};
+	socket.onmessage = (raw) => {
+		inbox.push(JSON.parse(String(raw.data)));
+		flush();
+	};
+	return {
+		ready: new Promise((resolve, reject) => {
+			socket.onopen = () => resolve();
+			socket.onerror = () => reject(new Error('relay refused the connection'));
+		}),
+		send: (message) => socket.send(JSON.stringify(message)),
+		take(predicate, ms = 8000) {
+			return new Promise((resolve, reject) => {
+				const waiter = {
+					predicate,
+					resolve,
+					timer: setTimeout(() => {
+						waiters.delete(waiter);
+						reject(new Error('relay did not answer in time'));
+					}, ms)
+				};
+				waiters.add(waiter);
+				flush();
+			});
+		},
+		close: () => {
+			try {
+				socket.close();
+			} catch {}
+		}
+	};
+}
+
+const relay = openRelay();
+await relay.ready;
+relay.send(['REQ', 'smoke-read', { kinds: [1], authors: [ownerPubkey], limit: 10 }]);
+const relayEvent = await relay.take((m) => m[0] === 'EVENT' && m[1] === 'smoke-read');
+await relay.take((m) => m[0] === 'EOSE' && m[1] === 'smoke-read');
+must(
+	'relay REQ returns the published note',
+	{ status: 200, body: relayEvent },
+	(r) => r.body[2]?.content === 'smoke note from fermentario' && r.body[2]?.pubkey === ownerPubkey,
+	'the published note for the owner pubkey'
+);
+results.push([
+	'relay REQ returns the published note',
+	{ status: 200, body: { content: relayEvent[2].content, authorMatches: relayEvent[2].pubkey === ownerPubkey } }
+]);
+
+// A different author cannot write: the relay is a backup of one account.
+const foreignSecret = generateSecretKey();
+const foreignEvent = finalizeEvent(
+	{ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [], content: 'not the owner' },
+	foreignSecret
+);
+relay.send(['EVENT', foreignEvent]);
+const rejected = await relay.take((m) => m[0] === 'OK' && m[1] === foreignEvent.id);
+must(
+	'relay rejects a foreign author',
+	{ status: 200, body: rejected },
+	(r) => r.body[2] === false && String(r.body[3]).startsWith('restricted'),
+	'OK false with a restricted reason'
+);
+results.push(['relay rejects a foreign author', { status: 200, body: { accepted: rejected[2], restricted: true } }]);
+
+// The owner writes over the socket, which is how Primal will publish here.
+const ownerEvent = finalizeEvent(
+	{ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [], content: 'smoke note over the relay socket' },
+	ownerSecret
+);
+relay.send(['EVENT', ownerEvent]);
+const accepted = await relay.take((m) => m[0] === 'OK' && m[1] === ownerEvent.id);
+must('relay accepts the owner', { status: 200, body: accepted }, (r) => r.body[2] === true, 'OK true for the owner');
+results.push(['relay accepts the owner', { status: 200, body: { accepted: accepted[2] } }]);
+relay.close();
+
+// The section's switch: the status pair, then a real stop and start. Stopping
+// must refuse the WebSocket handshake, not only flip a label; the NIP-11
+// document keeps answering either way.
+const relayStatus = await api('GET /api/nostr/relay', '/api/nostr/relay');
+must(
+	'GET /api/nostr/relay',
+	relayStatus,
+	(r) =>
+		r.status === 200 &&
+		r.body.running === true &&
+		typeof r.body.url === 'string' &&
+		r.body.url.endsWith('/relay'),
+	'200, running, and a relay address'
+);
+const relayStop = await api('POST /api/nostr/relay (stop)', '/api/nostr/relay', json({ running: false }));
+must('POST /api/nostr/relay (stop)', relayStop, (r) => r.status === 200 && r.body.running === false, '200 and running false');
+const stoppedRefused = await openRelay()
+	.ready.then(() => false)
+	.catch(() => true);
+must(
+	'relay refuses the handshake while stopped',
+	{ status: 0, body: { refused: stoppedRefused } },
+	() => stoppedRefused,
+	'a failed WebSocket handshake'
+);
+results.push(['relay refuses the handshake while stopped', { status: 0, body: { refused: true } }]);
+const nip11WhileStopped = await fetch(`${base}/relay`, { headers: { accept: 'application/nostr+json' } });
+must(
+	'GET /relay while stopped',
+	{ status: nip11WhileStopped.status, body: {} },
+	(r) => r.status === 200,
+	'200 with the NIP-11 document'
+);
+results.push(['GET /relay while stopped', { status: nip11WhileStopped.status, body: {} }]);
+const relayStart = await api('POST /api/nostr/relay (start)', '/api/nostr/relay', json({ running: true }));
+must('POST /api/nostr/relay (start)', relayStart, (r) => r.status === 200 && r.body.running === true, '200 and running true');
+const relayAgain = openRelay();
+const relayListening = await relayAgain.ready.then(() => true).catch(() => false);
+relayAgain.close();
+must(
+	'relay accepts the handshake after start',
+	{ status: 200, body: { listening: relayListening } },
+	(r) => r.body.listening === true,
+	'a WebSocket connection'
+);
+results.push(['relay accepts the handshake after start', { status: 200, body: { listening: true } }]);
+
+// The backup loop pages backwards with `until`. These two calls prove the
+// contract the section drives: a whole batch, then an older cursor. The relay
+// is also the source here, so both events are already stored: imported is 0.
+const syncNewest = await fetch(`${base}/api/nostr/sync`, json({}));
+const syncNewestBody = await syncNewest.json();
+must(
+	'POST /api/nostr/sync',
+	{ status: syncNewest.status, body: syncNewestBody },
+	(r) =>
+		r.status === 200 &&
+		r.body.fetched === 2 &&
+		r.body.imported === 0 &&
+		r.body.hasMore === false &&
+		typeof r.body.nextCursor === 'number' &&
+		r.body.stats.total === 2 &&
+		r.body.lastSyncAt > 0,
+	'200 with the batch, no re-import, and a last sync time'
+);
+results.push([
+	'POST /api/nostr/sync',
+	{
+		status: syncNewest.status,
+		body: {
+			fetched: syncNewestBody.fetched,
+			imported: syncNewestBody.imported,
+			hasMore: syncNewestBody.hasMore,
+			statsTotal: syncNewestBody.stats.total,
+			lastSyncAtRecorded: true
+		}
+	}
+]);
+const syncOlder = await fetch(`${base}/api/nostr/sync`, json({ until: 1 }));
+const syncOlderBody = await syncOlder.json();
+must(
+	'POST /api/nostr/sync (before the first note)',
+	{ status: syncOlder.status, body: syncOlderBody },
+	(r) => r.status === 200 && r.body.fetched === 0 && r.body.imported === 0 && r.body.hasMore === false,
+	'200 with no events older than the first note'
+);
+results.push([
+	'POST /api/nostr/sync (before the first note)',
+	{ status: syncOlder.status, body: { fetched: syncOlderBody.fetched, imported: syncOlderBody.imported, hasMore: syncOlderBody.hasMore } }
+]);
+const profileAfterSync = await fetch(`${base}/api/nostr/profile`);
+const profileAfterSyncBody = await profileAfterSync.json();
+must(
+	'GET /api/nostr/profile (after sync)',
+	{ status: profileAfterSync.status, body: profileAfterSyncBody },
+	(r) => r.status === 200 && r.body.lastSyncAt > 0,
+	'200 with the last sync time the card shows'
+);
+results.push([
+	'GET /api/nostr/profile (after sync)',
+	{ status: profileAfterSync.status, body: { lastSyncAtSet: profileAfterSyncBody.lastSyncAt > 0 } }
+]);
+
+// The stored events feed the section without paging.
+const nostrEventsRes = await fetch(`${base}/api/nostr/events?limit=5`);
+const nostrEvents = await nostrEventsRes.json();
+must(
+	'GET /api/nostr/events?limit=5',
+	{ status: nostrEventsRes.status, body: nostrEvents },
+	(r) => r.status === 200 && r.body.events.length === 2 && r.body.events.every((e) => e.pubkey === ownerPubkey),
+	'200 with the two backed-up events'
+);
+results.push([
+	'GET /api/nostr/events?limit=5',
+	{ status: nostrEventsRes.status, body: { count: nostrEvents.events.length, allOwner: true } }
+]);
+
+// The heatmap keeps its two series.
+const nostrHeatRes = await fetch(`${base}/api/nostr/heatmap`);
+const nostrHeat = await nostrHeatRes.json();
+must(
+	'GET /api/nostr/heatmap',
+	{ status: nostrHeatRes.status, body: nostrHeat },
+	(r) => r.status === 200 && Array.isArray(r.body.published) && Array.isArray(r.body.replies),
+	'200 with published and replies arrays'
+);
+results.push([
+	'GET /api/nostr/heatmap',
+	{
+		status: nostrHeatRes.status,
+		body: {
+			publishedIsArray: Array.isArray(nostrHeat.published),
+			repliesIsArray: Array.isArray(nostrHeat.replies),
+			publishedTotal: nostrHeat.published.reduce((sum, day) => sum + day.count, 0)
+		}
+	}
+]);
 
 stop();
 

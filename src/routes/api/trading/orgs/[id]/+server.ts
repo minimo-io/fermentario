@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
 import { updateTradingOrg } from '$lib/server/db';
 
-/** Edit one venue's cost rules. Disabled venues stay untouched until Ripio
- *  (or the next org) ships with real rules. */
+/** Edit one venue's cost rules, or flip its enabled flag so a venue can
+ *  be previewed and switched off again without a migration. */
 export async function PATCH({ params, request }) {
 	let body: unknown;
 	try {
@@ -15,11 +15,12 @@ export async function PATCH({ params, request }) {
 		feeRate: row?.feeRate,
 		irrfRate: row?.irrfRate,
 		fixedFee: row?.fixedFee,
-		exemptLimit: row?.exemptLimit
+		exemptLimit: row?.exemptLimit,
+		enabled: row?.enabled
 	});
 	if (!saved) {
 		return json(
-			{ error: 'unknown or disabled organization, or a rate is invalid (rates 0–0.1, amounts >= 0)' },
+			{ error: 'unknown organization, or a rate is invalid (rates 0–0.1, amounts >= 0, enabled true/false)' },
 			{ status: 400 }
 		);
 	}

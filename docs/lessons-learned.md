@@ -2323,10 +2323,580 @@
   status must not sit below a long order list.
 
 ## Session: Position age
-- Diary lines show both the exact date and the relative age (`bought 3 days
-  ago`, `sold 2 hours ago`); the verb follows the side, never the position.
-  Position cards show `open X ago` from the earliest open buy (`since`,
-  already tracked for the day-trade rule). `timeAgo` lives in `src/lib/age.ts`
-  with en/es/pt, one minute as the floor, future clamped to `just now`.
+- Diary lines show the exact date plus a bare duration (`12 Nov · 7 days`)
+  with no verb; position cards show the localized open age (`aberta há 3
+  dias`). Never wrap a localized duration in a hardcoded English verb —
+  `bought hace 7 h` is how that bug reads. `shortDuration` (bare) and
+  `openAge` (fully phrased per language) live in `src/lib/age.ts`.
 - `lang` prop values are `$derived`, never plain consts: svelte-check warns
   `state_referenced_locally` otherwise, and the gates allow zero warnings.
+
+## Session: Unified number parsing
+- `type="number"` improves the keyboard and blocks letters, but it does not
+  unify comma vs dot: a pt-BR comma key lands differently per browser locale.
+  Keep number inputs (spinners hidden in `app.css`) AND funnel every money
+  or quantity field through `parseDecimal` in `src/lib/numbers.ts`: digits
+  with at most one comma or dot, nothing else. Thousands, mixed marks and
+  blanks inside are NaN and hit the form error, never a guessed value.
+- Blind_attr replaces across modals double `type` where a field already had
+  `type="number"` with step/min on nearby lines. Check the diff per file;
+  `svelte-check` flags the duplicate, and cascading "no default export"
+  errors clear once the markup parses.
+- The smoke script shares one scope: a new `const badPrice` collides with
+  the existing stock one. Name new bindings distinctly (`badTradePrice`).
+- Chained `test:web:update && pnpm test` flakes: the smoke server port is
+  still releasing when the second run starts. Space the gates out.
+
+## Session: Shared position card and net estimates
+- One shared open-position card (`TradingPositionCard`): the home strip uses
+  it compact, the panel uses it in a 1→2→3 grid with age, quote source and
+  the target row. Never maintain two position markups again.
+- One shared net estimator (`positionPotential`): both panel and strip
+  compare `(sellNet − cost) / cost` against the target, where the sale
+  repays fees, dedo-duro and the fixed fee from the current venue rules.
+  Two call sites with the same formula will drift; one helper cannot.
+
+## Session: Position detail modal
+- Tapping a position card opens one shared `TradingPositionModal`: free
+  TradingView `widgetembed` iframe (`BVMF:TICKER`, daily, theme follows the
+  app), average buy, market price with fetch time, current total, goal price
+  with its distance from the market. Strip modal keeps an `Open in Trading`
+  button; the panel modal does not need one.
+- New server fields (`targetPrice`, `quoteAt`) need no migration — positions
+  derive. The smoke same-day case asserts the goal price formula directly
+  (1 × 60 @ 3% → R$ 61.84), since quotes stay null without a refresh.
+
+## Session: Card dedup and chart prefix
+- When a shared card grows mode-specific lines, keep one line per fact:
+  compact shows `avg` then `goal + trend`, detail shows `avg · cost`,
+  age, quote and target rows. Two paragraphs rendering the same value is a
+  truncation bug waiting for a narrow card.
+- TradingView resolves B3 tickers as `BMFBOVESPA:TICKER` in embeds (the
+  canonical symbol page 200s there and 404s under `BVMF`). Verify the
+  prefix with the symbol-search API before assuming the Google Finance
+  naming carries over.
+
+## Session: Net totals and monthly fees
+- Card and modal totals are net realizable value (`saleNet`: quote value
+  minus sell fee, dedo-duro and fixed fee), shared with `positionPotential`
+  so the pill and the number agree. Gross value no longer appears in Trading.
+- The monthly panel counts buy fees too (`fees` = buys + sells per month),
+  but the exemption ceiling still sees sales only. Zero-sale months render
+  "No sales yet — buys don't count toward the ceiling" instead of zeros.
+- The goal price needed no change: it already solved the sale net of both
+  fees (buy fee inside cost, sell fee plus dedo-duro on the sale). Prove
+  "already correct" claims with the user's own numbers before touching code.
+
+## Session: Diary table and card lines
+- The diary is a table with one column per levy (B3 fee always, dedo-duro
+  sales only with `—` on buys). Wide tables get `overflow-x-auto` plus a
+  `min-width`, never squeezed columns.
+- A 160px card fits ~22 chars per small line: one fact per line (`avg`,
+  then `goal + trend`, then the `Δ to goal` gap). Two facts sharing a line
+  truncate, and two lines sharing a fact read as a bug.
+
+## Session: Market card and live-number smoke
+- One collapsible Market card holds the holdings rail, the trading rail
+  and a single Update + Logs line. Inside it both rails run `bare` (no
+  headers of their own); `POST /api/market/refresh` refreshes everything
+  in one call and never fails the UI, returning cached data with errors.
+- Smoke must never byte-compare live market numbers: FX rates drift
+  between two consecutive runs. Record a shape-only projection (status,
+  tickers, holding tickers) for refresh endpoints. Also keep forced
+  network refreshes after the export block, or real rates and snapshots
+  pollute the fixture the restore assertions read.
+- The `Δ to goal` line follows the market, not the average: red while the
+  quote sits below the goal, green once it reaches it.
+
+## Session: Shared collapse, grouped log, quiet update
+- The `Δ to goal` line renders in both card modes from hoisted `$derived`
+  values; a fact that lives in one `{#if}` branch is invisible everywhere
+  else, same component or not.
+- One `CollapsibleSection` owns the toggle pattern (chevron, slide over
+  `motionMs(180)`, storage memory). Copy-pasted headers drift; a single
+  component cannot.
+- The quote log groups by local day (`Today`, `Yesterday`, then dates) as
+  pure presentation over `fetched_at` order; the endpoint is untouched.
+- The global Update runs a plain fetch, never `loading.track`: the button
+  spinner (`marketRefreshing`) is the only feedback, and double-taps stay
+  blocked while it flies.
+
+## Session: Single holding dialog
+- One `HoldingDialog` with Trade and Config tabs replaces the separate
+  buy/sell and add/edit modals. Card tap opens Config, card + opens Trade,
+  add opens Config alone. The carousel holds one dialog state instead of
+  a modal plus an acting holding.
+- When merging two modals, rename colliding state up front (`saving` and
+  `error` existed in both) and keep one fullscreen/Escape controller, or
+  the tabs fight over the overlay.
+
+## Session: Unknown vs flat vs stale
+- Unknown (`—`, no percent), flat (`0.0%`) and stale (`· stale` with the
+  quote date in the tooltip) are three different facts and render
+  differently. A user who updated yesterday but sees a flat card first
+  suspects the baseline; the stale tag answers before they ask.
+- Rule of thumb: never reuse the "no data" face for a real zero — check
+  the live rows first, then decide whether the display or the data is wrong.
+
+## Session: Grid overflow on mobile
+- Grid items default to `min-width: auto`, so one wide card widens its
+  column past the viewport — and it only shows once the data loads, which
+  is why the page was fine until positions appeared. `min-w-0` on every
+  grid `li` plus `overflow-x-clip` on the tab root ends it structurally;
+  the intentionally wide diary table keeps its own scroller.
+
+## Session: Page-level overflow guard
+- When a scrolled-wider-than-viewport report survives a contained fix, the
+  overflow source sits outside the contained subtree — contain one level
+  up (here, the page content wrapper) instead of chasing children.
+- `truncate` on a flex item also needs `min-w-0`; the class alone only
+  works on block children.
+
+## Session: Clip vs hidden, sync init
+- `overflow-x: clip` is a no-op on older engines with zero console noise —
+  the fix looks shipped while the browser ignores it. Prefer `hidden` for
+  guards unless `clip`'s exact semantics are needed.
+- Read remembered UI state synchronously at init (guarded try/catch for
+  SSR), never correct it in `$effect`: any parent toggle that remounts the
+  section replays an open-then-shut flash otherwise.
+
+## Session: Auditable refresh
+- A refresh that cannot fail visibly will fail silently: `refreshTradingQuotes`
+  now returns per-ticker `{ok, source, price, error}` and the market result
+  carries them, so Update names the ticker that did not move instead of
+  reporting success with an empty error list.
+- Live check beats theory: the user's "PETR4 never updates" reproduced as a
+  fetch-failure window, and the same endpoint now answers
+  `PETR4 ok via google @ 44.88` on demand.
+
+## Session: Modal inside a clickable card
+- A modal rendered inside a clickable card must swallow its own events:
+  `stopPropagation` on the overlay click/keydown and on every close
+  button. Otherwise closing the modal bubbles to the card beneath and
+  opens whatever the card opens — the close-then-reopen flicker.
+- Opening worked because that button stopped propagation; closing took
+  the same path without it. Audit both directions whenever a dialog
+  nests inside a tap target.
+
+## Session: Ripio quote plumbing
+- Ripio's public `GET /trade/public/tickers/BTC_USDC` needs no key and
+  answers with last/bid/ask plus 24h stats; in Brazil BTC trades against
+  USDC, not BRL, so the venue price is shown as USD. The BTC_BRL pair
+  exists but returns an empty book — ignore it.
+- Throttle-tolerant by construction: 60s cache, stale served on 429 or
+  timeout, typed error only on a cold miss. Never let a quote source fail
+  a batch: holdings (Coinbase) and Ripio log and refresh independently.
+- Smoke tests that write to shared tables must mask what they add:
+  `volatile.add` the log timestamps and live prices, or the golden drifts
+  every run. Live-shape assertions stay (price-or-error), recorded values
+  do not. A venue flag is runtime data, not schema: enabling/disabling
+  goes through PATCH, and smoke leaves the fixture as it found it.
+
+## Session: Linkify without a test runner
+- Bare URLs become real links in a new dependency-free `$lib/linkify-url.ts`,
+  wired into both note pipelines after markdown and before `[[id]]` pills.
+  Tag-aware splitting protects injected markup; `"` never matches, so
+  attributes cannot break out; display text wraps via `break-all`.
+- With no unit-test runner in the repo, the proof is a throwaway Node
+  script running the real module under `--experimental-strip-types`
+  (13 cases: trailing punctuation, balanced parens, no double-linking,
+  script-inert). Keep the module import-free so that stays possible.
+- `CollapsibleSection` takes an optional icon snippet; Featured passes a
+  gold star matching the note cards.
+
+## Session: Routes per section
+- Each section is a route under `(app)` now; `/` redirects to `/notes`.
+  The old `+page.svelte` became the `(app)/+layout.svelte` shell almost
+  verbatim — state and handlers moved, view branches became `{@render children()}`.
+- Tab components (Todo, Principles, Stocks, Businesses) needed zero logic
+  changes; only routing-adjacent code died: `fermentario.view`,
+  `fermentario.todoView`, `fermentario.business`, `?from=` links.
+- New routes render on the server on first hit: any `navigator` /
+  `matchMedia` at component init 500s the page (old code never hit this
+  because tabs only mounted client-side). Guard browser globals at init.
+- Smoke probes the new paths plus the root 307; the golden regrows once.
+
+## Session: Routes instead of view state
+- Mounting a route per section deleted an entire class of bugs: no `view`
+  state, no sessionStorage restore, no `?from=` return links, no stacked
+  modals surviving navigation. The old +page became the (app) layout
+  almost verbatim; only navigation and the view switch changed.
+- New routes that touch `window`/`navigator`/`matchMedia` at component init
+  500 on first SSR hit (TodoTab, StocksTab, PrinciplesTab all had the same
+  shortcut snippet). Guard browser globals at init; the diagnostics page
+  rule already said this.
+- Unknown org slugs render an explicit unknown-venue view with a way back
+  instead of a dead panel or a wrong org's data. Route params are user
+  input; the component must handle the miss.
+
+## Session: Private /admin move plus public homepage
+- Moving the `(app)` group to a real `/admin` prefix is a file move plus a
+  link sweep: the layout parses segment 2 when segment 1 is `admin`, every
+  `goto`/`href` gains the prefix, and old section URLs become one-line 307
+  stubs. `note-links.ts` and `search.ts` were the hidden links: timeline
+  hours and the search palette bypass the layout.
+- One shared note type lies: journal `Note` requires `featured`/`video` while
+  UI `types.ts Note` keeps them optional. A new flag (`published`) must land
+  in both, plus `NoteRow`, `rowToNote`, restore columns with a fallback, and
+  the PATCH fast path — otherwise the golden shows the field missing in one
+  surface only.
+- Smoke node ids shift when a route is added (`admin/+page.ts` moved `/`
+  from `[0,2]` to `[0,3]`). The `GET /` raw-body check flags it; regrow the
+  golden and confirm the diff is only the id shift.
+- `CommentItem` action handlers became optional so the public note page can
+  reuse the component read-only without dead buttons.
+
+## Session: Server-rendered public pages plus note covers
+- Public pages must SSR for crawlers: the homepage fetched `/api/public/notes`
+  in `onMount`, so bots saw a loading shell. A `+page.server.ts` using
+  `listNotesPage` directly ships HTML; client fetch stays only for Load more.
+  Same for the note detail (universal `fetch` loader replaced by a server
+  loader with the published check). The smoke `hasNoteText` flag on
+  `page:/notes/[id]` now proves body content in HTML.
+- Random test ports leak into absolute URLs (canonical, `og:url`, embedded
+  server data) and break the golden on every run. Mask `base` to `<base>` in
+  the smoke `mask()` next to the existing workdir masking; two consecutive
+  runs on different ports prove it.
+- Note covers mirror the stock photo system: one row per note in
+  `note_photos` (unique index, replace on upload), same
+  `decodePhotoUrl`/`fileToPhotoUrl` helpers, immutable byte serving by photo
+  id. Both edit surfaces (timeline dialog, admin detail form) share the
+  `undefined`-keeps / data-URL-replaces / `null`-removes convention.
+
+## Session: Principle backlinks
+- The reverse of `[[id]]` links needed no new table: a `LIKE '%[[id]]%'`
+  pre-filter on note content plus the exact `noteLinkIds` re-check stays
+  correct (uuids carry no LIKE wildcards) and scales from content size, not
+  link count.
+- Adding `GET /api/principles/[id]` exposed that no `getPrinciple` existed;
+  the single-principle endpoint now guards 404 before returning `mentionedIn`,
+  so the route never answers 200 with empty backlinks for an unknown id.
+
+## Session: Public config base
+- Public visitor settings need a separate DB namespace from private admin
+  preferences. `public_config` holds only values safe to serve anonymously,
+  while browser localStorage remains the admin/theme local cache.
+- A config sanitizer used by both reads and writes must respect column-name
+  boundaries. Mapping `site_title`, `notes_enabled`, and
+  `show_cover_images` to camel-case before `sanitizePublicConfig` caught a
+  bug where same-named `description` saved correctly while other fields
+  silently fell back to defaults.
+
+## Session: Fold reload cap, sound toasts, Market action line
+- A persisted fold is not just a flag: WebKit renders `line-clamp` alone
+  half-contracted, so every code path that recreates the folded state
+  (manual fold via `finishFold`, reload via the measure pass) must leave the
+  same one-line `max-height` cap + `overflow-hidden` on the wrapper. The
+  reload path was missed for months because Chromium emulators clamp
+  correctly; test WebKit behaviour in a real WebKit engine.
+- Toast sounds belong to the global `Toasts` mount (`showToast(text, tone,
+  sound)`), never to callers. WebAudio needs a user gesture before it can
+  play: unlock the `AudioContext` on the first `pointerdown`/`keydown`, and
+  check `state === 'running'` before scheduling, so pre-gesture alerts still
+  show the toast and simply stay quiet.
+- Value-crossing notifications must be edge-triggered with persisted keys
+  (`ferm:trading-goal-alerts`): a polling surface re-reports the same hit
+  every minute otherwise. Forget the key when the value drops below or the
+  entity disappears, so the next crossing rings again.
+- `CollapsibleSection` gained `actionsOnExpandOnly` — group-header actions
+  that only make sense for visible content hide with the collapsed body.
+  The `actions` slot stayed unused elsewhere, so the default keeps every
+  other section identical.
+
+## Session: Library EPUB reader + live-journal corruption incident
+- NEVER run the `sqlite3` CLI against a journal file while the app holds it
+  open in WAL mode. The CLI's close-checkpoint deleted the WAL index under
+  the running server; every page read after that returned `disk I/O error`
+  and the app wrote two 0-byte pre-migration backups. Recovery: the main db
+  file was intact (verify with `integrity_check` on a COPY, never on the
+  live file), the stale process was killed, and a fresh `initialize()`
+  opened cleanly and ran the real backup + migration. The safeguard held:
+  migrations abort when the backup fails, so no schema change was applied
+  over a dying handle.
+- `journal-store.initialize()` caches `initError` for the whole process:
+  the "Try again" button on the journal-error page cannot recover from a
+  connection-state failure because every retry re-throws the stored error
+  without touching the file. A real fix (retry via `resetJournalStore()`)
+  is still open.
+- epub.js measures its container at mount: a `height: 100%` chain under an
+  ancestor with only `min-h-dvh` resolves to 0 and renders a blank page.
+  The reader root must be `h-dvh` (definite) all the way to the mount div.
+- The reader route must opt out of the admin shell (Market card, section
+  bar, composer): children of `/admin/*` all inherit `admin/+layout.svelte`
+  unless the layout branches. `bareReader` (pathname starts with
+  `/admin/book/`) renders the page with no shell chrome.
+- Multipart smoke POSTs (`FormData` upload of the EPUB) need the
+  `origin: base` header like every other non-JSON POST, or the SvelteKit
+  CSRF check 403s before the route runs.
+- `pnpm add epubjs` ships its own types, but the npm package re-exports
+  them only as `import('epubjs').Book` etc. for named classes; the default
+  export's instance types are easier handled as `any` behind the component
+  boundary than fought.
+- The `GET / homepage` golden stores raw SSR HTML, so Vite's 8-char asset
+  hashes and the SvelteKit nonce changed it on EVERY rebuild — a gate that
+  cries wolf. `mask()` now replaces `.<hash>.js|css` with `.<hashed>` and
+  `__sveltekit_*` with `__sveltekit_<nonce>`; one rebuild later, the
+  comparison proved the run is stable.
+- epub.js `determineType()` keys on the URL EXTENSION: `/api/books/id/file`
+  (no `.epub`) opened as a DIRECTORY — it fetched `META-INF/container.xml`,
+  the router 404'd, and `display()` hung forever: black screen, no error.
+  Binary sources must be fetched to an ArrayBuffer and passed to `ePub()`.
+  A silent-hanging third party should always be wrapped in a visible
+  loading state and an explicit failure surface.
+
+## Session: Reader controls toggle + paged notes drawer
+- epub.js `Annotations.highlight(cfi, data, cb, className, styles)` styles
+  the mark through the SVG pane: only SVG attributes (fill, fill-opacity)
+  apply; CSS properties pass through silently and the mark keeps the engine
+  default. Read the installed source, not the docs, for third-party shape.
+- Selection text is not guaranteed in `contents.window` on iOS: read the
+  window selection first, then fall back to
+  `rendition.getRange(cfiRange).toString()`; only dismiss the toolbar when
+  BOTH come back empty (epub.js debounces `selectionchange`, so a clearing
+  emission arrives right after the real one).
+- Tap-to-toggle over a third-party iframe needs four guards working
+  together: touch duration (<400 ms) and moved distance (<12 px), the
+  synthetic click that follows touchend (timestamp suppress), taps landing
+  on interactive targets (`closest('a, button, [ref]')`), and open overlays
+  (their tap closes the overlay instead).
+- A drawer list scrolls in its OWN box: an IntersectionObserver with the
+  default viewport root never fires for content clipped by that box. Pass
+  `root: scrollContainer`. (Repo rule again: copy the existing
+  TradeHistory sentinel, do not invent a second loader.)
+- Client-side re-sort of a paged list (notes by CFI) is a hidden bug: it
+  only sorts the loaded page and contradicts the cursor order. Paged lists
+  keep strict server order.
+- WebKit (iOS Safari) does not fire `selectionchange` in iframe documents,
+  so epub.js's `selected` event — and every highlight flow built on it —
+  is dead there, while Blink works: the symptom is the native Copy bubble
+  and nothing else. Fix by reading the iframe selection on the forwarded
+  `touchend`/`mouseup` and building the range with the library's own
+  `new EpubCFI(range, contents.cfiBase)`; dedupe with the native event by
+  CFI, and schedule the capture before any tap/duration guard (the
+  selecting gesture is precisely the one that fails those guards).
+- Silent guards are debug-hostile: `if (!ctor) return` in the selection
+  capture made a possible import-interop failure indistinguishable from
+  "user selected nothing". Guard, then TELL (toast) when the precondition
+  breaks during a real gesture.
+- CJS interop with epub.js: prefer `rendition.epubcfi.constructor` over the
+  dynamic-import named export for the EpubCFI class — the instance always
+  exists inside the engine, no bundler detection involved.
+- iPhone Safari (WebKit) never shipped element requestFullscreen: any
+  "fullscreen" UI must have an honest fallback (hide chrome + Add to Home
+  Screen hint), not a dead button.
+- `rendition.getContents()` is an ARRAY of view Contents, not one Contents.
+  Passed to a reader expecting `{ window }`, every property was undefined
+  and the selection poll did nothing — silently, again. This is what three
+  "fixed" rounds in a row actually shared.
+- Stop asserting behavior from source-reading alone: the reader now has a
+  real-WebKit end-to-end script (`scripts/reader-webkit-check.mjs`) that
+  runs the actual engine iPhone uses. It proved the capture chain end to
+  end (toolbar → CFI save → SVG mark → no ghost) and it would have caught
+  the array bug on the first minute.
+- Sandboxed content iframes isolate EVENT REALMS for script-generated
+  dispatches: `document.dispatchEvent` from a CDP/evaluate context does
+  not reach listeners added in the parent realm — but TRUSTED input
+  (real mouse/touch hit-testing) does, and so do listeners the parent
+  registers directly on the frame document. Never "prove" a broken event
+  chain with synthetic in-frame dispatch; use trusted input (Playwright
+  `page.mouse`) or the real device.
+- A capability the platform does not have must hide the CONTROL, not
+  explain the gap: the fullscreen button "worked" by toasting how to add
+  the app to the Home Screen — on a phone, that is a dead button with a
+  tutorial attached. Feature-detect the exact API surface
+  (`Element.prototype.requestFullscreen` etc.) and render the button only
+  when the gesture will truly do something.
+- Floating controls over an always-white surface (the book paper) need
+  light-surface contrast in BOTH app themes: the dark-mode variant of the
+  restore-eye pill (dark glass, faint icon) was invisible over the white
+  page. Match the pill to the surface it floats on, not to the app theme.
+- marks-pane binds its click proxy to the iframe's contentDocument AT PANE
+  CREATION; srcdoc documents get replaced, and then mark taps die silently.
+  Never rely on that proxy alone for mark interaction: hit-test the
+  annotation rects from the live gesture (parent coords) as fallback. The
+  pane SVG is pointer-events:none, so harness taps must dispatch on the
+  mark element itself.
+
+## Session: Ripio credentials + signed market quotes
+- Ripio Trade signs private GETs as `base64(HMAC-SHA256(secret, Timestamp +
+  "GET" + Path))` with an EMPTY payload and the path WITHOUT query, sent as
+  `authorization/timestamp/signature` headers; the public tickers are
+  documented to lag up to 30 s, so the signed `/trade/ticker/{pair}` is the
+  real-time source. Verified against apidocs.ripio.com, not guessed.
+- Secrets live in the journal DB (backups are the restore point), but the
+  API surface must never echo them: PUT/GET/DELETE report only
+  `{configured, updatedAt}`. Smoke asserts the absence of `token`/`secret`
+  keys in every response — the leak test is part of the gate.
+- HMAC without a Node-only dependency: WebCrypto (`crypto.subtle`) + `btoa`
+  run identically in Node 22 and any WebView, keeping journal.ts engine-
+  neutral like the rest of the data layer.
+
+## Session: Copyable fold bodies + loud Ripio panel
+- A whole-text `<button>` for folding steals drag-selection: on desktop the
+  tap-to-fold gesture fights copy-select and on WebKit the button's layout
+  height also ignored `line-clamp` before. The fold control must be its own
+  small button (chevron) beside selectable text, never over it.
+- Fixed-height modal bodies measured only on tab change clip late content:
+  async status chips and result lines inside Settings tabs rendered
+  invisibly below the old height (the Ripio "Test quote does nothing" bug).
+  A ResizeObserver on the measured element keeps the animated height honest
+  for content that arrives after mount.
+- Ripio auth rejections must be visible: the signed ticker 401/403 now
+  answers with `authError: true` beside the public fallback price, and the
+  panel states it in amber instead of showing nothing.
+
+## Session: Ripio vs global BTC comparison cards
+- A read-only comparison card must reuse the canonical stored price (the
+  fx_rates Coinbase BTC row refreshRates already maintains), never a second
+  ad-hoc fetch: two numbers that can drift would make the comparison lie.
+  Serving from fx_rates also makes the card free — no extra network.
+- Any new function that touches shared log tables must be checked against
+  the golden immediately: getGlobalBtcQuote logging its own Coinbase fetch
+  duplicated the BTC/coinbase quote-log entry and broke the smoke's Logs
+  contract on the first run. Reads that only refresh a comparison should
+  not write the fetch log at all.
+
+## Session: Ripio full trading + side-aware spread
+- Bulk find/replace poisoned its own anchor: swapping every 'BRL' to a new
+  `cur` constant also rewrote the constant's initializer to `… : cur` —
+  a self-referential $derived. Replace the definition FIRST, or exclude it.
+- Ripio's PUBLIC ticker answers with bid/ask too (the docs only advertise
+  them on the signed Market schema): the side-aware spread works with or
+  without an API key. Feature the data the response actually carries.
+- authError on the live card caught a real key problem while testing — the
+  user's stored Ripio key gets 401/403. Loud surfaces are diagnostics.
+
+## Session: Nostr section (publish + backup + heatmap)
+- The relay list for an account comes from NIP-65 (kind 10002) fetched
+  from public relays at save time and merged with the configured list —
+  never hardcode a single relay; the user's personal relay is just one
+  entry. Discovery runs server-side (nostr-tools + global WebSocket) so
+  the nsec never reaches the browser.
+- The nsec is stored in plaintext in the journal DB (local-first, same as
+  api_credentials); backups carry it. Warn in the UI and never echo it.
+- Nostr events are stored locally AND pushed to relays: the local copy is
+  the durable record; relay publishing is best-effort (Promise.allSettled).
+- "Publish a note" must never auto-publish a Fermentario note: loading a
+  note's text into the textarea is a draft, and only the Publish button
+  signs and sends. The user is explicit about this.
+- The heatmap shows two series (published notes amber, replies blue) on
+  one grid; the hue leans toward whichever series dominated that day, and
+  the tooltip shows both counts.
+
+## Session: Nostr section + config modal carousel
+- The config modal's tab strip overflowed because five pills no longer fit
+  on one row; a `flex-wrap` attempt was rejected — the right pattern is the
+  section bar's horizontal snap carousel (`no-scrollbar -mx-1 flex min-w-0
+  flex-1 snap-x gap-2 overflow-x-auto px-1 pb-1`).
+- The modal body's fixed height + `overflow: hidden` clipped late content
+  (status chips, test results). The ResizeObserver must observe the
+  first child (the actual panel content), not the clipped container.
+- `ws` is not a dependency: Node 22 ships a global `WebSocket`. Use
+  `useWebSocketImplementation(globalThis.WebSocket)` so nostr-tools'
+  SimplePool works in route handlers without adding a package.
+
+## Session: Embedded relay, owner gate, and the smoke entry point
+- The relay's write gate compared `event.pubkey` (hex) with the stored
+  `nostr_profile.npub` (bech32). Every owner write got
+  `OK false restricted: not the owner`, and the HTTP publish path still
+  stored its copy locally, so the section looked fine. Decode the npub with
+  `nip19.decode` (or store the hex) before comparing. When the gate is
+  bypassed this way, the only symptom is an empty `publishedTo`.
+- `pool.publish()` **rejects** on `OK false` and on a connection failure; it
+  does not resolve with a reason. `Promise.allSettled` then shows no
+  fulfilled entry. A publish that wrote locally but reached no relay looks
+  like success unless the caller checks that list.
+- `scripts/start.mjs` is now the runtime entry. It imports `build/index.js`,
+  takes adapter-node's `app.server.server` (a real `http.Server`) and adds the
+  relay's `upgrade` listener. `node build/index.js` alone has no relay, so the
+  smoke test must spawn `scripts/start.mjs` — and still assert that
+  `build/index.js` exists after a build.
+- `GET /relay` is an ordinary SvelteKit route serving the NIP-11 document.
+  Add `/relay` to both `hooks.server.ts` allowlists (no journal, journal
+  error) or the redirect to `/welcome` answers the client's discovery request.
+  A normal GET never reaches the WebSocket upgrade listener.
+- The relay owns a second `better-sqlite3` connection. Re-read
+  `data/registry.db` (active id and path) before each operation and reopen on
+  change: restore and journal switch replace the file under it. `INSERT OR
+  IGNORE` by event id makes repeated syncs and socket retries harmless.
+- `FERMENTARIO_NOSTR_RELAYS` (comma separated) replaces the fallback discovery
+  relays. The smoke test points it at `ws://127.0.0.1:<port>/relay`, so
+  discovery and publish never touch the network; mask the `ws://` form of the
+  base in the golden, not only `http://`.
+- Schema 32 adds `nostr_events.pubkey` and backfills it with
+  `json_extract(raw_event, '$.pubkey')`; filters by author need that column,
+  and the raw JSON stays the source for serving events.
+
+## Session: Relay switch, dev attachment, and masking zero
+- The dev server shares one HTTP server with Vite's HMR socket. A relay
+  listener that destroys every upgrade whose path is not `/relay` kills HMR,
+  and Vite's own listener never sees the request. Pass
+  `strictPaths: false` there: the listener returns without touching the
+  socket when the path differs, and the next `upgrade` handler gets it.
+  Production keeps the strict default.
+- Vite's `server.httpServer` is typed as `http.Server |
+  http2.Http2SecureServer`. `attachRelay` wants the plain HTTP/1 server, so
+  the dev plugin casts (`as unknown as Server`). The cast is truthful: a dev
+  server is not HTTP/2.
+- `checkJs: true` covers any `.mjs` that enters the program — here the relay,
+  because `vite.config.ts` imports it. `scripts/start.mjs` escapes only
+  because nothing typed imports it. better-sqlite3's `get()` returns
+  `unknown`, so each row needs a JSDoc cast; every callback parameter needs
+  a type. Run `pnpm run check` after editing a script that a typed file
+  imports.
+- Vite restarts itself when `vite.config.ts` or an imported `scripts/*.mjs`
+  changes (`scripts/relay.mjs changed, restarting server...`). The old relay
+  listener dies with the old server and the new one attaches to the new
+  `httpServer`; no manual restart is needed for relay edits, only for edits
+  Vite cannot see.
+- The smoke script's `volatile` set collected a real `0` (a reading position
+  index), so `volatile.has(value)` masked *every* legitimate zero: counts,
+  balances, `changePct`, and a synthetic `status: 0`. Zero is never a fresh id
+  or timestamp. Mask numbers only when they are non-zero; otherwise the golden
+  hides real values and a changed zero passes unnoticed.
+
+## Session: Automatic paginated backup
+- A backup that only runs when a page is open is not a backup. The sync loop
+  is owned by the admin layout, not the Nostr section: it starts on every page
+  load when an account is configured, and reactively when an account is saved
+  (a shared rune store flips). No account means no request. The section only
+  reads progress and can nudge `Sync now`.
+- The loop pages newest batch first so new posts arrive even when the history
+  is already stored.
+- NIP-01 `until` is inclusive, so the next page re-includes the previous
+  page's oldest event. That is fine because `INSERT OR IGNORE` drops the
+  duplicate, but it means each page advances by `limit - 1` when using
+  `until = nextCursor`. Use the oldest `created_at` as the cursor, not
+  `oldest - 1`: subtracting one skips events that share that timestamp.
+- A short page does not prove the end. Relays apply `limit` per relay and cap
+  it below what the client asks, so the aggregate can return fewer than
+  `limit` while older events exist. The loop must continue while the page
+  added something new (`imported > 0`) and stop when it adds nothing. That
+  costs one extra request at the end of the history and is the only reliable
+  stopping rule.
+- `imported` must come from a row-count delta around the batch, not from
+  `events.length`, because the same event arrives from several relays.
+  Dedup is already guaranteed by `nostr_events.id` (`TEXT PRIMARY KEY`,
+  `INSERT OR IGNORE`) and by the id Map inside `fetchOwnEvents`.
+- Two tabs would fetch the same pages in parallel and double the relay load.
+  An in-process `running` flag in a server module answers the second caller
+  with `409`; the client treats it as "someone else is doing it" and stops
+  without an error. A server module is a single process under adapter-node.
+- Pace the pages: 2 s between batches keeps a long account from looking like
+  a burst. The loop is background work, so the delay costs nothing visible.
+- `lastSyncAt` belongs in the registry (`app_state`), not in the journal: it
+  reports the last check even when a run imported nothing, survives a
+  restart, and does not change the journal's schema.
+- In the smoke, a new check that records a whole profile response carries
+  `stats.lastAt` and `lastStoredAt` (runtime values that no `volatile` entry
+  covers). Record a sanitized body (`{ lastSyncAtSet: true }`) instead, or the
+  golden changes between runs.
+
+## Session: Mini apps and time tracker
+- A schema-adding migration bumps `LATEST_SCHEMA_VERSION`; `scripts/web-smoke.mjs` asserts the legacy import registers the active journal at that version, so add the migration and update the smoke check together.
+- A persistent bottom indicator must share space with the composer: reserve extra bottom padding and offset fixed elements by `var(--composer-h)` plus the indicator height, or the counter, FAB and composer overlap.
+- Client-only usage/order state (mini app opens) can live in local storage; server-side state is needed only for data that must survive across devices or live in the journal (time entries).
+- The repo already has `ConfirmDialog.svelte`; never use `window.confirm` for a destructive action. Keep the pending target in component state (`pendingDelete = entry`), then call the API from the dialog's `onConfirm`.
+- A delete changes data that another component already fetched. `TimeTrackerChart` takes a `revision` prop and reloads in `$effect`, because it otherwise keeps stale bars until remount.
+- A single-ticker refresh must write the same quote to both surfaces, so it goes through one extracted write helper (`storeTradingQuote`), not a second copy of the SQL. Keep `refreshMarket` on its existing multi-ticker run: adding a per-ticker path must not change the global button. Guard the holdings update with `price_auto = 1` and `category != 'cash'`, or one click overwrites a hand-set price.
+- The admin layout maps the URL segment to a section and used `'notes'` as the fallback for anything unknown. A new page under `/admin` then selected the Notes pill and rendered its composer. Return `null` for an unknown segment and type the fallback as `View | null`; do not hide an unknown route inside a real section. Add the page to `scripts/web-smoke.mjs` so the golden records its chrome.

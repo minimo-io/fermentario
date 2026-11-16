@@ -1,38 +1,117 @@
 {
+	"GET / homepage": {
+		"status": 200,
+		"body": "<!doctype html>\n<html lang=\"en\" data-theme=\"light\">\n\t<head>\n\t\t<meta charset=\"utf-8\" />\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\" />\n\t\t<meta name=\"text-scale\" content=\"scale\" />\n\t\t<script>\n\t\t\t// Apply the saved theme before the first paint, so a dark page never\n\t\t\t// flashes white. The config modal writes the same `theme` key.\n\t\t\t(() => {\n\t\t\t\ttry {\n\t\t\t\t\tconst raw = localStorage.getItem('fermentario.config');\n\t\t\t\t\tconst saved = raw ? JSON.parse(raw)?.theme : null;\n\t\t\t\t\tconst theme = saved === 'light' || saved === 'dark' ? saved : 'system';\n\t\t\t\t\tconst dark =\n\t\t\t\t\t\ttheme === 'dark' ||\n\t\t\t\t\t\t(theme === 'system' &&\n\t\t\t\t\t\t\ttypeof matchMedia === 'function' &&\n\t\t\t\t\t\t\tmatchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tdocument.documentElement.style.colorScheme = dark ? 'dark' : 'light';\n\t\t\t\t} catch {\n\t\t\t\t\t// Blocked storage keeps the light default.\n\t\t\t\t}\n\t\t\t})();\n\t\t</script>\n\t\t<style>\n\t\t\thtml {\n\t\t\t\tbackground: #ffffff;\n\t\t\t}\n\t\t\thtml.dark {\n\t\t\t\tbackground: #0c0a09;\n\t\t\t}\n\t\t\t#boot-loader {\n\t\t\t\tposition: fixed;\n\t\t\t\tinset: 0;\n\t\t\t\tz-index: 60;\n\t\t\t\tdisplay: grid;\n\t\t\t\tplace-items: center;\n\t\t\t\tpadding: 1.5rem;\n\t\t\t\tcursor: wait;\n\t\t\t\tbackground: rgba(255, 255, 255, 0.28);\n\t\t\t\t-webkit-backdrop-filter: blur(8px);\n\t\t\t\tbackdrop-filter: blur(8px);\n\t\t\t\tanimation: boot-timeout 0.3s linear 60s forwards;\n\t\t\t}\n\t\t\t#boot-loader .boot-pill {\n\t\t\t\tdisplay: inline-flex;\n\t\t\t\talign-items: center;\n\t\t\t\tgap: 0.5rem;\n\t\t\t\tborder: 1px solid #e7e5e4;\n\t\t\t\tborder-radius: 9999px;\n\t\t\t\tbackground: rgba(255, 255, 255, 0.95);\n\t\t\t\tpadding: 0.5rem 0.875rem;\n\t\t\t\tfont-family: ui-sans-serif, system-ui, sans-serif;\n\t\t\t\tfont-size: 0.75rem;\n\t\t\t\tfont-weight: 500;\n\t\t\t\tline-height: 1;\n\t\t\t\tcolor: #57534e;\n\t\t\t\tbox-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);\n\t\t\t}\n\t\t\t#boot-loader .boot-spinner {\n\t\t\t\twidth: 1rem;\n\t\t\t\theight: 1rem;\n\t\t\t\tborder: 2px solid #e7e5e4;\n\t\t\t\tborder-top-color: #f59e0b;\n\t\t\t\tborder-radius: 9999px;\n\t\t\t\tanimation: boot-spin 0.7s linear infinite;\n\t\t\t}\n\t\t\thtml.dark #boot-loader {\n\t\t\t\tbackground: rgba(12, 10, 9, 0.28);\n\t\t\t}\n\t\t\thtml.dark #boot-loader .boot-pill {\n\t\t\t\tborder-color: #292524;\n\t\t\t\tbackground: rgba(28, 25, 23, 0.9);\n\t\t\t\tcolor: #d6d3d1;\n\t\t\t\tbox-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);\n\t\t\t}\n\t\t\thtml.dark #boot-loader .boot-spinner {\n\t\t\t\tborder-color: #292524;\n\t\t\t\tborder-top-color: #fbbf24;\n\t\t\t}\n\t\t\t@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {\n\t\t\t\t#boot-loader {\n\t\t\t\t\t-webkit-backdrop-filter: none;\n\t\t\t\t\tbackdrop-filter: none;\n\t\t\t\t\tbackground: rgba(255, 255, 255, 0.85);\n\t\t\t\t}\n\t\t\t\thtml.dark #boot-loader {\n\t\t\t\t\tbackground: rgba(12, 10, 9, 0.9);\n\t\t\t\t}\n\t\t\t}\n\t\t\t@keyframes boot-spin {\n\t\t\t\tto { transform: rotate(360deg); }\n\t\t\t}\n\t\t\t@keyframes boot-timeout {\n\t\t\t\tto { opacity: 0; visibility: hidden; }\n\t\t\t}\n\t\t\t@media (prefers-reduced-motion: reduce) {\n\t\t\t\t#boot-loader .boot-spinner { animation: none; }\n\t\t\t}\n\t\t</style>\n\t\t<noscript><style>#boot-loader { display: none; }</style></noscript>\n\t\t<!--12qhfyh--><meta name=\"description\" content=\"voice journal for life and the bootstrapped journey\"/> <link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"/><!----><!--1uha8ag--><meta name=\"description\" content=\"Published notes.\"/> <link rel=\"canonical\" href=\"<base>/\"/> <meta property=\"og:type\" content=\"website\"/> <meta property=\"og:title\" content=\"fermentario\"/> <meta property=\"og:description\" content=\"Published notes.\"/> <meta property=\"og:url\" content=\"<base>/\"/> <meta name=\"twitter:card\" content=\"summary\"/> <meta name=\"twitter:title\" content=\"fermentario\"/> <meta name=\"twitter:description\" content=\"Published notes.\"/><!----><title>fermentario</title>\n\t\t<link href=\"./_app/immutable/assets/0.<hashed>.$2\" rel=\"stylesheet\">\n\t</head>\n\t<body data-sveltekit-preload-data=\"hover\">\n\t\t<div id=\"boot-loader\" role=\"status\" aria-live=\"polite\">\n\t\t\t<span class=\"boot-pill\"><span class=\"boot-spinner\"></span>Loading…</span>\n\t\t</div>\n\t\t<div style=\"display: contents\"><!--[--><!--[0--><!--[--><!--[-1--><!--[--><main class=\"min-h-dvh\"><div class=\"mx-auto max-w-2xl px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24\"><!--[-1--><!--]--> <!--[-1--><!--]--><!----> <header class=\"mb-5 flex items-center justify-between gap-2\"><h1 class=\"text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100\">fermentario</h1> <a href=\"/admin/notes\" class=\"rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800\">Admin</a></header> <!--[2--><p class=\"rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400\">Nothing published yet.</p><!--]--></div></main><!--]--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----><!--]--><!--]--> <!--[-1--><!--]--><!--]-->\n\t\t\t\n\t\t\t<script>\n\t\t\t\t{\n\t\t\t\t\t__sveltekit_<nonce> = {\n\t\t\t\t\t\tbase: new URL(\".\", location).pathname.slice(0, -1)\n\t\t\t\t\t};\n\n\t\t\t\t\tconst element = document.currentScript.parentElement;\n\n\t\t\t\t\tPromise.all([\n\t\t\t\t\t\timport(\"./_app/immutable/entry/start.<hashed>.$2\"),\n\t\t\t\t\t\timport(\"./_app/immutable/entry/app.<hashed>.$2\")\n\t\t\t\t\t]).then(([kit, app]) => {\n\t\t\t\t\t\tkit.start(app, element, {\n\t\t\t\t\t\t\tnode_ids: [0, 3],\n\t\t\t\t\t\t\tdata: [null,{type:\"data\",data:{notes:[],hasMore:false,nextCursor:null,origin:\"<base>\",publicConfig:{siteTitle:\"fermentario\",description:\"Published notes.\",notesEnabled:true,showCoverImages:true,updatedAt:0}},uses:{}}],\n\t\t\t\t\t\t\tform: null,\n\t\t\t\t\t\t\terror: null\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t</script>\n\t\t</div>\n\t</body>\n</html>"
+	},
 	"page:/": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": false,
 		"hasTagName": false,
-		"hasPageWidth": true
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
 	},
-	"page:/heatmap": {
+	"GET /notes redirect": {
+		"status": 307,
+		"body": ""
+	},
+	"page:/admin/notes": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": false,
 		"hasTagName": false,
-		"hasPageWidth": true
+		"hasPageWidth": true,
+		"hasComposer": true,
+		"selectedSections": [
+			"notes"
+		]
 	},
-	"page:/tags/garden": {
+	"page:/admin/todo": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": [
+			"todo"
+		]
+	},
+	"page:/admin/time-tracker": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
+	},
+	"page:/admin/stocks": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": [
+			"stocks"
+		]
+	},
+	"GET /businesses redirect": {
+		"status": 307,
+		"body": ""
+	},
+	"GET /businesses/trading redirect": {
+		"status": 307,
+		"body": ""
+	},
+	"page:/admin/businesses/trading/b3": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": [
+			"businesses"
+		]
+	},
+	"page:/admin/heatmap": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
+	},
+	"page:/admin/tags/garden": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": true,
 		"hasTagName": false,
-		"hasPageWidth": true
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
 	},
-	"page:/tags/missing": {
+	"page:/admin/tags/missing": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": false,
 		"hasTagName": false,
-		"hasPageWidth": true
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
 	},
-	"page:/diagnostics": {
+	"page:/admin/diagnostics": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": false,
 		"hasTagName": false,
-		"hasPageWidth": true
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
 	},
 	"GET /api/status": {
 		"status": 200,
@@ -73,6 +152,8 @@
 					"updated_at": 1741089600000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [],
 					"commentCount": 0,
 					"linkedNotes": []
@@ -84,6 +165,8 @@
 					"updated_at": 1741089600000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [
 						"garden"
 					],
@@ -111,6 +194,8 @@
 					"updated_at": 1740916800000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [
 						"work"
 					],
@@ -124,6 +209,8 @@
 					"updated_at": 1740312000000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [
 						"garden",
 						"work"
@@ -152,6 +239,8 @@
 					"updated_at": 1741089600000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [
 						"garden"
 					],
@@ -165,6 +254,8 @@
 					"updated_at": 1740312000000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [
 						"garden",
 						"work"
@@ -179,6 +270,8 @@
 					"updated_at": 1730626200000,
 					"featured": false,
 					"video": "",
+					"published": false,
+					"coverId": null,
 					"tags": [
 						"garden"
 					],
@@ -279,6 +372,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": false,
+				"coverId": null,
 				"tags": [
 					"garden"
 				]
@@ -295,6 +390,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": false,
+				"coverId": null,
 				"tags": [
 					"work"
 				],
@@ -303,12 +400,182 @@
 			}
 		}
 	},
+	"PATCH /api/notes/[id] published": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "Smoke test note, edited, about kayaking",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"published": true,
+				"coverId": null,
+				"tags": [
+					"work"
+				],
+				"commentCount": 0,
+				"linkedNotes": []
+			}
+		}
+	},
+	"GET /api/public/notes": {
+		"status": 200,
+		"body": {
+			"notes": [
+				{
+					"id": "<runtime>",
+					"content": "Smoke test note, edited, about kayaking",
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"featured": false,
+					"video": "",
+					"published": true,
+					"coverId": null,
+					"tags": [
+						"work"
+					],
+					"commentCount": 0,
+					"linkedNotes": []
+				}
+			],
+			"hasMore": false,
+			"nextCursor": {
+				"created_at": "<runtime>",
+				"id": "<runtime>"
+			}
+		}
+	},
+	"GET /api/public/notes/[id]": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "Smoke test note, edited, about kayaking",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"published": true,
+				"coverId": null,
+				"tags": [
+					"work"
+				],
+				"commentCount": 0,
+				"linkedNotes": []
+			},
+			"comments": [],
+			"publicConfig": {
+				"siteTitle": "fermentario",
+				"description": "Published notes.",
+				"notesEnabled": true,
+				"showCoverImages": true,
+				"updatedAt": 0
+			}
+		}
+	},
 	"page:/notes/[id]": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": true,
 		"hasTagName": false,
-		"hasPageWidth": true
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": []
+	},
+	"page:/admin/notes/[id]": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": true,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": true,
+		"selectedSections": [
+			"notes"
+		]
+	},
+	"PATCH /api/config/public": {
+		"status": 200,
+		"body": {
+			"publicConfig": {
+				"siteTitle": "Smoke Config",
+				"description": "Smoke public description",
+				"notesEnabled": false,
+				"showCoverImages": false,
+				"updatedAt": "<runtime>"
+			}
+		}
+	},
+	"GET /api/public/config": {
+		"status": 200,
+		"body": {
+			"publicConfig": {
+				"siteTitle": "Smoke Config",
+				"description": "Smoke public description",
+				"notesEnabled": false,
+				"showCoverImages": false,
+				"updatedAt": "<runtime>"
+			}
+		}
+	},
+	"GET /api/public/notes disabled": {
+		"status": 200,
+		"body": {
+			"notes": [],
+			"hasMore": false,
+			"nextCursor": null
+		}
+	},
+	"GET /api/public/notes/[id] disabled": {
+		"status": 404,
+		"body": {
+			"error": "not found"
+		}
+	},
+	"PATCH /api/config/public reset": {
+		"status": 200,
+		"body": {
+			"publicConfig": {
+				"siteTitle": "fermentario",
+				"description": "Published notes.",
+				"notesEnabled": true,
+				"showCoverImages": true,
+				"updatedAt": "<runtime>"
+			}
+		}
+	},
+	"POST /api/notes/[id]/photo": {
+		"status": 201,
+		"body": {
+			"id": "<runtime>",
+			"created_at": "<runtime>"
+		}
+	},
+	"GET /api/notes/photos/[photoId]": {
+		"status": 200,
+		"contentType": "image/png",
+		"bytes": 70
+	},
+	"GET /api/notes/[id] cover": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"content": "Smoke test note, edited, about kayaking",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"published": true,
+				"coverId": "<runtime>",
+				"tags": [
+					"work"
+				],
+				"commentCount": 0,
+				"linkedNotes": []
+			}
+		}
 	},
 	"DELETE /api/notes/[id]/tags/[tag]": {
 		"status": 405,
@@ -346,6 +613,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": true,
+				"coverId": "<runtime>",
 				"tags": [
 					"work"
 				],
@@ -408,6 +677,8 @@
 				"updated_at": 1741089600000,
 				"featured": true,
 				"video": "dQw4w9WgXcQ",
+				"published": false,
+				"coverId": null,
 				"tags": [],
 				"commentCount": 0,
 				"linkedNotes": []
@@ -967,6 +1238,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": false,
+				"coverId": null,
 				"tags": []
 			}
 		}
@@ -981,6 +1254,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": false,
+				"coverId": null,
 				"tags": []
 			}
 		}
@@ -995,6 +1270,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": false,
+				"coverId": null,
 				"tags": [],
 				"commentCount": 0,
 				"linkedNotes": [
@@ -1010,6 +1287,224 @@
 					}
 				]
 			}
+		}
+	},
+	"GET /api/principles/[id] backlinks": {
+		"status": 200,
+		"body": {
+			"principle": {
+				"id": "<runtime>",
+				"content": "Principle that must survive a restore",
+				"position": 0,
+				"created_at": "<runtime>",
+				"video": "",
+				"comment_count": 1,
+				"tags": [
+					"trip"
+				],
+				"commentCount": 1,
+				"linkedNotes": []
+			},
+			"mentionedIn": [
+				{
+					"id": "<runtime>",
+					"content": "<runtime>",
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>",
+					"featured": false,
+					"video": "",
+					"published": false,
+					"coverId": null,
+					"tags": [],
+					"commentCount": 0,
+					"linkedNotes": [
+						{
+							"id": "<runtime>",
+							"label": "Link target note about kayaking trips",
+							"kind": "note"
+						},
+						{
+							"id": "<runtime>",
+							"label": "Principle that must survive a restore",
+							"kind": "principle"
+						}
+					]
+				}
+			]
+		}
+	},
+	"POST /api/books": {
+		"status": 201,
+		"body": {
+			"book": {
+				"id": "<runtime>",
+				"title": "Smoke Library Book",
+				"author": "A. Tester",
+				"size": 29,
+				"added_at": "<runtime>",
+				"lastCfi": "",
+				"lastPct": 0,
+				"lastChapter": "",
+				"lastReadAt": 0
+			}
+		}
+	},
+	"POST /api/books drm rejected": {
+		"status": 400,
+		"body": {
+			"error": "DRM-protected EPUBs cannot be read here."
+		}
+	},
+	"GET /api/books": {
+		"status": 200,
+		"body": {
+			"books": [
+				{
+					"id": "<runtime>",
+					"title": "Smoke Library Book",
+					"author": "A. Tester",
+					"size": 29,
+					"added_at": "<runtime>",
+					"lastCfi": "",
+					"lastPct": 0,
+					"lastChapter": "",
+					"lastReadAt": 0
+				}
+			]
+		}
+	},
+	"GET /api/books/[id]/file": {
+		"status": 200,
+		"bytes": 29
+	},
+	"PUT /api/books/[id]/position": {
+		"status": 200,
+		"body": {
+			"book": {
+				"id": "<runtime>",
+				"title": "Smoke Library Book",
+				"author": "A. Tester",
+				"size": 29,
+				"added_at": "<runtime>",
+				"lastCfi": "epubcfi(/6/4[xhtml]!/4/2/1:8)",
+				"lastPct": 0.42,
+				"lastChapter": "Chapter One",
+				"lastReadAt": "<runtime>"
+			}
+		}
+	},
+	"POST /api/books/[id]/notes": {
+		"status": 201,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"book_id": "<runtime>",
+				"cfi": "epubcfi(/6/4[xhtml]!/4/2/1:8,/4/2/1:24)",
+				"excerpt": "a highlighted sentence",
+				"note": "first note",
+				"color": "amber",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"PATCH /api/books/[id]/notes/[noteId]": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"book_id": "<runtime>",
+				"cfi": "epubcfi(/6/4[xhtml]!/4/2/1:8,/4/2/1:24)",
+				"excerpt": "a highlighted sentence",
+				"note": "edited note",
+				"color": "amber",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"GET /api/books/[id]/notes": {
+		"status": 200,
+		"body": {
+			"notes": [
+				{
+					"id": "<runtime>",
+					"book_id": "<runtime>",
+					"cfi": "epubcfi(/6/4[xhtml]!/4/2/1:8,/4/2/1:24)",
+					"excerpt": "a highlighted sentence",
+					"note": "edited note",
+					"color": "amber",
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>"
+				}
+			],
+			"hasMore": false,
+			"nextCursor": {
+				"created_at": "<runtime>",
+				"id": "<runtime>"
+			},
+			"total": 1
+		}
+	},
+	"POST /api/books/[id]/notes 2": {
+		"status": 201,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"book_id": "<runtime>",
+				"cfi": "epubcfi(/6/6[xhtml2]!/4/2/1:8)",
+				"excerpt": "second highlight",
+				"note": "",
+				"color": "amber",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>"
+			}
+		}
+	},
+	"GET /api/books/[id]/notes page 1": {
+		"status": 200,
+		"body": {
+			"notes": [
+				{
+					"id": "<runtime>",
+					"book_id": "<runtime>",
+					"cfi": "epubcfi(/6/6[xhtml2]!/4/2/1:8)",
+					"excerpt": "second highlight",
+					"note": "",
+					"color": "amber",
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>"
+				}
+			],
+			"hasMore": true,
+			"nextCursor": {
+				"created_at": "<runtime>",
+				"id": "<runtime>"
+			},
+			"total": 2
+		}
+	},
+	"GET /api/books/[id]/notes page 2": {
+		"status": 200,
+		"body": {
+			"notes": [
+				{
+					"id": "<runtime>",
+					"book_id": "<runtime>",
+					"cfi": "epubcfi(/6/4[xhtml]!/4/2/1:8,/4/2/1:24)",
+					"excerpt": "a highlighted sentence",
+					"note": "edited note",
+					"color": "amber",
+					"created_at": "<runtime>",
+					"updated_at": "<runtime>"
+				}
+			],
+			"hasMore": false,
+			"nextCursor": {
+				"created_at": "<runtime>",
+				"id": "<runtime>"
+			},
+			"total": 2
 		}
 	},
 	"POST /api/holdings btc": {
@@ -2918,6 +3413,12 @@
 			"error": "not a B3 ticker"
 		}
 	},
+	"POST /api/trading/orders bad price": {
+		"status": 400,
+		"body": {
+			"error": "unit price must be > 0"
+		}
+	},
 	"GET /api/trading/orgs": {
 		"status": 200,
 		"body": {
@@ -2966,7 +3467,155 @@
 	"PATCH /api/trading/orgs/ripio blocked": {
 		"status": 400,
 		"body": {
-			"error": "unknown or disabled organization, or a rate is invalid (rates 0–0.1, amounts >= 0)"
+			"error": "unknown organization, or a rate is invalid (rates 0–0.1, amounts >= 0, enabled true/false)"
+		}
+	},
+	"PATCH /api/trading/orgs/ripio enable": {
+		"status": 200,
+		"body": {
+			"org": {
+				"id": "ripio",
+				"name": "Ripio",
+				"enabled": true,
+				"feeRate": 0,
+				"irrfRate": 0,
+				"fixedFee": 0,
+				"exemptLimit": 0,
+				"position": 1,
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"POST /api/trading/orders ripio": {
+		"status": 201,
+		"body": {
+			"order": {
+				"id": "<runtime>",
+				"orgId": "ripio",
+				"ticker": "BTC_USDC",
+				"side": "BUY",
+				"qty": 0.01,
+				"unitPrice": 64000,
+				"value": 640,
+				"fees": 0,
+				"irrf": 0,
+				"net": 640,
+				"date": 1794495600000,
+				"month": "11/2026",
+				"created_at": "<runtime>"
+			}
+		}
+	},
+	"GET /api/trading/summary ripio": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"org": {
+					"id": "ripio",
+					"name": "Ripio",
+					"enabled": true,
+					"feeRate": 0,
+					"irrfRate": 0,
+					"fixedFee": 0,
+					"exemptLimit": 0,
+					"position": 1,
+					"created_at": "<runtime>"
+				},
+				"orders": [
+					{
+						"id": "<runtime>",
+						"orgId": "ripio",
+						"ticker": "BTC_USDC",
+						"side": "BUY",
+						"qty": 0.01,
+						"unitPrice": 64000,
+						"value": 640,
+						"fees": 0,
+						"irrf": 0,
+						"net": 640,
+						"date": 1794495600000,
+						"month": "11/2026",
+						"created_at": "<runtime>",
+						"profit": null,
+						"profitPct": null
+					}
+				],
+				"positions": [
+					{
+						"ticker": "BTC_USDC",
+						"orgId": "ripio",
+						"orgName": "Ripio",
+						"qty": 0.01,
+						"avgPrice": 64000,
+						"cost": 640,
+						"quote": null,
+						"quoteSource": null,
+						"quoteAt": null,
+						"targetPct": 0.03,
+						"potentialPct": null,
+						"sameDay": false,
+						"since": 1794495600000,
+						"targetPrice": 65920,
+						"netValue": null,
+						"sellFees": null,
+						"recommendation": "waiting"
+					}
+				],
+				"months": [
+					{
+						"month": "11/2026",
+						"sales": 0,
+						"limit": 0,
+						"fees": 0,
+						"irrf": 0,
+						"profit": 0,
+						"exempt": true
+					}
+				]
+			}
+		}
+	},
+	"DELETE /api/trading/orders ripio": {
+		"status": 200,
+		"body": {
+			"ok": true
+		}
+	},
+	"GET /api/trading/summary ripio empty": {
+		"status": 200,
+		"body": {
+			"summary": {
+				"org": {
+					"id": "ripio",
+					"name": "Ripio",
+					"enabled": true,
+					"feeRate": 0,
+					"irrfRate": 0,
+					"fixedFee": 0,
+					"exemptLimit": 0,
+					"position": 1,
+					"created_at": "<runtime>"
+				},
+				"orders": [],
+				"positions": [],
+				"months": []
+			}
+		}
+	},
+	"PATCH /api/trading/orgs/ripio disable": {
+		"status": 200,
+		"body": {
+			"org": {
+				"id": "ripio",
+				"name": "Ripio",
+				"enabled": false,
+				"feeRate": 0,
+				"irrfRate": 0,
+				"fixedFee": 0,
+				"exemptLimit": 0,
+				"position": 1,
+				"created_at": "<runtime>"
+			}
 		}
 	},
 	"POST /api/trading/orders buy": {
@@ -3009,7 +3658,7 @@
 				"fees": 0.023999999999999997,
 				"irrf": 0.004,
 				"net": 79.972,
-				"date": "<runtime>",
+				"date": 1794495600000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
 			}
@@ -3059,7 +3708,7 @@
 						"fees": 0.023999999999999997,
 						"irrf": 0.004,
 						"net": 79.972,
-						"date": "<runtime>",
+						"date": 1794495600000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": 2.9488999999999947,
@@ -3072,6 +3721,7 @@
 						"month": "11/2026",
 						"sales": 80,
 						"limit": 20000,
+						"fees": 0.047099999999999996,
 						"irrf": 0.004,
 						"profit": 2.9488999999999947,
 						"exempt": true
@@ -3126,7 +3776,7 @@
 				"fees": 0.023999999999999997,
 				"irrf": 0.004,
 				"net": 79.972,
-				"date": "<runtime>",
+				"date": 1794495600000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
 			}
@@ -3196,7 +3846,7 @@
 						"fees": 0.023999999999999997,
 						"irrf": 0.004,
 						"net": 79.972,
-						"date": "<runtime>",
+						"date": 1794495600000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": 2.9488999999999947,
@@ -3223,6 +3873,8 @@
 				"positions": [
 					{
 						"ticker": "VALE3",
+						"orgId": "b3",
+						"orgName": "B3",
 						"qty": 1,
 						"avgPrice": 60,
 						"cost": 60.018,
@@ -3233,6 +3885,9 @@
 						"potentialPct": null,
 						"sameDay": true,
 						"since": "<runtime>",
+						"targetPrice": 61.84018406442255,
+						"netValue": null,
+						"sellFees": null,
 						"recommendation": "waiting"
 					}
 				],
@@ -3241,6 +3896,7 @@
 						"month": "11/2026",
 						"sales": 80,
 						"limit": 20000,
+						"fees": 0.06509999999999999,
 						"irrf": 0.004,
 						"profit": 2.9488999999999947,
 						"exempt": true
@@ -3261,10 +3917,26 @@
 			"positions": []
 		}
 	},
+	"GET /api/trading/quotes/history empty": {
+		"status": 200,
+		"body": {
+			"points": []
+		}
+	},
 	"GET /api/quotes/log": {
 		"status": 200,
 		"body": {
-			"entries": []
+			"entries": [
+				{
+					"ticker": "BTC_USDC",
+					"source": "ripio",
+					"ok": 1,
+					"price": "<runtime>",
+					"previous_close": null,
+					"error": "",
+					"fetched_at": "<runtime>"
+				}
+			]
 		}
 	},
 	"GET /api/export": {
@@ -3300,6 +3972,7 @@
 			"shoppingExtras": 1,
 			"tradingOrgs": 2,
 			"tradingOrders": 2,
+			"tradingQuoteHistory": 0,
 			"b3Tickers": 126
 		}
 	},
@@ -3331,8 +4004,11 @@
 			"holdingValueHistory": 2,
 			"portfolioValueHistory": 1,
 			"shoppingExtras": 1,
+			"books": 1,
+			"bookNotes": 2,
 			"tradingOrgs": 2,
 			"tradingOrders": 2,
+			"tradingQuoteHistory": 0,
 			"b3Tickers": 126
 		}
 	},
@@ -3346,6 +4022,8 @@
 				"updated_at": 1741089600000,
 				"featured": true,
 				"video": "dQw4w9WgXcQ",
+				"published": false,
+				"coverId": null,
 				"tags": [],
 				"commentCount": 1,
 				"linkedNotes": []
@@ -3804,6 +4482,8 @@
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
+				"published": false,
+				"coverId": null,
 				"tags": [],
 				"commentCount": 0,
 				"linkedNotes": [
@@ -3819,6 +4499,242 @@
 					}
 				]
 			}
+		}
+	},
+	"GET /api/books/[id]/file after restore": {
+		"status": 200,
+		"bytes": 29
+	},
+	"GET /api/books/[id] after restore": {
+		"status": 200,
+		"body": {
+			"book": {
+				"id": "<runtime>",
+				"title": "Smoke Library Book",
+				"author": "A. Tester",
+				"size": 29,
+				"added_at": "<runtime>",
+				"lastCfi": "epubcfi(/6/4[xhtml]!/4/2/1:8)",
+				"lastPct": 0.42,
+				"lastChapter": "Chapter One",
+				"lastReadAt": "<runtime>"
+			}
+		}
+	},
+	"POST /api/market/refresh": {
+		"status": 200,
+		"tickers": [
+			"PETR4"
+		],
+		"holdings": [
+			"MXRF11",
+			"NUBANK"
+		]
+	},
+	"PUT /api/config/credentials/ripio": {
+		"status": 200,
+		"body": {
+			"configured": true,
+			"updatedAt": "<runtime>"
+		}
+	},
+	"PUT /api/config/credentials/ripio bad": {
+		"status": 400,
+		"body": {
+			"error": "token and secret are both required"
+		}
+	},
+	"GET /api/config/credentials/ripio": {
+		"status": 200,
+		"body": {
+			"configured": true,
+			"updatedAt": "<runtime>"
+		}
+	},
+	"DELETE /api/config/credentials/ripio": {
+		"status": 200,
+		"body": {
+			"configured": false,
+			"updatedAt": 0
+		}
+	},
+	"GET /api/nostr/profile": {
+		"status": 200,
+		"body": {
+			"configured": false,
+			"npub": "",
+			"name": "",
+			"about": "",
+			"picture": "",
+			"relays": [],
+			"relayUrl": "<base>/relay",
+			"updatedAt": 0,
+			"lastSyncAt": 0,
+			"stats": {
+				"notes": 0,
+				"replies": 0,
+				"total": 0,
+				"lastAt": 0,
+				"lastStoredAt": 0
+			}
+		}
+	},
+	"POST /api/nostr/publish (no account)": {
+		"status": 400,
+		"body": {
+			"error": "No Nostr account configured."
+		}
+	},
+	"PUT /api/nostr/profile (no nsec)": {
+		"status": 400,
+		"body": {
+			"error": "nsec is required"
+		}
+	},
+	"PUT /api/nostr/profile (bad nsec)": {
+		"status": 400,
+		"body": {
+			"error": "That is not a valid nsec."
+		}
+	},
+	"GET /relay (NIP-11)": {
+		"status": 200,
+		"body": {
+			"name": "Fermentario",
+			"supported_nips": [
+				1,
+				11
+			],
+			"restricted_writes": true
+		}
+	},
+	"PUT /api/nostr/profile (owner)": {
+		"status": 200,
+		"body": {
+			"configured": true,
+			"npub": "<runtime>",
+			"name": "",
+			"about": "",
+			"picture": "",
+			"relays": [
+				"<base>/relay"
+			],
+			"relayUrl": "<base>/relay",
+			"updatedAt": "<runtime>",
+			"lastSyncAt": 0,
+			"stats": {
+				"notes": 0,
+				"replies": 0,
+				"total": 0,
+				"lastAt": 0,
+				"lastStoredAt": 0
+			},
+			"foundProfile": false,
+			"foundRelays": false
+		}
+	},
+	"POST /api/nostr/publish": {
+		"status": 200,
+		"body": {
+			"signed": true,
+			"relayCount": 1,
+			"notes": 1
+		}
+	},
+	"relay REQ returns the published note": {
+		"status": 200,
+		"body": {
+			"content": "smoke note from fermentario",
+			"authorMatches": true
+		}
+	},
+	"relay rejects a foreign author": {
+		"status": 200,
+		"body": {
+			"accepted": false,
+			"restricted": true
+		}
+	},
+	"relay accepts the owner": {
+		"status": 200,
+		"body": {
+			"accepted": true
+		}
+	},
+	"GET /api/nostr/relay": {
+		"status": 200,
+		"body": {
+			"running": true,
+			"url": "<base>/relay"
+		}
+	},
+	"POST /api/nostr/relay (stop)": {
+		"status": 200,
+		"body": {
+			"running": false,
+			"url": "<base>/relay"
+		}
+	},
+	"relay refuses the handshake while stopped": {
+		"status": 0,
+		"body": {
+			"refused": true
+		}
+	},
+	"GET /relay while stopped": {
+		"status": 200,
+		"body": {}
+	},
+	"POST /api/nostr/relay (start)": {
+		"status": 200,
+		"body": {
+			"running": true,
+			"url": "<base>/relay"
+		}
+	},
+	"relay accepts the handshake after start": {
+		"status": 200,
+		"body": {
+			"listening": true
+		}
+	},
+	"POST /api/nostr/sync": {
+		"status": 200,
+		"body": {
+			"fetched": 2,
+			"imported": 0,
+			"hasMore": false,
+			"statsTotal": 2,
+			"lastSyncAtRecorded": true
+		}
+	},
+	"POST /api/nostr/sync (before the first note)": {
+		"status": 200,
+		"body": {
+			"fetched": 0,
+			"imported": 0,
+			"hasMore": false
+		}
+	},
+	"GET /api/nostr/profile (after sync)": {
+		"status": 200,
+		"body": {
+			"lastSyncAtSet": true
+		}
+	},
+	"GET /api/nostr/events?limit=5": {
+		"status": 200,
+		"body": {
+			"count": 2,
+			"allOwner": true
+		}
+	},
+	"GET /api/nostr/heatmap": {
+		"status": 200,
+		"body": {
+			"publishedIsArray": true,
+			"repliesIsArray": true,
+			"publishedTotal": 2
 		}
 	}
 }

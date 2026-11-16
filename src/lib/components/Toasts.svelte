@@ -1,5 +1,13 @@
 <script lang="ts">
 	import { toast } from '$lib/toast.svelte';
+	import { playPing } from '$lib/sound';
+
+	// The one place sounds are played: a toast asked for it when it appeared.
+	// The effect reads `toast.current`, so it fires per shown toast, not per
+	// frame; soundless toasts never reach playPing.
+	$effect(() => {
+		if (toast.current?.sound) playPing();
+	});
 </script>
 
 {#if toast.current}

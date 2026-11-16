@@ -27,8 +27,6 @@
 	function fmtTime(at: number): string {
 		try {
 			return new Date(at).toLocaleString(undefined, {
-				day: 'numeric',
-				month: 'short',
 				hour: '2-digit',
 				minute: '2-digit'
 			});
@@ -36,6 +34,37 @@
 			return '';
 		}
 	}
+
+	function dayKey(at: number): string {
+		const d = new Date(at);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+
+	function dayLabel(at: number): string {
+		const d = new Date(at);
+		const today = new Date();
+		const yesterday = new Date();
+		yesterday.setDate(today.getDate() - 1);
+		const same = (a: Date, b: Date) =>
+			a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+		if (same(d, today)) return 'Today';
+		if (same(d, yesterday)) return 'Yesterday';
+		try {
+			return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+		} catch {
+			return '';
+		}
+	}
+
+	const groups = $derived.by(() => {
+		const out: { at: number; label: string; entries: QuoteFetchEntry[] }[] = [];
+		for (const e of entries ?? []) {
+			const last = out[out.length - 1];
+			if (last && dayKey(last.at) === dayKey(e.fetched_at)) last.entries.push(e);
+			else out.push({ at: e.fetched_at, label: dayLabel(e.fetched_at), entries: [e] });
+		}
+		return out;
+	});
 </script>
 
 <div
@@ -75,28 +104,31 @@
 			{:else if (entries ?? []).length === 0}
 				<p class="py-6 text-center text-xs text-stone-400 dark:text-stone-500">No fetches logged yet.</p>
 			{:else}
-				<ul class="divide-y divide-stone-100 dark:divide-stone-800">
-					{#each entries ?? [] as e, i (i)}
-						<li class="flex items-start gap-2 py-2">
-							<span
-								class="mt-0.5 h-2 w-2 shrink-0 rounded-full {e.ok ? 'bg-emerald-500' : 'bg-rose-500'}"
-								title={e.ok ? 'Success' : 'Failed'}
-							></span>
-							<div class="min-w-0 flex-1">
-								<p class="text-xs font-semibold text-stone-800 dark:text-stone-200">
-									{e.ticker} <span class="font-normal text-stone-400 dark:text-stone-500">· {e.source}</span>
-									{#if e.ok && e.price !== null}
-										<span class="font-normal tabular-nums"> · {e.price}</span>
+				{#each groups as g (g.at)}
+					<h3 class="pt-3 pb-1 text-[11px] font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500 first:pt-0">{g.label}</h3>
+					<ul class="divide-y divide-stone-100 dark:divide-stone-800">
+						{#each g.entries as e (e.fetched_at + e.ticker + e.source)}
+							<li class="flex items-start gap-2 py-2">
+								<span
+									class="mt-0.5 h-2 w-2 shrink-0 rounded-full {e.ok ? 'bg-emerald-500' : 'bg-rose-500'}"
+									title={e.ok ? 'Success' : 'Failed'}
+								></span>
+								<div class="min-w-0 flex-1">
+									<p class="text-xs font-semibold text-stone-800 dark:text-stone-200">
+										{e.ticker} <span class="font-normal text-stone-400 dark:text-stone-500">· {e.source}</span>
+										{#if e.ok && e.price !== null}
+											<span class="font-normal tabular-nums"> · {e.price}</span>
+										{/if}
+									</p>
+									{#if !e.ok && e.error}
+										<p class="mt-0.5 text-[11px] text-rose-600 dark:text-rose-400">{e.error}</p>
 									{/if}
-								</p>
-								{#if !e.ok && e.error}
-									<p class="mt-0.5 text-[11px] text-rose-600 dark:text-rose-400">{e.error}</p>
-								{/if}
-								<p class="mt-0.5 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{fmtTime(e.fetched_at)}</p>
-							</div>
-						</li>
-					{/each}
-				</ul>
+									<p class="mt-0.5 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{fmtTime(e.fetched_at)}</p>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/each}
 			{/if}
 		</div>
 	</div>

@@ -1,4 +1,5 @@
 import { inlineMarkdown } from '$lib/markdown-inline';
+import { linkifyUrls } from '$lib/linkify-url';
 import { noteLinkIds, noteLabel } from '$lib/platform/journal';
 import type { LinkRef } from '$lib/platform/journal';
 
@@ -12,7 +13,7 @@ function esc(s: string): string {
 }
 
 export function linkHref(id: string, kind: LinkRef['kind']): string {
-	return kind === 'principle' ? `/principles/${id}` : `/notes/${id}`;
+	return kind === 'principle' ? `/admin/principles/${id}` : `/admin/notes/${id}`;
 }
 
 /** Inline link pill, shared by rendered note text and the header row. */
@@ -37,19 +38,19 @@ export function renderNoteLinks(
 	});
 }
 
-/** Full pipeline for note body text: markdown, then link pills. */
+/** Full pipeline for note body text: markdown, then bare URLs, then link pills. */
 export function renderNoteContent(source: string, links?: LinkRef[]): string {
 	const map: Record<string, LinkRef> = {};
 	for (const l of links ?? []) map[l.id] = l;
-	return renderNoteLinks(inlineMarkdown(source), map);
+	return renderNoteLinks(linkifyUrls(inlineMarkdown(source)), map);
 }
 
 /** Links-only pipeline for surfaces that stay markdown-free (principles):
- *  escape, then link pills. */
+ *  escape, then bare URLs, then link pills. */
 export function renderPlainLinks(source: string, links?: LinkRef[]): string {
 	const map: Record<string, LinkRef> = {};
 	for (const l of links ?? []) map[l.id] = l;
-	return renderNoteLinks(esc(source), map);
+	return renderNoteLinks(linkifyUrls(esc(source)), map);
 }
 
 /** Find an open `[[query` immediately before the caret. The query may be

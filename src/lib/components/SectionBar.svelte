@@ -4,7 +4,7 @@
 	type Props = {
 		sections: Section[];
 		fixed: Section[];
-		active: SectionId;
+		active: SectionId | null;
 		onSelect: (id: SectionId) => void;
 		onReorder: (ids: SectionId[]) => void;
 	};

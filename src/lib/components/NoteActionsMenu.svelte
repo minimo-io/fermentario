@@ -4,6 +4,7 @@
 	import Copy from '@lucide/svelte/icons/copy';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Star from '@lucide/svelte/icons/star';
+	import Globe from '@lucide/svelte/icons/globe';
 	import Volume2 from '@lucide/svelte/icons/volume-2';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Trash from '@lucide/svelte/icons/trash';
@@ -16,9 +17,10 @@
 		onEdit: (note: Note) => void;
 		onDelete: (note: Note) => void;
 		onFeature: (note: Note) => void;
+		onPublish: (note: Note) => void;
 		onClose: () => void;
 	};
-	let { note, onOpen, onListen, onEdit, onDelete, onFeature, onClose }: Props = $props();
+	let { note, onOpen, onListen, onEdit, onDelete, onFeature, onPublish, onClose }: Props = $props();
 
 	let copied = $state(false);
 	let copyErr = $state('');
@@ -80,6 +82,13 @@
 				onclick={() => { onFeature(note); }}
 			>
 				<Star class="h-4 w-4 fill-amber-400 text-amber-400" /> {note.featured ? 'Unfeature' : 'Feature'}
+			</button>
+			<button
+				type="button"
+				class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+				onclick={() => { onPublish(note); }}
+			>
+				<Globe class="h-4 w-4 text-stone-400 dark:text-stone-500" /> {note.published ? 'Unpublish' : 'Publish'}
 			</button>
 			<button
 				type="button"

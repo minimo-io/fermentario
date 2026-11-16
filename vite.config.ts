@@ -1,7 +1,29 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+import type { Server } from 'node:http';
 import adapter from '@sveltejs/adapter-node';
+
+/**
+ * Serve the Nostr relay while developing too. Production attaches it in
+ * `scripts/start.mjs`; here the dev server's own HTTP server is the only place
+ * that can carry the upgrade. `strictPaths: false` keeps Vite's HMR socket
+ * working: the listener steps aside for every path except `/relay`.
+ */
+function nostrRelayDev(): Plugin {
+	return {
+		name: 'fermentario-nostr-relay',
+		configureServer(server) {
+			const httpServer = server.httpServer;
+			if (!httpServer) return;
+			void import('./scripts/relay.mjs').then(({ attachRelay }) =>
+				// Vite types its server as a union with HTTP/2; in dev it is the
+				// plain HTTP/1 server, which is what the upgrade listener needs.
+				attachRelay(httpServer as unknown as Server, { dataDir: './data', strictPaths: false })
+			);
+		}
+	};
+}
 
 export default defineConfig({
 	server: {
@@ -14,6 +36,7 @@ export default defineConfig({
 	},
 	plugins: [
 		tailwindcss(),
+		nostrRelayDev(),
 		sveltekit({
 			compilerOptions: {
 				runes: ({ filename }) =>

@@ -72,35 +72,42 @@ export function durationText(span: Span, lang: AgeLang): string {
 	return `${parts[0]}, ${parts[1]} ${labels.and} ${parts[2]}`;
 }
 
-/** Short relative time: `just now`, `5 min ago`, `3 h ago`, `2 days ago`.
- *  One minute is the floor; future dates clamp to `just now`. */
-export function timeAgo(atMs: number, lang: AgeLang = 'en', now = Date.now()): string {
+/** Bare duration without wrapper words: `7 days`, `3 h`, `5 min`.
+ *  The diary table and other tight spots use this — no verb, so no language
+ *  can leak through a hardcoded English one. */
+export function shortDuration(atMs: number, lang: AgeLang = 'en', now = Date.now()): string {
 	if (!Number.isFinite(atMs) || atMs <= 0) return '';
 	const mins = Math.max(0, Math.floor((now - atMs) / 60000));
-	if (mins < 1) {
-		return lang === 'es' ? 'ahora mismo' : lang === 'pt' ? 'agora mesmo' : 'just now';
-	}
-	if (mins < 60) {
-		return lang === 'es' ? `hace ${mins} min` : lang === 'pt' ? `há ${mins} min` : `${mins} min ago`;
-	}
+	if (mins < 1) return lang === 'es' ? 'ahora' : lang === 'pt' ? 'agora' : 'now';
+	if (mins < 60) return `${mins} min`;
 	const hours = Math.floor(mins / 60);
-	if (hours < 24) {
-		return lang === 'es' ? `hace ${hours} h` : lang === 'pt' ? `há ${hours} h` : `${hours} h ago`;
-	}
+	if (hours < 24) return `${hours} h`;
 	const days = Math.floor(hours / 24);
 	if (days < 30) {
-		return lang === 'es' ? `hace ${days} ${days === 1 ? 'día' : 'días'}` : lang === 'pt' ? `há ${days} ${days === 1 ? 'dia' : 'dias'}` : `${days} ${days === 1 ? 'day' : 'days'} ago`;
+		const unit = lang === 'es' ? (days === 1 ? 'día' : 'días') : lang === 'pt' ? (days === 1 ? 'dia' : 'dias') : days === 1 ? 'day' : 'days';
+		return `${days} ${unit}`;
 	}
 	const months = Math.floor(days / 30);
 	if (months < 12) {
-		return lang === 'es' ? `hace ${months} ${months === 1 ? 'mes' : 'meses'}` : lang === 'pt' ? `há ${months} ${months === 1 ? 'mês' : 'meses'}` : `${months} ${months === 1 ? 'month' : 'months'} ago`;
+		const unit = lang === 'es' ? (months === 1 ? 'mes' : 'meses') : lang === 'pt' ? (months === 1 ? 'mês' : 'meses') : months === 1 ? 'month' : 'months';
+		return `${months} ${unit}`;
 	}
 	const years = Math.floor(months / 12);
-	return lang === 'es'
-		? `hace ${years} ${years === 1 ? 'año' : 'años'}`
-		: lang === 'pt'
-			? `há ${years} ${years === 1 ? 'ano' : 'anos'}`
-			: `${years} ${years === 1 ? 'year' : 'years'} ago`;
+	const unit =
+		lang === 'es' ? (years === 1 ? 'año' : 'años') : lang === 'pt' ? (years === 1 ? 'ano' : 'anos') : years === 1 ? 'year' : 'years';
+	return `${years} ${unit}`;
+}
+
+/** Position age as a full phrase: `open 3 days ago`, `abierta hace 3
+ *  días`, `aberta há 3 dias`. */
+export function openAge(atMs: number, lang: AgeLang = 'en', now = Date.now()): string {
+	if (!Number.isFinite(atMs) || atMs <= 0) return '';
+	const mins = Math.max(0, Math.floor((now - atMs) / 60000));
+	if (mins < 1) return lang === 'es' ? 'abierta ahora' : lang === 'pt' ? 'aberta agora' : 'just opened';
+	const short = shortDuration(atMs, lang, now);
+	if (lang === 'es') return `abierta hace ${short}`;
+	if (lang === 'pt') return `aberta há ${short}`;
+	return `open ${short} ago`;
 }
 
 /** Split age: `prefix` is the status word (neutral), `duration` is the time
