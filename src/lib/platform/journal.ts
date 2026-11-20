@@ -1,7 +1,8 @@
 import type { SearchHit } from '../search.ts';
 import type { TagCount } from '../tag-cloud.ts';
 import type { SqlDb, SqlValue } from './sqlite';
-import { splitTrailingHashtags } from '../hashtags.ts';
+import { splitHashtags } from '../hashtags.ts';
+import { SLOGAN } from '../brand.ts';
 
 /**
  * Every query the app makes, written once against the `SqlDb` interface.
@@ -125,6 +126,8 @@ export const SCHEMA = `
 
 export interface Note {
 	id: string;
+	/** Optional single-line title; empty when the note has none. */
+	title: string;
 	content: string;
 	created_at: number;
 	updated_at: number;
@@ -142,6 +145,7 @@ export interface Note {
 
 export interface NoteRow {
 	id: string;
+	title: string;
 	content: string;
 	created_at: number;
 	updated_at: number;
@@ -172,7 +176,7 @@ export interface PublicConfig {
 
 export const PUBLIC_CONFIG_DEFAULT: PublicConfig = {
 	siteTitle: 'fermentario',
-	description: 'Published notes.',
+	description: SLOGAN,
 	notesEnabled: true,
 	showCoverImages: true,
 	updatedAt: 0
@@ -313,6 +317,7 @@ export interface TodoItem {
 	commentCount: number;
 	subgroup: string;
 	video: string;
+	photoId?: string | null;
 	tags: string[];
 }
 
@@ -648,6 +653,7 @@ export interface HoldingsSummary {
 
 const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0, links: LinkRef[] = [], coverId: string | null = null): Note => ({
 	id: r.id,
+	title: r.title ?? '',
 	content: r.content,
 	created_at: r.created_at,
 	updated_at: r.updated_at,
@@ -714,8 +720,12 @@ export interface TradingOrg {
 	name: string;
 	enabled: boolean;
 	feeRate: number;
+	/** Ripio's sale-side gap to the screen price. Zero on B3. */
+	spreadRate: number;
 	irrfRate: number;
 	fixedFee: number;
+	/** What the venue's percentage fee covers, in the user's words. */
+	feeNote: string;
 	exemptLimit: number;
 	position: number;
 	created_at: number;
@@ -733,15 +743,26 @@ export interface TradingOrder {
 	fees: number;
 	irrf: number;
 	net: number;
+	/** The venue rules at the moment this order was recorded. A later fee
+	 *  edit must not rewrite this row, so every recompute reads these. */
+	feeRate: number;
+	spreadRate: number;
+	irrfRate: number;
+	fixedFee: number;
 	date: number;
 	month: string;
 	created_at: number;
 }
 
-/** A diary line; sales carry their profit over the open cost basis. */
+/** A diary line; sales carry their profit over the open cost basis. A buy
+ *  also carries the goal of the day it was recorded: the price and the net
+ *  that goal asks for. */
 export interface TradingDiaryLine extends TradingOrder {
 	profit: number | null;
 	profitPct: number | null;
+	targetPct: number;
+	goalPrice: number | null;
+	netAtGoal: number | null;
 }
 
 /** An open ticker position with its live quote and recommendation. */
@@ -766,7 +787,24 @@ export interface TradingPosition {
 	/** Cash the position would actually yield selling now, sell costs off. */
 	netValue: number | null;
 	/** Itemized sell costs behind the net value. */
-	sellFees: { fee: number; irrf: number; fixed: number; feeRatePct: number; irrfRatePct: number } | null;
+	sellFees: {
+		fee: number;
+		spread: number;
+		irrf: number;
+		fixed: number;
+		feeRatePct: number;
+		spreadRatePct: number;
+		irrfRatePct: number;
+	} | null;
+	/** The cost rules the open buys were recorded with, weighted by their
+	 *  net. The goal price uses these, so a later fee edit cannot move the
+	 *  target of a position that already exists. */
+	goalFees: {
+		feeRatePct: number;
+		spreadRatePct: number;
+		irrfRatePct: number;
+		fixedFee: number;
+	};
 	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
 }
 
@@ -819,8 +857,48 @@ export interface TradingStripItem {
 	/** Cash the position would actually yield selling now, sell costs off. */
 	netValue: number | null;
 	/** Itemized sell costs behind the net value. */
-	sellFees: { fee: number; irrf: number; fixed: number; feeRatePct: number; irrfRatePct: number } | null;
+	sellFees: {
+		fee: number;
+		spread: number;
+		irrf: number;
+		fixed: number;
+		feeRatePct: number;
+		spreadRatePct: number;
+		irrfRatePct: number;
+	} | null;
+	/** The cost rules the open buys were recorded with, weighted by their
+	 *  net. The goal price uses these, so a later fee edit cannot move the
+	 *  target of a position that already exists. */
+	goalFees: {
+		feeRatePct: number;
+		spreadRatePct: number;
+		irrfRatePct: number;
+		fixedFee: number;
+	};
 	recommendation: 'waiting' | 'hold' | 'sell' | 'daytrade';
+}
+
+/** One money figure shown in the three currencies the app displays. USD is
+ *  the base; BRL and UYU divide it by the stored rate for that currency, so
+ *  a missing rate is null instead of a 1:1 guess. */
+export type TradingMoneyTriple = { USD: number | null; BRL: number | null; UYU: number | null };
+
+/** Totals over every open trade in every enabled venue. `invested` counts
+ *  the buy net (buy fees in), `now` the cash a sale at the stored quote
+ *  would yield (sell costs out), `atGoal` the net each goal asks for. */
+export interface TradingStripTotals {
+	count: number;
+	/** Open positions whose current value is unknown (no quote yet). */
+	missingQuotes: number;
+	invested: TradingMoneyTriple;
+	now: TradingMoneyTriple;
+	atGoal: TradingMoneyTriple;
+}
+
+/** The home-page trading rail plus its totals. */
+export interface TradingStrip {
+	positions: TradingStripItem[];
+	totals: TradingStripTotals;
 }
 
 export function createJournal(db: SqlDb) {
@@ -1001,6 +1079,36 @@ export function createJournal(db: SqlDb) {
 			next.updatedAt
 		);
 		return getPublicConfig();
+	}
+
+	// --- Quick note ---------------------------------------------------------
+
+	/** The quick note is a scratchpad, not a journal entry: one row, no tags, no
+	 *  publishing, and no shape other than text. */
+	type QuickNote = { content: string; updatedAt: number };
+	const QUICK_NOTE_MAX = 100_000;
+
+	function getQuickNote(): QuickNote {
+		try {
+			const row = db
+				.prepare('SELECT content, updated_at FROM quick_note WHERE id = 1')
+				.get() as unknown as { content: string; updated_at: number } | undefined;
+			if (!row) return { content: '', updatedAt: 0 };
+			return { content: row.content, updatedAt: row.updated_at };
+		} catch {
+			// Migration 39 creates the row. Older databases fall back safely.
+			return { content: '', updatedAt: 0 };
+		}
+	}
+
+	function setQuickNote(content: string): QuickNote {
+		const next = String(content ?? '').slice(0, QUICK_NOTE_MAX);
+		const updatedAt = Date.now();
+		db.prepare(
+			`INSERT INTO quick_note (id, content, updated_at) VALUES (1, ?, ?)
+			 ON CONFLICT (id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`
+		).run(next, updatedAt);
+		return { content: next, updatedAt };
 	}
 
 	// --- Library ------------------------------------------------------------
@@ -1405,7 +1513,7 @@ export function createJournal(db: SqlDb) {
 			now
 		);
 		db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
-		return { id, content, created_at: now, updated_at: now, featured: false, video: '', published: false, coverId: null, tags: [] };
+		return { id, title: '', content, created_at: now, updated_at: now, featured: false, video: '', published: false, coverId: null, tags: [] };
 	}
 
 	function deleteNote(id: string): boolean {
@@ -1510,6 +1618,21 @@ export function createJournal(db: SqlDb) {
 	function setNoteVideo(id: string, video: string): Note | null {
 		const done = db.prepare('UPDATE notes SET video = ? WHERE id = ?').run(video, id).changes > 0;
 		if (!done) return null;
+		return getNote(id);
+	}
+
+	/** Set or clear the optional title. Titles are single-line and capped;
+	 *  only the title column and updated_at change. Returns null when the
+	 *  note does not exist. */
+	function setNoteTitle(id: string, title: string): Note | null {
+		const existing = db.prepare('SELECT title, created_at FROM notes WHERE id = ?').get(id) as
+			| { title: string; created_at: number }
+			| undefined;
+		if (!existing) return null;
+		const clean = title.replace(/\s+/g, ' ').trim().slice(0, 120);
+		if (existing.title === clean) return getNote(id);
+		const updated = Math.max(Date.now(), existing.created_at + 1);
+		db.prepare('UPDATE notes SET title = ?, updated_at = ? WHERE id = ?').run(clean, updated, id);
 		return getNote(id);
 	}
 
@@ -1675,7 +1798,7 @@ export function createJournal(db: SqlDb) {
 		comment_count: number;
 	}
 
-	const rowToTodoItem = (r: TodoItemRow, tags: string[] = []): TodoItem => ({
+	const rowToTodoItem = (r: TodoItemRow, tags: string[] = [], photoId: string | null = null): TodoItem => ({
 		id: r.id,
 		group_id: r.group_id,
 		content: r.content,
@@ -1688,8 +1811,22 @@ export function createJournal(db: SqlDb) {
 		commentCount: r.comment_count ?? 0,
 		subgroup: r.subgroup ?? '',
 		video: r.video ?? '',
+		photoId,
 		tags
 	});
+
+	/** Photo id per item, one query for a whole list. */
+	function photoIdsByItem(rows: { id: string }[]): Map<string, string> {
+		const map = new Map<string, string>();
+		if (rows.length === 0) return map;
+		const ids = rows.map((r) => r.id);
+		const placeholders = ids.map(() => '?').join(',');
+		const photoRows = db
+			.prepare(`SELECT item_id, id FROM todo_item_photos WHERE item_id IN (${placeholders})`)
+			.all(...ids) as unknown as { item_id: string; id: string }[];
+		for (const p of photoRows) map.set(p.item_id, p.id);
+		return map;
+	}
 
 	function listTodoItems(groupId: string): TodoItem[] {
 		const rows = db
@@ -1699,13 +1836,64 @@ export function createJournal(db: SqlDb) {
 			)
 			.all(groupId) as unknown as TodoItemRow[];
 		const tags = tagsByItem(rows);
-		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
+		const photos = photoIdsByItem(rows);
+		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? [], photos.get(r.id) ?? null));
 	}
 
 	function getTodoItem(id: string): TodoItem | null {
 		const r = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as unknown as TodoItemRow | undefined;
 		if (!r) return null;
-		return rowToTodoItem(r, tagsByItem([r]).get(r.id) ?? []);
+		return rowToTodoItem(
+			r,
+			tagsByItem([r]).get(r.id) ?? [],
+			photoIdsByItem([r]).get(r.id) ?? null
+		);
+	}
+
+	/** Set (replacing) an item's image. Null bytes clear it. */
+	function setTodoItemPhoto(
+		itemId: string,
+		photo: Uint8Array | null,
+		mime: string
+	): { id: string; created_at: number } | null {
+		const exists = db.prepare('SELECT id FROM todo_items WHERE id = ?').get(itemId) as unknown as
+			| { id: string }
+			| undefined;
+		if (!exists) return null;
+		if (photo === null) {
+			db.prepare('DELETE FROM todo_item_photos WHERE item_id = ?').run(itemId);
+			return null;
+		}
+		const id = crypto.randomUUID();
+		const now = Date.now();
+		db.transaction(() => {
+			db.prepare('DELETE FROM todo_item_photos WHERE item_id = ?').run(itemId);
+			db.prepare(
+				'INSERT INTO todo_item_photos (id, item_id, photo, mime, created_at) VALUES (?, ?, ?, ?, ?)'
+			).run(id, itemId, photo as unknown as string, mime, now);
+		});
+		return { id, created_at: now };
+	}
+
+	/** Remove an item's image. True when a row went away. */
+	function removeTodoItemPhoto(itemId: string): boolean {
+		return db.prepare('DELETE FROM todo_item_photos WHERE item_id = ?').run(itemId).changes > 0;
+	}
+
+	/** Item image bytes by photo id. */
+	function getTodoItemPhoto(photoId: string): { photo: Uint8Array; mime: string; createdAt: number } | null {
+		let r: { photo: unknown; mime: string; created_at: number } | undefined;
+		try {
+			r = db
+				.prepare('SELECT photo, mime, created_at FROM todo_item_photos WHERE id = ?')
+				.get(photoId) as unknown as { photo: unknown; mime: string; created_at: number } | undefined;
+		} catch {
+			return null;
+		}
+		if (!r || r.photo === null || r.photo === undefined) return null;
+		const bytes = toBytes(r.photo);
+		if (bytes.length === 0) return null;
+		return { photo: bytes, mime: r.mime || 'image/jpeg', createdAt: r.created_at };
 	}
 
 	function createTodoItem(groupId: string, content: string, createdAt: number, subgroup = '', video = ''): TodoItem | null {
@@ -1718,7 +1906,7 @@ export function createJournal(db: SqlDb) {
 		db.prepare(
 			'INSERT INTO todo_items (id, group_id, content, done, done_at, in_progress, subgroup, video, position, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?)'
 		).run(id, groupId, clean, subgroup, video, max.m + 1, createdAt, createdAt);
-		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, subgroup, video, tags: [] };
+		return { id, group_id: groupId, content: clean, done: false, done_at: 0, inProgress: false, position: max.m + 1, created_at: createdAt, updated_at: createdAt, commentCount: 0, subgroup, video, photoId: null, tags: [] };
 	}
 
 	/** Edit text and/or checked state. `updated_at` always moves past
@@ -1772,7 +1960,8 @@ export function createJournal(db: SqlDb) {
 			)
 			.all(clean) as unknown as TodoItemRow[];
 		const tags = tagsByItem(rows);
-		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? []));
+		const photos = photoIdsByItem(rows);
+		return rows.map((r) => rowToTodoItem(r, tags.get(r.id) ?? [], photos.get(r.id) ?? null));
 	}
 
 	/** Every in-progress item across groups, with its group name attached. */
@@ -1786,7 +1975,11 @@ export function createJournal(db: SqlDb) {
 			)
 			.all() as unknown as (TodoItemRow & { group_name: string })[];
 		const tags = tagsByItem(rows);
-		return rows.map((r) => ({ ...rowToTodoItem(r, tags.get(r.id) ?? []), groupName: r.group_name }));
+		const photos = photoIdsByItem(rows);
+		return rows.map((r) => ({
+			...rowToTodoItem(r, tags.get(r.id) ?? [], photos.get(r.id) ?? null),
+			groupName: r.group_name
+		}));
 	}
 
 	/** Done items across every group, latest completion first. */
@@ -1806,8 +1999,9 @@ export function createJournal(db: SqlDb) {
 		const hasMore = rows.length > safeLimit;
 		const page = hasMore ? rows.slice(0, safeLimit) : rows;
 		const tags = tagsByItem(page);
+		const photos = photoIdsByItem(page);
 		const items = page.map((r) => ({
-			...rowToTodoItem(r, tags.get(r.id) ?? []),
+			...rowToTodoItem(r, tags.get(r.id) ?? [], photos.get(r.id) ?? null),
 			groupName: r.group_name
 		}));
 		const last = page[page.length - 1];
@@ -3096,8 +3290,10 @@ export function createJournal(db: SqlDb) {
 		name: string;
 		enabled: number;
 		fee_rate: number;
+		spread_rate: number;
 		irrf_rate: number;
 		fixed_fee: number;
+		fee_note: string;
 		exempt_limit: number;
 		position: number;
 		created_at: number;
@@ -3114,6 +3310,10 @@ export function createJournal(db: SqlDb) {
 		fees: number;
 		irrf: number;
 		net: number;
+		fee_rate: number;
+		spread_rate: number;
+		irrf_rate: number;
+		fixed_fee: number;
 		date: number;
 		month: string;
 		created_at: number;
@@ -3136,8 +3336,10 @@ export function createJournal(db: SqlDb) {
 			name: r.name,
 			enabled: r.enabled === 1,
 			feeRate: r.fee_rate ?? 0,
+			spreadRate: r.spread_rate ?? 0,
 			irrfRate: r.irrf_rate ?? 0,
 			fixedFee: r.fixed_fee ?? 0,
+			feeNote: r.fee_note ?? '',
 			exemptLimit: r.exempt_limit ?? 20000,
 			position: r.position ?? 0,
 			created_at: r.created_at ?? 0
@@ -3164,7 +3366,15 @@ export function createJournal(db: SqlDb) {
 
 	function updateTradingOrg(
 		id: string,
-		patch: { feeRate?: unknown; irrfRate?: unknown; fixedFee?: unknown; exemptLimit?: unknown; enabled?: unknown }
+		patch: {
+			feeRate?: unknown;
+			spreadRate?: unknown;
+			irrfRate?: unknown;
+			fixedFee?: unknown;
+			feeNote?: unknown;
+			exemptLimit?: unknown;
+			enabled?: unknown;
+		}
 	): TradingOrg | null {
 		const org = getTradingOrg(id);
 		if (!org) return null;
@@ -3184,19 +3394,24 @@ export function createJournal(db: SqlDb) {
 			return Number.isFinite(n) && n >= 0 ? n : NaN;
 		};
 		const feeRate = patch.feeRate === undefined ? org.feeRate : num(patch.feeRate);
+		const spreadRate = patch.spreadRate === undefined ? org.spreadRate : num(patch.spreadRate);
 		const irrfRate = patch.irrfRate === undefined ? org.irrfRate : num(patch.irrfRate);
 		const fixedFee = patch.fixedFee === undefined ? org.fixedFee : num(patch.fixedFee);
+		const feeNote = patch.feeNote === undefined ? org.feeNote : String(patch.feeNote ?? '').trim().slice(0, 160);
 		const exemptLimit = patch.exemptLimit === undefined ? org.exemptLimit : num(patch.exemptLimit);
 		if (feeRate === null || Number.isNaN(feeRate as number)) return null;
+		if (spreadRate === null || Number.isNaN(spreadRate as number)) return null;
 		if (irrfRate === null || Number.isNaN(irrfRate as number)) return null;
 		if (fixedFee === null || Number.isNaN(fixedFee as number)) return null;
 		if (exemptLimit === null || Number.isNaN(exemptLimit as number)) return null;
-		if ((feeRate as number) > 0.1 || (irrfRate as number) > 0.1) return null;
+		if ((feeRate as number) > 0.1 || (spreadRate as number) > 0.1 || (irrfRate as number) > 0.1) return null;
 		try {
-			db.prepare('UPDATE trading_orgs SET fee_rate = ?, irrf_rate = ?, fixed_fee = ?, exempt_limit = ?, enabled = ? WHERE id = ?').run(
+			db.prepare('UPDATE trading_orgs SET fee_rate = ?, spread_rate = ?, irrf_rate = ?, fixed_fee = ?, fee_note = ?, exempt_limit = ?, enabled = ? WHERE id = ?').run(
 				feeRate as number,
+				spreadRate as number,
 				irrfRate as number,
 				fixedFee as number,
+				feeNote,
 				exemptLimit as number,
 				enabled ? 1 : 0,
 				id
@@ -3223,6 +3438,10 @@ export function createJournal(db: SqlDb) {
 				fees: r.fees ?? 0,
 				irrf: r.irrf ?? 0,
 				net: r.net,
+				feeRate: r.fee_rate ?? 0,
+				spreadRate: r.spread_rate ?? 0,
+				irrfRate: r.irrf_rate ?? 0,
+				fixedFee: r.fixed_fee ?? 0,
 				date: r.date,
 				month: r.month,
 				created_at: r.created_at
@@ -3236,14 +3455,33 @@ export function createJournal(db: SqlDb) {
 	 *  order. A sale always empties its ticker, so at most one open group
 	 *  exists per ticker. `since` is the earliest open buy: selling while it
 	 *  is today is a day trade, not a swing trade. */
-	function openTradingPositions(orders: TradingOrder[]): Map<string, { qty: number; cost: number; value: number; since: number }> {
-		const open = new Map<string, { qty: number; cost: number; value: number; since: number }>();
+	type OpenPosition = {
+		qty: number;
+		cost: number;
+		value: number;
+		since: number;
+		/** Each buy's rate times its net, summed: divided by `cost` it gives
+		 *  the rate the position's goal is priced with. */
+		feeWeight: number;
+		spreadWeight: number;
+		irrfWeight: number;
+		/** One sale pays one fixed fee, so the largest buy rule wins. */
+		fixed: number;
+	};
+
+	function openTradingPositions(orders: TradingOrder[]): Map<string, OpenPosition> {
+		const open = new Map<string, OpenPosition>();
 		for (const o of orders) {
-			const cur = open.get(o.ticker) ?? { qty: 0, cost: 0, value: 0, since: o.date };
+			const cur =
+				open.get(o.ticker) ?? { qty: 0, cost: 0, value: 0, since: o.date, feeWeight: 0, spreadWeight: 0, irrfWeight: 0, fixed: 0 };
 			if (o.side === 'BUY') {
 				cur.qty += o.qty;
 				cur.cost += o.net;
 				cur.value += o.value;
+				cur.feeWeight += o.net * o.feeRate;
+				cur.spreadWeight += o.net * o.spreadRate;
+				cur.irrfWeight += o.net * o.irrfRate;
+				cur.fixed = Math.max(cur.fixed, o.fixedFee);
 				if (o.date < cur.since) cur.since = o.date;
 				open.set(o.ticker, cur);
 			} else if (cur.qty > 0) {
@@ -3253,6 +3491,23 @@ export function createJournal(db: SqlDb) {
 		return open;
 	}
 
+	/** The rate the position's goal is priced with: the open buys' own rules,
+	 *  weighted by net. A fee edit in Fees applies to new buys only. */
+	function goalRules(pos: { cost: number; feeWeight: number; spreadWeight: number; irrfWeight: number; fixed: number }): {
+		feeRate: number;
+		spreadRate: number;
+		irrfRate: number;
+		fixedFee: number;
+	} {
+		const base = pos.cost > 0 ? pos.cost : 1;
+		return {
+			feeRate: pos.feeWeight / base,
+			spreadRate: pos.spreadWeight / base,
+			irrfRate: pos.irrfWeight / base,
+			fixedFee: pos.fixed
+		};
+	}
+
 	function createTradingOrder(input: {
 		orgId?: unknown;
 		ticker?: unknown;
@@ -3260,6 +3515,8 @@ export function createJournal(db: SqlDb) {
 		qty?: unknown;
 		unitPrice?: unknown;
 		date?: unknown;
+		/** Goal for this buy, as a fraction (0.03 = 3%). */
+		targetPct?: unknown;
 	}): TradingOrder | { error: string } {
 		const org = getTradingOrg(String(input.orgId ?? ''));
 		if (!org || !org.enabled) return { error: 'unknown or disabled organization' };
@@ -3273,6 +3530,11 @@ export function createJournal(db: SqlDb) {
 		if (!Number.isFinite(unitPrice) || unitPrice <= 0) return { error: 'unit price must be > 0' };
 		const date = Number(input.date);
 		const at = Number.isFinite(date) && date > 0 ? Math.min(date, Date.now()) : Date.now();
+		// The goal belongs to the buy that sets it: a later buy of the same
+		// ticker overwrites it, and a sale does not touch it.
+		const rawTarget = input.targetPct === undefined || input.targetPct === null ? NaN : Number(input.targetPct);
+		const targetPct = Number.isFinite(rawTarget) && rawTarget >= 0 && rawTarget <= 10 ? rawTarget : null;
+		if (side === 'BUY' && input.targetPct !== undefined && targetPct === null) return { error: 'goal must be between 0 and 1000%' };
 		const open = openTradingPositions(listTradingOrders(org.id)).get(ticker) ?? { qty: 0, cost: 0, value: 0 };
 		if (side === 'SELL') {
 			// Full-position sales only: the diary never holds a remainder.
@@ -3285,9 +3547,20 @@ export function createJournal(db: SqlDb) {
 		const net = side === 'BUY' ? value + fees : value - fees - irrf;
 		try {
 			const id = crypto.randomUUID();
+			// The four rates travel with the row: a later fee edit belongs to
+			// future orders, never to this one.
 			db.prepare(
-				'INSERT INTO trading_orders (id, org_id, ticker, side, qty, unit_price, value, fees, irrf, net, date, month, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-			).run(id, org.id, ticker, side, qty, unitPrice, value, fees, irrf, net, at, tradingMonthKey(at), Date.now());
+				'INSERT INTO trading_orders (id, org_id, ticker, side, qty, unit_price, value, fees, irrf, net, fee_rate, spread_rate, irrf_rate, fixed_fee, date, month, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+			).run(
+				id, org.id, ticker, side, qty, unitPrice, value, fees, irrf, net,
+				org.feeRate, org.spreadRate, org.irrfRate, org.fixedFee,
+				at, tradingMonthKey(at), Date.now()
+			);
+			if (side === 'BUY' && targetPct !== null) {
+				db.prepare(
+					'INSERT INTO trading_targets (org_id, ticker, target_pct, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (org_id, ticker) DO UPDATE SET target_pct = excluded.target_pct, updated_at = excluded.updated_at'
+				).run(org.id, ticker, targetPct, Date.now());
+			}
 			const row = db.prepare('SELECT * FROM trading_orders WHERE id = ?').get(id) as unknown as TradingOrderRow;
 			return {
 				id: row.id,
@@ -3300,9 +3573,99 @@ export function createJournal(db: SqlDb) {
 				fees: row.fees ?? 0,
 				irrf: row.irrf ?? 0,
 				net: row.net,
+				feeRate: row.fee_rate ?? 0,
+				spreadRate: row.spread_rate ?? 0,
+				irrfRate: row.irrf_rate ?? 0,
+				fixedFee: row.fixed_fee ?? 0,
 				date: row.date,
 				month: row.month,
 				created_at: row.created_at
+			};
+		} catch {
+			return { error: 'could not save the order' };
+		}
+	}
+
+	/** Correct the latest order of its venue. Earlier rows are the cost basis
+	 *  of later sales, so a rewrite would change history: the rule that guards
+	 *  delete guards edit too. Value, fees, net and month come from the venue's
+	 *  current cost rules, never from the client. The ticker stays put, because
+	 *  a rename would orphan the goal stored under that ticker. */
+	function updateTradingOrder(
+		id: string,
+		input: { qty?: unknown; unitPrice?: unknown; date?: unknown; targetPct?: unknown }
+	): TradingOrder | { error: string } {
+		let row: TradingOrderRow | undefined;
+		try {
+			row = db.prepare('SELECT * FROM trading_orders WHERE id = ?').get(String(id)) as unknown as TradingOrderRow | undefined;
+		} catch {
+			return { error: 'could not read the order' };
+		}
+		if (!row) return { error: 'order not found' };
+		const latest = db
+			.prepare('SELECT id FROM trading_orders WHERE org_id = ? ORDER BY date DESC, created_at DESC, id DESC LIMIT 1')
+			.get(row.org_id) as unknown as { id: string } | undefined;
+		if (!latest || latest.id !== row.id) return { error: 'only the latest order can be edited' };
+		const org = getTradingOrg(row.org_id);
+		if (!org || !org.enabled) return { error: 'unknown or disabled organization' };
+		const side = row.side === 'SELL' ? 'SELL' : 'BUY';
+		const qty = input.qty === undefined ? row.qty : Number(input.qty);
+		const unitPrice = input.unitPrice === undefined ? row.unit_price : Number(input.unitPrice);
+		if (!Number.isFinite(qty) || qty <= 0) return { error: 'quantity must be > 0' };
+		if (!Number.isFinite(unitPrice) || unitPrice <= 0) return { error: 'unit price must be > 0' };
+		const rawDate = Number(input.date);
+		const at = Number.isFinite(rawDate) && rawDate > 0 ? Math.min(rawDate, Date.now()) : row.date;
+		const rawTarget = input.targetPct === undefined || input.targetPct === null ? NaN : Number(input.targetPct);
+		const targetPct = Number.isFinite(rawTarget) && rawTarget >= 0 && rawTarget <= 10 ? rawTarget : null;
+		if (side === 'BUY' && input.targetPct !== undefined && targetPct === null) return { error: 'goal must be between 0 and 1000%' };
+		// The date keeps its place in the replay: moving the row behind an
+		// order that already ran would leave a sale without its cost basis.
+		const previous = db
+			.prepare('SELECT MAX(date) AS at FROM trading_orders WHERE org_id = ? AND id != ?')
+			.get(org.id, row.id) as unknown as { at: number | null };
+		if (previous.at !== null && at < previous.at) return { error: 'the date cannot be earlier than the previous order' };
+		if (side === 'SELL') {
+			// A sale always closes the whole position, now against the other.
+			const others = listTradingOrders(org.id).filter((o) => o.id !== row.id);
+			const open = openTradingPositions(others).get(row.ticker) ?? { qty: 0 };
+			if (!(open.qty > 0)) return { error: 'no open position in this ticker' };
+			if (Math.abs(qty - open.qty) > 1e-9) return { error: `a sale must close the full position (${open.qty})` };
+		}
+		// Recompute with the rates this order was recorded with, not with the
+		// venue's current rules: a fee edit must leave past money alone.
+		const rules = { feeRate: row.fee_rate ?? 0, spreadRate: row.spread_rate ?? 0, irrfRate: row.irrf_rate ?? 0, fixedFee: row.fixed_fee ?? 0 };
+		const value = qty * unitPrice;
+		const fees = value * rules.feeRate + rules.fixedFee;
+		const irrf = side === 'SELL' ? value * rules.irrfRate : 0;
+		const net = side === 'BUY' ? value + fees : value - fees - irrf;
+		try {
+			db.prepare(
+				'UPDATE trading_orders SET qty = ?, unit_price = ?, value = ?, fees = ?, irrf = ?, net = ?, date = ?, month = ? WHERE id = ?'
+			).run(qty, unitPrice, value, fees, irrf, net, at, tradingMonthKey(at), row.id);
+			if (side === 'BUY' && targetPct !== null) {
+				db.prepare(
+					'INSERT INTO trading_targets (org_id, ticker, target_pct, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (org_id, ticker) DO UPDATE SET target_pct = excluded.target_pct, updated_at = excluded.updated_at'
+				).run(org.id, row.ticker, targetPct, Date.now());
+			}
+			const fresh = db.prepare('SELECT * FROM trading_orders WHERE id = ?').get(row.id) as unknown as TradingOrderRow;
+			return {
+				id: fresh.id,
+				orgId: fresh.org_id,
+				ticker: fresh.ticker,
+				side: fresh.side === 'SELL' ? 'SELL' : 'BUY',
+				qty: fresh.qty,
+				unitPrice: fresh.unit_price,
+				value: fresh.value,
+				fees: fresh.fees ?? 0,
+				irrf: fresh.irrf ?? 0,
+				net: fresh.net,
+				feeRate: fresh.fee_rate ?? 0,
+				spreadRate: fresh.spread_rate ?? 0,
+				irrfRate: fresh.irrf_rate ?? 0,
+				fixedFee: fresh.fixed_fee ?? 0,
+				date: fresh.date,
+				month: fresh.month,
+				created_at: fresh.created_at
 			};
 		} catch {
 			return { error: 'could not save the order' };
@@ -3493,12 +3856,12 @@ export function createJournal(db: SqlDb) {
 	}
 
 	/** Net cash of selling `qty` units at `quote` right now: the quote
-	 *  value minus the venue's sell fee, dedo-duro and fixed fee. Null
-	 *  without a usable quote. */
+	 *  value minus the venue's spread, sell fee, dedo-duro and fixed fee.
+	 *  Null without a usable quote. */
 	function saleNet(
 		qty: number,
 		quote: number | null,
-		org: { feeRate: number; irrfRate: number; fixedFee: number }
+		org: { feeRate: number; spreadRate: number; irrfRate: number; fixedFee: number }
 	): number | null {
 		return saleBreakdown(qty, quote, org)?.net ?? null;
 	}
@@ -3507,16 +3870,35 @@ export function createJournal(db: SqlDb) {
 	function saleBreakdown(
 		qty: number,
 		quote: number | null,
-		org: { feeRate: number; irrfRate: number; fixedFee: number }
-	): { net: number; fee: number; irrf: number; fixed: number; feeRatePct: number; irrfRatePct: number } | null {
+		org: { feeRate: number; spreadRate: number; irrfRate: number; fixedFee: number }
+	): {
+		net: number;
+		fee: number;
+		spread: number;
+		irrf: number;
+		fixed: number;
+		feeRatePct: number;
+		spreadRatePct: number;
+		irrfRatePct: number;
+	} | null {
 		if (quote === null || !Number.isFinite(quote) || quote <= 0 || !(qty > 0)) return null;
 		const value = qty * quote;
 		const fee = value * org.feeRate;
+		const spread = value * org.spreadRate;
 		const irrf = value * org.irrfRate;
 		const fixed = org.fixedFee;
-		const net = value - fee - irrf - fixed;
+		const net = value - fee - spread - irrf - fixed;
 		if (!Number.isFinite(net)) return null;
-		return { net, fee, irrf, fixed, feeRatePct: org.feeRate * 100, irrfRatePct: org.irrfRate * 100 };
+		return {
+			net,
+			fee,
+			spread,
+			irrf,
+			fixed,
+			feeRatePct: org.feeRate * 100,
+			spreadRatePct: org.spreadRate * 100,
+			irrfRatePct: org.irrfRate * 100
+		};
 	}
 
 	/** Forward-looking swing estimate for one open position, using the
@@ -3527,24 +3909,23 @@ export function createJournal(db: SqlDb) {
 		qty: number,
 		cost: number,
 		quote: number | null,
-		org: { feeRate: number; irrfRate: number; fixedFee: number }
+		org: { feeRate: number; spreadRate: number; irrfRate: number; fixedFee: number }
 	): number | null {
 		if (quote === null || !Number.isFinite(quote) || quote <= 0 || cost <= 0) return null;
 		const net = saleNet(qty, quote, org);
 		if (net === null) return null;
 		return ((net - cost) / cost) * 100;
-	}
-
-	/** Unit sell price whose net clears the target: `qty × P` minus sell
-	 *  fees, dedo-duro and the fixed fee must equal `cost × (1 + target)`.
-	 *  Null without a usable position or a degenerate fee config. */
+	}	/** Unit sell price whose net clears the target: `qty × P` minus the
+	 *  spread, sell fees, dedo-duro and the fixed fee must equal
+	 *  `cost × (1 + target)`. Null without a usable position or a
+	 *  degenerate fee config. */
 	function targetSellPrice(
 		qty: number,
 		cost: number,
 		targetPct: number,
-		org: { feeRate: number; irrfRate: number; fixedFee: number }
+		org: { feeRate: number; spreadRate: number; irrfRate: number; fixedFee: number }
 	): number | null {
-		const rate = 1 - org.feeRate - org.irrfRate;
+		const rate = 1 - org.feeRate - org.spreadRate - org.irrfRate;
 		if (!(qty > 0) || !(cost > 0) || !(rate > 0)) return null;
 		const price = (cost * (1 + targetPct) + org.fixedFee) / (qty * rate);
 		return Number.isFinite(price) && price > 0 ? price : null;
@@ -3569,19 +3950,41 @@ export function createJournal(db: SqlDb) {
 		// Diary: replay in order, attaching each sale its profit over the
 		// open cost basis before the position closes.
 		const diary: TradingDiaryLine[] = [];
-		const open = new Map<string, { qty: number; cost: number; value: number; since: number }>();
+		const open = new Map<string, OpenPosition>();
 		for (const o of orders) {
-			const cur = open.get(o.ticker) ?? { qty: 0, cost: 0, value: 0, since: o.date };
+			const cur: OpenPosition =
+				open.get(o.ticker) ?? { qty: 0, cost: 0, value: 0, since: o.date, feeWeight: 0, spreadWeight: 0, irrfWeight: 0, fixed: 0 };
 			if (o.side === 'BUY') {
 				cur.qty += o.qty;
 				cur.cost += o.net;
 				cur.value += o.value;
+				cur.feeWeight += o.net * o.feeRate;
+				cur.spreadWeight += o.net * o.spreadRate;
+				cur.irrfWeight += o.net * o.irrfRate;
+				cur.fixed = Math.max(cur.fixed, o.fixedFee);
 				if (o.date < cur.since) cur.since = o.date;
 				open.set(o.ticker, cur);
-				diary.push({ ...o, profit: null, profitPct: null });
+				// A buy carries the goal it was recorded with, so the diary can
+				// name the price that goal asks for and the net it yields.
+				const targetPct = targets[o.ticker] ?? 0.03;
+				diary.push({
+					...o,
+					profit: null,
+					profitPct: null,
+					targetPct,
+					goalPrice: targetSellPrice(o.qty, o.net, targetPct, o),
+					netAtGoal: o.net * (1 + targetPct)
+				});
 			} else {
 				const profit = o.net - cur.cost;
-				diary.push({ ...o, profit, profitPct: cur.cost > 0 ? (profit / cur.cost) * 100 : null });
+				diary.push({
+					...o,
+					profit,
+					profitPct: cur.cost > 0 ? (profit / cur.cost) * 100 : null,
+					targetPct: targets[o.ticker] ?? 0.03,
+					goalPrice: null,
+					netAtGoal: null
+				});
 				open.delete(o.ticker);
 			}
 		}
@@ -3592,6 +3995,7 @@ export function createJournal(db: SqlDb) {
 			const avgPrice = pos.qty > 0 ? pos.value / pos.qty : 0;
 			const targetPct = targets[ticker] ?? 0.03;
 			const potentialPct = positionPotential(pos.qty, pos.cost, quote?.price ?? null, org);
+			const rules = goalRules(pos);
 			// Selling while every open buy is from today is a day trade
 			// (20% IR, no exemption), never a swing sale — even past target.
 			const sameDay = localDayKey(pos.since) === today;
@@ -3610,9 +4014,15 @@ export function createJournal(db: SqlDb) {
 				potentialPct,
 				sameDay,
 				since: pos.since,
-				targetPrice: targetSellPrice(pos.qty, pos.cost, targetPct, org),
+				targetPrice: targetSellPrice(pos.qty, pos.cost, targetPct, rules),
 				netValue: saleNet(pos.qty, quote?.price ?? null, org),
 				sellFees: saleBreakdown(pos.qty, quote?.price ?? null, org),
+				goalFees: {
+					feeRatePct: rules.feeRate * 100,
+					spreadRatePct: rules.spreadRate * 100,
+					irrfRatePct: rules.irrfRate * 100,
+					fixedFee: rules.fixedFee
+				},
 				recommendation:
 					quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
 			});
@@ -3661,9 +4071,10 @@ export function createJournal(db: SqlDb) {
 		return { org, orders: diary, positions, months };
 	}
 
-	/** One card per open ticker across every enabled venue: the home-page
-	 *  strip below the holdings carousel. */
-	function getTradingStrip(): TradingStripItem[] {
+	/** One card per open ticker across every enabled venue, plus the money
+	 *  totals of the whole rail: the home-page strip below the holdings
+	 *  carousel. */
+	function getTradingStrip(): TradingStrip {
 		const out: TradingStripItem[] = [];
 		for (const org of listTradingOrgs().filter((o) => o.enabled)) {
 			const orders = listTradingOrders(org.id);
@@ -3684,6 +4095,7 @@ export function createJournal(db: SqlDb) {
 				const targetPct = targets[ticker] ?? 0.03;
 				const potentialPct = positionPotential(pos.qty, pos.cost, quote?.price ?? null, org);
 				const sameDay = localDayKey(pos.since) === localDayKey(Date.now());
+				const rules = goalRules(pos);
 				const hit = potentialPct !== null && potentialPct >= targetPct * 100;
 				out.push({
 					ticker,
@@ -3698,15 +4110,68 @@ export function createJournal(db: SqlDb) {
 					sameDay,
 					since: pos.since,
 					quoteAt: quote?.fetchedAt ?? null,
-					targetPrice: targetSellPrice(pos.qty, pos.cost, targetPct, org),
+					targetPrice: targetSellPrice(pos.qty, pos.cost, targetPct, rules),
 					netValue: saleNet(pos.qty, quote?.price ?? null, org),
 					sellFees: saleBreakdown(pos.qty, quote?.price ?? null, org),
+					goalFees: {
+						feeRatePct: rules.feeRate * 100,
+						spreadRatePct: rules.spreadRate * 100,
+						irrfRatePct: rules.irrfRate * 100,
+						fixedFee: rules.fixedFee
+					},
 					recommendation:
 						quote === null || quote.price === null ? 'waiting' : hit ? (sameDay ? 'daytrade' : 'sell') : 'hold'
 				});
 			}
 		}
-		return out.sort((a, b) => b.cost - a.cost);
+		// Currencies never add up: each venue's money goes to USD first. The
+		// rest of the app states holdings totals with these same rates.
+		const { rates } = fxToUsd();
+		const native = new Map<string, { invested: number; now: number; atGoal: number; missing: number }>();
+		for (const p of out) {
+			const currency = p.orgId === 'ripio' ? 'USD' : 'BRL';
+			const sum = native.get(currency) ?? { invested: 0, now: 0, atGoal: 0, missing: 0 };
+			sum.invested += p.cost;
+			// The goal is defined on net after sell costs, so this needs no quote.
+			sum.atGoal += p.cost * (1 + p.targetPct);
+			if (p.netValue === null) sum.missing += 1;
+			else sum.now += p.netValue;
+			native.set(currency, sum);
+		}
+		let investedUsd = 0;
+		let nowUsd = 0;
+		let atGoalUsd = 0;
+		let missingQuotes = 0;
+		let complete = true;
+		for (const [currency, sum] of native) {
+			const rate = rates.get(currency);
+			if (rate === undefined) {
+				complete = false;
+				continue;
+			}
+			investedUsd += sum.invested * rate;
+			nowUsd += sum.now * rate;
+			atGoalUsd += sum.atGoal * rate;
+			missingQuotes += sum.missing;
+		}
+		const triple = (usd: number | null): TradingMoneyTriple => {
+			if (usd === null) return { USD: null, BRL: null, UYU: null };
+			const brl = rates.get('BRL');
+			const uyu = rates.get('UYU');
+			return {
+				USD: usd,
+				BRL: brl === undefined ? null : usd / brl,
+				UYU: uyu === undefined ? null : usd / uyu
+			};
+		};
+		const totals: TradingStripTotals = {
+			count: out.length,
+			missingQuotes,
+			invested: triple(complete ? investedUsd : null),
+			now: triple(complete ? nowUsd : null),
+			atGoal: triple(complete ? atGoalUsd : null)
+		};
+		return { positions: out.sort((a, b) => b.cost - a.cost), totals };
 	}
 
 	function getTradingQuoteHistory(orgId: string, rawTicker: unknown): TradingQuotePoint[] {
@@ -4724,18 +5189,52 @@ export function createJournal(db: SqlDb) {
 				        SUM(notes) AS notes,
 				        SUM(todos) AS todos,
 				        SUM(principles) AS principles,
-				        SUM(notes + todos + principles) AS count
+				        SUM(time_entries) AS time,
+				        SUM(notes + todos + principles + time_entries) AS count
 				 FROM (
-				   SELECT tag, COUNT(*) AS notes, 0 AS todos, 0 AS principles FROM note_tags GROUP BY tag
+				   SELECT tag, COUNT(*) AS notes, 0 AS todos, 0 AS principles, 0 AS time_entries FROM note_tags GROUP BY tag
 				   UNION ALL
-				   SELECT tag, 0 AS notes, COUNT(*) AS todos, 0 AS principles FROM todo_item_tags GROUP BY tag
+				   SELECT tag, 0 AS notes, COUNT(*) AS todos, 0 AS principles, 0 AS time_entries FROM todo_item_tags GROUP BY tag
 				   UNION ALL
-				   SELECT tag, 0 AS notes, 0 AS todos, COUNT(*) AS principles FROM principle_tags GROUP BY tag
+				   SELECT tag, 0 AS notes, 0 AS todos, COUNT(*) AS principles, 0 AS time_entries FROM principle_tags GROUP BY tag
+				   UNION ALL
+				   SELECT tag, 0 AS notes, 0 AS todos, 0 AS principles, COUNT(*) AS time_entries FROM time_entry_tags GROUP BY tag
 				 )
 				 GROUP BY tag
 				 ORDER BY count DESC, tag ASC`
 			)
 			.all() as unknown as TagCount[];
+	}
+
+	/** Tags on published notes only, for the public tag map. To-dos,
+	 *  principles and time entries are never public, so those columns stay 0. */
+	function listPublicTagCounts(): TagCount[] {
+		return db
+			.prepare(
+				`SELECT t.tag AS tag,
+				        COUNT(*) AS notes,
+				        0 AS todos,
+				        0 AS principles,
+				        0 AS time,
+				        COUNT(*) AS count
+				 FROM note_tags t JOIN notes n ON n.id = t.note_id
+				 WHERE n.published = 1
+				 GROUP BY t.tag
+				 ORDER BY count DESC, tag ASC`
+			)
+			.all() as unknown as TagCount[];
+	}
+
+	/** Published notes carrying one tag, for the public tag page header. */
+	function countPublishedNotesByTag(tag: string): number {
+		return (
+			db
+				.prepare(
+					`SELECT COUNT(*) AS c FROM note_tags t JOIN notes n ON n.id = t.note_id
+					 WHERE t.tag = ? AND n.published = 1`
+				)
+				.get(tag.trim().toLowerCase()) as { c: number }
+		).c;
 	}
 
 	// --- Tag colors -------------------------------------------------------
@@ -4858,6 +5357,50 @@ export function createJournal(db: SqlDb) {
 			)
 			.all(like, cap) as unknown as { id: string; content: string; at: number }[];
 
+		const holdingRows = db
+			.prepare(
+				`SELECT ticker, category, MAX(updated_at) AS at
+				 FROM holdings
+				 WHERE ticker LIKE ? ESCAPE '!'
+				 GROUP BY ticker, category
+				 ORDER BY at DESC
+				 LIMIT ?`
+			)
+			.all(like, cap) as unknown as { ticker: string; category: string; at: number }[];
+
+		const orgRows = db
+			.prepare(
+				`SELECT id, name, created_at AS at
+				 FROM trading_orgs
+				 WHERE name LIKE ? ESCAPE '!' OR id LIKE ? ESCAPE '!'
+				 ORDER BY position ASC, name ASC
+				 LIMIT ?`
+			)
+			.all(like, like, cap) as unknown as { id: string; name: string; at: number }[];
+
+		// A ticker can sit in a watchlist, in an order, or both. One row per
+		// venue and ticker keeps the list readable and the deep link exact.
+		const tradingRows = db
+			.prepare(
+				`SELECT ticker, org_id, MAX(at) AS at FROM (
+					SELECT ticker, org_id, updated_at AS at FROM trading_targets
+					UNION ALL
+					SELECT ticker, org_id, created_at AS at FROM trading_orders
+				)
+				WHERE ticker LIKE ? ESCAPE '!'
+				GROUP BY ticker, org_id
+				ORDER BY at DESC
+				LIMIT ?`
+			)
+			.all(like, cap) as unknown as { ticker: string; org_id: string; at: number }[];
+
+		const orgNames = new Map(
+			(db.prepare('SELECT id, name FROM trading_orgs').all() as unknown as {
+				id: string;
+				name: string;
+			}[]).map((o) => [o.id, o.name])
+		);
+
 		return [
 			...notes.map((r) => ({
 				kind: 'note' as const,
@@ -4878,6 +5421,27 @@ export function createJournal(db: SqlDb) {
 				id: r.id,
 				text: clipSearchText(r.content, q),
 				context: '',
+				at: r.at
+			})),
+			...holdingRows.map((r) => ({
+				kind: 'holding' as const,
+				id: r.ticker,
+				text: r.ticker,
+				context: `Holding · ${r.category}`,
+				at: r.at
+			})),
+			...orgRows.map((r) => ({
+				kind: 'trading' as const,
+				id: `${r.id}|`,
+				text: r.name,
+				context: 'Trading · venue',
+				at: r.at
+			})),
+			...tradingRows.map((r) => ({
+				kind: 'trading' as const,
+				id: `${r.org_id}|${r.ticker}`,
+				text: r.ticker,
+				context: `Trading · ${orgNames.get(r.org_id) ?? r.org_id}`,
 				at: r.at
 			}))
 		];
@@ -4999,12 +5563,58 @@ export function createJournal(db: SqlDb) {
 		return rows.map((r) => rowToTimeEntry(r, tagMap.get(r.id) ?? []));
 	}
 
+	/** Entries that carry one tag, running first. Same order as
+	 *  `listTimeEntries`, so a live timer leads the list. */
+	function listTimeEntriesByTag(tag: unknown, limit = 200): TimeEntry[] {
+		const clean = String(tag ?? '').trim().toLowerCase().slice(0, 60);
+		if (!clean) return [];
+		const cap = Math.max(1, Math.min(500, Math.trunc(limit) || 200));
+		const rows = db
+			.prepare(
+				`SELECT e.id, e.comment, e.started_at, e.ended_at, e.created_at, e.updated_at
+				 FROM time_entries e
+				 JOIN time_entry_tags t ON t.entry_id = e.id
+				 WHERE t.tag = ?
+				 ORDER BY CASE WHEN e.ended_at IS NULL THEN 0 ELSE 1 END, e.started_at DESC, e.id DESC
+				 LIMIT ?`
+			)
+			.all(clean, cap) as unknown as TimeRow[];
+		const tagMap = tagsByTimeEntry(rows);
+		return rows.map((r) => rowToTimeEntry(r, tagMap.get(r.id) ?? []));
+	}
+
+	/** Rewrite the comment and tags of one entry, running or stopped. The tags
+	 *  come from the hashtags anywhere in `comment`, the same rule as start. */
+	function updateTimeEntry(
+		id: unknown,
+		comment: unknown
+	): { ok: true; entry: TimeEntry } | { ok: false; error: string } {
+		const want = typeof id === 'string' ? id.trim() : '';
+		if (!want) return { ok: false, error: 'Missing id.' };
+		const row = db
+			.prepare('SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE id = ?')
+			.get(want) as unknown as TimeRow | undefined;
+		if (!row) return { ok: false, error: 'Time entry not found.' };
+		const raw = String(comment ?? '').trim().slice(0, 500);
+		const split = splitHashtags(raw);
+		const text = split.content.slice(0, 500);
+		const now = Date.now();
+		db.transaction(() => {
+			db.prepare('UPDATE time_entries SET comment = ?, updated_at = ? WHERE id = ?').run(text, now, row.id);
+			setTimeEntryTags(row.id, split.tags);
+		});
+		const updated = db
+			.prepare('SELECT id, comment, started_at, ended_at, created_at, updated_at FROM time_entries WHERE id = ?')
+			.get(row.id) as unknown as TimeRow;
+		return { ok: true, entry: rowToTimeEntry(updated, split.tags) };
+	}
+
 	function startTimeEntry(comment: unknown, startedAt?: unknown): { ok: true; entry: TimeEntry } | { ok: false; error: string } {
 		if (getRunningTimeEntry()) return { ok: false, error: 'A timer is already running.' };
 		const now = Date.now();
 		const at = typeof startedAt === 'number' && Number.isFinite(startedAt) ? Math.trunc(startedAt) : now;
 		const raw = String(comment ?? '').trim().slice(0, 500);
-		const split = splitTrailingHashtags(raw);
+		const split = splitHashtags(raw);
 		const text = split.content.slice(0, 500);
 		const tags = split.tags;
 		const id = crypto.randomUUID();
@@ -5202,6 +5812,7 @@ export function createJournal(db: SqlDb) {
 		removeNoteCover,
 		getNotePhoto,
 		setNoteVideo,
+		setNoteTitle,
 		setVector,
 		allVectors,
 		ftsCandidateIds,
@@ -5215,12 +5826,16 @@ export function createJournal(db: SqlDb) {
 		deleteAsk,
 		getRunningTimeEntry,
 		listTimeEntries,
+		listTimeEntriesByTag,
+		updateTimeEntry,
 		startTimeEntry,
 		stopTimeEntry,
 		deleteTimeEntry,
 		getTimeTrackerStats,
 		getPublicConfig,
 		setPublicConfig,
+		getQuickNote,
+		setQuickNote,
 		listBooks,
 		getBook,
 		getBookBytes,
@@ -5249,6 +5864,9 @@ export function createJournal(db: SqlDb) {
 		listTodoItems,
 		getTodoItem,
 		createTodoItem,
+		setTodoItemPhoto,
+		removeTodoItemPhoto,
+		getTodoItemPhoto,
 		updateTodoItem,
 		deleteTodoItem,
 		setTodoItemTags,
@@ -5318,6 +5936,7 @@ export function createJournal(db: SqlDb) {
 		listTradingOrders,
 		createTradingOrder,
 		deleteTradingOrder,
+		updateTradingOrder,
 		setTradingTarget,
 		refreshTradingQuotes,
 		refreshTickerQuote,
@@ -5331,6 +5950,8 @@ export function createJournal(db: SqlDb) {
 		addB3Ticker,
 		listTagColors,
 		listTagCounts,
+		listPublicTagCounts,
+		countPublishedNotesByTag,
 		setTagColor
 	};
 }

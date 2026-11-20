@@ -14,17 +14,18 @@ export interface NotesContext {
 	onDismissWeekly: () => void;
 	featured: Note[];
 	notes: Note[];
+	/** The published-only filter pill state. */
+	publishedOnly: boolean;
+	onTogglePublished: () => void;
 	hasMore: boolean;
 	loadingMore: boolean;
 	onLoadMore: () => void;
 	onDeleteNote: (id: string) => void;
-	onEditNote: (id: string, content: string, video?: string, createdAt?: number) => Promise<void>;
+	onEditNote: (id: string, content: string, video?: string, createdAt?: number, title?: string) => Promise<void>;
 	onFeatureNote: (note: Note) => void;
 	onPublishNote: (note: Note) => void;
 	onCoverNote: (note: Note, coverId: string | null) => void;
 	onRemoveTag: (noteId: string, tag: string) => void;
-	onCopyLoaded: () => void;
-	copied: boolean;
 }
 
 export interface AskContext {

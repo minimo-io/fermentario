@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getTodoItem, updateTodoItem, deleteTodoItem, setTodoItemTags } from '$lib/server/db';
-import { splitTrailingHashtags } from '$lib/hashtags';
+import { splitHashtags } from '$lib/hashtags';
 import { splitLeadingSubgroup } from '$lib/subgroups';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -14,10 +14,10 @@ export async function PATCH({ params, request }) {
 	const body = await request.json();
 	if (!getTodoItem(params.id)) return json({ error: 'item not found' }, { status: 404 });
 	const patch: { content?: string; done?: boolean; inProgress?: boolean; subgroup?: string; video?: string; group_id?: string } = {};
-	// Editing text re-parses trailing hashtags, exactly like notes, and a
+	// Editing text re-parses hashtags anywhere, exactly like notes, and a
 	// leading (subgroup) moves the item (empty prefix clears it).
 	if (typeof body?.content === 'string') {
-		const { content, tags } = splitTrailingHashtags(body.content);
+		const { content, tags } = splitHashtags(body.content);
 		const group = splitLeadingSubgroup(content);
 		if (!group.content.trim()) return json({ error: 'empty item' }, { status: 400 });
 		patch.content = group.content;

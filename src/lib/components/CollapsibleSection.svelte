@@ -13,12 +13,15 @@
 		storageKey: string;
 		icon?: Snippet;
 		actions?: Snippet;
+		/** One line of numbers shown beside the label while collapsed, so a
+		 *  shut section still reports its totals. */
+		summary?: Snippet;
 		/** Hide the actions line while collapsed (Market's Update/Logs:
 		 *  both act on content that is not visible when the group is shut). */
 		actionsOnExpandOnly?: boolean;
 		children: Snippet;
 	};
-	let { label, storageKey, icon, actions, actionsOnExpandOnly = false, children }: Props = $props();
+	let { label, storageKey, icon, actions, summary, actionsOnExpandOnly = false, children }: Props = $props();
 
 	// Read the remembered state synchronously at init — not in an $effect.
 	// Correcting it after mount flashes open-then-shut every time a parent
@@ -54,6 +57,9 @@
 		</span>
 		{#if icon}{@render icon()}{/if}
 		<span class="text-xs font-medium uppercase tracking-widest">{label}</span>
+		{#if collapsed && summary}
+			<span class="min-w-0 truncate text-[11px] font-normal normal-case tracking-normal tabular-nums">{@render summary()}</span>
+		{/if}
 	</button>
 	{#if actions && (!actionsOnExpandOnly || !collapsed)}
 		<span class="ml-auto inline-flex items-center gap-2">{@render actions()}</span>

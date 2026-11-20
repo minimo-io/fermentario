@@ -6,7 +6,12 @@
 	import { loading } from '$lib/loading.svelte';
 	import { shortDuration, openAge, type AgeLang } from '$lib/age';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
+	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
+	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import TrendingUp from '@lucide/svelte/icons/trending-up';
+	import TrendingDown from '@lucide/svelte/icons/trending-down';
+	import { coinLabel, venuePair } from '$lib/trading-pairs';
 	import TradingPositionCard from '$lib/components/TradingPositionCard.svelte';
 	import TradingPositionModal from '$lib/components/TradingPositionModal.svelte';
 	import type { TradingOrg, TradingSummary } from '$lib/types';
@@ -40,10 +45,21 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	let summary = $state<TradingSummary | null>(null);
 	let settingsOpen = $state(false);
 	let orderOpen = $state<'BUY' | 'SELL' | null>(null);
+	// The row under correction. Only the latest order can be edited, so the
+	// sheet opens prefilled and the ticker stays fixed.
+	let editingOrderId = $state<string | null>(null);
+	// The cost rules the edited order was recorded with. Read-only here:
+	// editing the venue fee must never rewrite an order that already ran.
+	let editCosts = $state<null | { feeRatePct: number; spreadRatePct: number; irrfRatePct: number; fixedFee: number }>(null);
+	// Sale of one open position: a sale always closes the full quantity, so
+	// the sheet asks only for the price the venue offers.
+	let sellPos = $state<TradingSummary['positions'][number] | null>(null);
+	let sellPrice = $state('');
+	let sellDate = $state('');
+	let confirmingSale = $state<{ ticker: string; qty: number; price: number; date: number } | null>(null);
 	let confirmingOrder = $state<string | null>(null);
 	let targetTicker = $state<string | null>(null);
 	let detailTicker = $state<string | null>(null);
-	let confirmingDisable = $state<TradingOrg | null>(null);
 	let orgLoading = $state(false);
 	let ripio = $state<null | {
 		pair: string;
@@ -68,6 +84,9 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	let fQty = $state('');
 	let fPrice = $state('');
 	let fDate = $state('');
+	// Goal for the buy being recorded, as a percent. It becomes the
+	// position's goal, editable again from the trade detail modal.
+	let fGoal = $state('3');
 	// Ticker picker: B3 universe from the server, filtered as you type.
 	// Free text always saves; the list is a shortcut, not a restriction.
 	let allTickers = $state<string[]>([]);
@@ -75,13 +94,40 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	let tickerActive = $state(0);
 	// Org settings draft (percents for the rates).
 	let sFee = $state('');
+	let sSpread = $state('');
 	let sIrrf = $state('');
 	let sFixed = $state('');
 	let sLimit = $state('');
+	let sNote = $state('');
 	// Target draft (percent).
 	let tPct = $state('');
 
 	const org = $derived(orgs.find((o) => o.id === orgId) ?? null);
+	// A venue with a percentage fee takes it on the buy and again on the
+	// sell, so the diary states the round-trip total, not one leg.
+	const feeBothWays = $derived(org !== null && org.feeRate > 0);
+	const roundTripFee = (fee: number): number => (feeBothWays ? fee * 2 : fee);
+	// What the venue pays for the whole position at the price typed in the
+	// sale sheet: fees, spread and dedo-duro come off the gross, like the
+	// projection the cards use.
+	// What the edited order pays with its own recorded rules, at the values
+	// currently typed in the form.
+	const editFeePreview = $derived.by(() => {
+		if (!editCosts) return null;
+		const qty = parseDecimal(fQty);
+		const price = parseDecimal(fPrice);
+		if (!Number.isFinite(qty) || !Number.isFinite(price) || qty <= 0 || price <= 0) return null;
+		const fee = qty * price * (editCosts.feeRatePct / 100) + editCosts.fixedFee;
+		return { fee, both: fee * 2 };
+	});
+	const sellPreview = $derived.by(() => {
+		if (!sellPos || !org) return null;
+		const price = parseDecimal(sellPrice);
+		if (!Number.isFinite(price) || price <= 0) return null;
+		const value = sellPos.qty * price;
+		const net = value * (1 - org.feeRate - org.spreadRate - org.irrfRate) - org.fixedFee;
+		return Number.isFinite(net) ? { value, net } : null;
+	});
 	const latestOrderId = $derived.by(() => {
 		const list = summary?.orders ?? [];
 		if (list.length === 0) return null;
@@ -102,6 +148,13 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 		return v.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 	}
 
+	/** Crypto quantities are fractional: show the coins bought, not whole
+	 *  units, and keep trailing zeros off. */
+	function fmtCoin(v: number): string {
+		if (!Number.isFinite(v)) return '—';
+		return v.toLocaleString('pt-BR', { maximumFractionDigits: 8 });
+	}
+
 	function fmtDate(at: number): string {
 		try {
 			return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -117,27 +170,33 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	}
 
 	function openQty(ticker: string): number {
-		return summary?.positions.find((p) => p.ticker === ticker.toUpperCase().trim())?.qty ?? 0;
+		return summary?.positions.find((p) => p.ticker === venuePair(ticker, orgId))?.qty ?? 0;
 	}
 
 	// Ranked suggestions: open positions first when selling, then prefix
 	// matches, then substring matches. Capped at 8 rows.
 	const tickerSuggestions = $derived.by(() => {
 		const q = fTicker.trim().toUpperCase();
-		const open = (summary?.positions ?? []).map((p) => p.ticker);
+		const open = (summary?.positions ?? []).map((p) => coinLabel(p.ticker, orgId));
+		const known = allTickers.map((t) => coinLabel(t, orgId));
+		// Ripio names its markets after the coin; its only BTC market is
+		// BTC_USDC, which the journal stores under that pair name.
+		const coins = orgId === 'ripio' ? ['BTC'] : [];
 		const out: string[] = [];
 		const push = (t: string) => {
 			if (!out.includes(t)) out.push(t);
 		};
 		if (orderOpen === 'SELL') for (const t of open) if (!q || t.includes(q)) push(t);
-		for (const t of allTickers) if (!q || t.startsWith(q)) push(t);
-		for (const t of allTickers) if (q && !t.startsWith(q) && t.includes(q)) push(t);
+		for (const t of coins) if (!q || t.startsWith(q) || t.includes(q)) push(t);
+		for (const t of known) if (!q || t.startsWith(q)) push(t);
+		for (const t of known) if (q && !t.startsWith(q) && t.includes(q)) push(t);
 		return out.slice(0, 8);
 	});
 
 	function pickTicker(t: string) {
 		fTicker = t;
 		tickerFocus = false;
+		fGoal = goalFor(t);
 		if (orderOpen === 'SELL') {
 			const q = openQty(t);
 			if (q > 0) fQty = String(q);
@@ -188,7 +247,6 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 			);
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update the venue.');
-			confirmingDisable = null;
 			await loadOrgs();
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to update the venue.');
@@ -203,9 +261,12 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 			// Refresh means re-read upstream now: bypass both the Ripio
 			// minute cache and the stored Coinbase rate.
 			const f = force ? '&force=1' : '';
+			// The global endpoint has no other query, so its force flag needs
+			// `?`, not the `&` the pair-scoped Ripio URL uses.
+			const g = force ? '?force=1' : '';
 			const [r] = await Promise.all([
 				fetch(`/api/quotes/ripio?pair=BTC_USDC${f}`).then((res) => res.json()),
-				fetch(`/api/quotes/btc-global${f}`)
+				fetch(`/api/quotes/btc-global${g}`)
 					.then((res) => res.json())
 					// The global card fails soft: the Ripio price still matters
 					// without a comparison.
@@ -220,13 +281,6 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 			ripioLoading = false;
 		}
 	}
-
-	const btcCompare = $derived.by(() => {
-		if (!ripio || !globalBtc) return null;
-		const value = ripio.priceUsd - globalBtc.priceUsd;
-		const pct = globalBtc.priceUsd > 0 ? (value / globalBtc.priceUsd) * 100 : null;
-		return { value, pct };
-	});
 
 	function ripioSourceLabel(q: NonNullable<typeof ripio>): string {
 		if (q.authError) return 'Ripio · public (API key rejected)';
@@ -243,9 +297,14 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	}
 
 	$effect(() => {
+		const id = orgId;
 		void reload();
+		// A market refresh (the top card, or one ticker) re-reads both
+		// prices on the Ripio page: the venue quote alone would leave the
+		// global comparison card on its old number.
 		const onChange = () => {
 			void loadSummary();
+			if (id === 'ripio') void loadRipio();
 		};
 		window.addEventListener('trading:changed', onChange);
 		return () => window.removeEventListener('trading:changed', onChange);
@@ -259,35 +318,97 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	});
 
 	function startOrder(side: 'BUY' | 'SELL') {
+		editingOrderId = null;
+		editCosts = null;
 		orderOpen = side;
 		fTicker = '';
 		tickerActive = 0;
 		tickerFocus = false;
 		fQty = side === 'SELL' ? '' : fQty;
 		fPrice = '';
+		fGoal = '3';
 		fDate = new Date().toISOString().slice(0, 10);
+	}
+
+	/** An open position already has a goal: show it when you sell or rebuy
+	 *  that ticker, instead of resetting the form to 3%. */
+	function goalFor(ticker: string): string {
+		const p = summary?.positions.find((x) => x.ticker === venuePair(ticker, orgId));
+		return p ? String(Number((p.targetPct * 100).toFixed(4))) : '3';
+	}
+
+	function startEditOrder(o: TradingSummary['orders'][number]) {
+		editingOrderId = o.id;
+		editCosts = {
+			feeRatePct: o.feeRate * 100,
+			spreadRatePct: o.spreadRate * 100,
+			irrfRatePct: o.irrfRate * 100,
+			fixedFee: o.fixedFee
+		};
+		orderOpen = o.side;
+		fTicker = coinLabel(o.ticker, orgId);
+		tickerActive = 0;
+		tickerFocus = false;
+		fQty = String(Number(o.qty.toFixed(8)));
+		fPrice = String(o.unitPrice);
+		fGoal = String(Number((o.targetPct * 100).toFixed(4)));
+		fDate = new Date(o.date).toISOString().slice(0, 10);
+	}
+
+	function closeOrder() {
+		orderOpen = null;
+		editingOrderId = null;
+		editCosts = null;
 	}
 
 	async function saveOrder() {
 		if (!orderOpen) return;
+		const editing = editingOrderId;
 		const qty = parseDecimal(fQty);
 		const price = parseDecimal(fPrice);
 		const when = fDate ? new Date(`${fDate}T12:00:00`).getTime() : Date.now();
-		if (!fTicker.trim() || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) {
-			onError('Ticker, quantity and unit price are required.');
+		const goal = orderOpen === 'BUY' ? parseDecimal(fGoal) : NaN;
+		if ((!editing && !fTicker.trim()) || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) {
+			onError(editing ? 'Quantity and unit price are required.' : 'Ticker, quantity and unit price are required.');
+			return;
+		}
+		if (orderOpen === 'BUY' && (!Number.isFinite(goal) || goal < 0)) {
+			onError('Goal % is invalid.');
 			return;
 		}
 		try {
+			// An edit changes the numbers, never the venue, the side or the
+			// ticker: the goal is stored per ticker, and the server recomputes
+			// value, fees and net from the rules.
 			const res = await loading.track(
-				fetch('/api/trading/orders', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ orgId, ticker: fTicker, side: orderOpen, qty, unitPrice: price, date: when })
-				})
+				editing
+					? fetch(`/api/trading/orders/${editing}`, {
+							method: 'PATCH',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({
+								qty,
+								unitPrice: price,
+								date: when,
+								targetPct: orderOpen === 'BUY' ? goal / 100 : undefined
+							})
+						})
+					: fetch('/api/trading/orders', {
+							method: 'POST',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({
+								orgId,
+								ticker: venuePair(fTicker, orgId),
+								side: orderOpen,
+								qty,
+								unitPrice: price,
+								date: when,
+								targetPct: orderOpen === 'BUY' ? goal / 100 : undefined
+							})
+						})
 			);
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save the order.');
-			orderOpen = null;
+			closeOrder();
 			await loadSummary();
 			notifyChanged();
 		} catch (e) {
@@ -308,11 +429,65 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 		}
 	}
 
+	function startSell(p: TradingSummary['positions'][number]) {
+		sellPos = p;
+		sellPrice = p.quote === null ? '' : String(p.quote);
+		sellDate = new Date().toISOString().slice(0, 10);
+	}
+
+	function closeSell() {
+		sellPos = null;
+		confirmingSale = null;
+	}
+
+	/** The sheet itself is a form; the dialog after it is the confirmation,
+	 *  because a sale is not reversible from the diary. */
+	function confirmSale() {
+		if (!sellPos) return;
+		const price = parseDecimal(sellPrice);
+		if (!Number.isFinite(price) || price <= 0) {
+			onError('Sale price is required.');
+			return;
+		}
+		const when = sellDate ? new Date(`${sellDate}T12:00:00`).getTime() : Date.now();
+		confirmingSale = { ticker: sellPos.ticker, qty: sellPos.qty, price, date: when };
+	}
+
+	async function saveSale() {
+		const sale = confirmingSale;
+		if (!sale) return;
+		try {
+			const res = await loading.track(
+				fetch('/api/trading/orders', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						orgId,
+						ticker: sale.ticker,
+						side: 'SELL',
+						qty: sale.qty,
+						unitPrice: sale.price,
+						date: sale.date
+					})
+				})
+			);
+			const d = await res.json();
+			if (!res.ok) throw new Error(d?.error ?? 'Failed to save the sale.');
+			closeSell();
+			await loadSummary();
+			notifyChanged();
+		} catch (e) {
+			onError((e as Error)?.message ?? 'Failed to save the sale.');
+		}
+	}
+
 	function startSettings() {
 		if (!org) return;
 		sFee = String(org.feeRate * 100);
+		sSpread = String(org.spreadRate * 100);
 		sIrrf = String(org.irrfRate * 100);
 		sFixed = String(org.fixedFee);
+		sNote = org.feeNote;
 		sLimit = String(org.exemptLimit);
 		settingsOpen = true;
 	}
@@ -324,6 +499,7 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 			return parseDecimal(v);
 		};
 		const fee = toNum(sFee);
+		const spread = toNum(sSpread);
 		const irrf = toNum(sIrrf);
 		const fixed = toNum(sFixed);
 		const limit = toNum(sLimit);
@@ -331,17 +507,33 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 			onError('Fee % is invalid.');
 			return;
 		}
+		if (spread !== undefined && (!Number.isFinite(spread) || spread < 0)) {
+			onError('Spread % is invalid.');
+			return;
+		}
+		// Ripio carries one percentage and a note; its spread and fixed fee
+		// stay at zero so a single rate explains every operation.
+		const body =
+			orgId === 'ripio'
+				? {
+						...(fee === undefined ? {} : { feeRate: fee / 100 }),
+						spreadRate: 0,
+						fixedFee: 0,
+						feeNote: sNote
+					}
+				: {
+						...(fee === undefined ? {} : { feeRate: fee / 100 }),
+						...(spread === undefined ? {} : { spreadRate: spread / 100 }),
+						...(irrf === undefined ? {} : { irrfRate: irrf / 100 }),
+						...(fixed === undefined ? {} : { fixedFee: fixed }),
+						...(limit === undefined ? {} : { exemptLimit: limit })
+					};
 		try {
 			const res = await loading.track(
 				fetch(`/api/trading/orgs/${org.id}`, {
 					method: 'PATCH',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({
-						...(fee === undefined ? {} : { feeRate: fee / 100 }),
-						...(irrf === undefined ? {} : { irrfRate: irrf / 100 }),
-						...(fixed === undefined ? {} : { fixedFee: fixed }),
-						...(limit === undefined ? {} : { exemptLimit: limit })
-					})
+					body: JSON.stringify(body)
 				})
 			);
 			const d = await res.json();
@@ -419,11 +611,6 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 						class="rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
 						onclick={() => startOrder('BUY')}
 					>+ Buy</button>
-					<button
-						type="button"
-						class="rounded-full bg-rose-600 px-3 py-1 text-xs font-medium text-white hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600"
-						onclick={() => startOrder('SELL')}
-					>− Sell</button>
 				{/if}
 				{#if org?.enabled}
 					<button
@@ -458,6 +645,9 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 
 		{#if org && org.enabled && org.id === 'ripio'}
 			{@const q = ripio}
+			<p class="mb-2 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+				Fee {(org.feeRate * 100).toFixed(2)}% on every operation{#if org.feeNote} · {org.feeNote}{/if}
+			</p>
 			<!-- Two sources side by side: Ripio's own ticker and the
 				Coinbase canonical rate (the same number Holdings prices BTC
 				with), plus the gap between them in value and percent. -->
@@ -492,29 +682,6 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 				</div>
 			</div>
 
-			{#if q && q.bid !== null && q.ask !== null && globalBtc}
-				<!-- With a signed quote the comparison is side-aware: a buy
-					pays the ask, a sale receives the bid. Mid-gap alone would
-					hide the venue spread. -->
-				{@const mid = (q.ask + q.bid) / 2}
-				{@const spread = q.ask - q.bid}
-				{@const buyGap = q.ask - globalBtc.priceUsd}
-				{@const sellGap = q.bid - globalBtc.priceUsd}
-				<div class="mt-2 space-y-0.5 text-center text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
-					<p>Ripio spread buy−sell: {fmtMoney(spread, 'USD', 2)} ({mid > 0 ? ((spread / mid) * 100).toFixed(2) : '—'}%)</p>
-					<p class={buyGap < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-						Buy pays {fmtMoney(q.ask, 'USD', 2)} · {buyGap >= 0 ? '+' : '−'}{fmtMoney(Math.abs(buyGap), 'USD', 2)} ({globalBtc.priceUsd > 0 ? (buyGap / globalBtc.priceUsd * 100).toFixed(2) : '—'}%) vs Coinbase
-					</p>
-					<p class={sellGap < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
-						Sell gets {fmtMoney(q.bid, 'USD', 2)} · {sellGap >= 0 ? '+' : '−'}{fmtMoney(Math.abs(sellGap), 'USD', 2)} ({globalBtc.priceUsd > 0 ? (sellGap / globalBtc.priceUsd * 100).toFixed(2) : '—'}%) vs Coinbase
-					</p>
-				</div>
-			{:else if btcCompare}
-				<p class="mt-2 text-center text-[11px] font-medium tabular-nums {btcCompare.value < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
-					Ripio vs Coinbase: {btcCompare.value >= 0 ? '+' : '−'}{fmtMoney(Math.abs(btcCompare.value), 'USD', 2)}{#if btcCompare.pct !== null} ({btcCompare.pct >= 0 ? '+' : '−'}{Math.abs(btcCompare.pct).toFixed(2)}%){/if}
-				</p>
-			{/if}
-
 			<div class="mt-3 flex items-center justify-center gap-2">
 				<button
 					type="button"
@@ -522,12 +689,6 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 					disabled={ripioLoading}
 					onclick={() => { void loadRipio(true); void loadSummary(true, true); }}
 				>{ripioLoading ? 'Updating…' : 'Refresh'}</button>
-				<button
-					type="button"
-					class="rounded-full px-3 py-1 text-xs font-medium text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
-					disabled={orgLoading}
-					onclick={() => { if (org) confirmingDisable = org; }}
-				>Disable</button>
 			</div>
 		{/if}
 
@@ -540,7 +701,7 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 								<div
 									role="button"
 									tabindex="0"
-									aria-label="Open {p.ticker} details"
+									aria-label="Open {coinLabel(p.ticker, orgId)} details"
 									aria-haspopup="dialog"
 									class="h-full w-full cursor-pointer rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500"
 									onclick={() => (detailTicker = p.ticker)}
@@ -551,6 +712,7 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 										compact
 										age={openAge(p.since, ageLang)}
 										onEditTarget={() => startTarget(p.ticker, p.targetPct)}
+										onSell={() => startSell(p)}
 										onRefresh={onRefreshTicker ? () => onRefreshTicker(p.ticker) : undefined}
 										refreshing={refreshingTicker === p.ticker}
 									/>
@@ -591,6 +753,70 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 			</div>
 			{#if summary.orders.length === 0}
 				<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-8 text-center text-sm text-stone-500 dark:text-stone-400">No orders yet. Add the first buy.</p>
+			{:else if orgId === 'ripio'}
+				<div class="max-w-full overflow-x-auto rounded-2xl border border-stone-200 dark:border-stone-800">
+					<table class="w-full min-w-[780px] border-collapse text-left text-[11px] tabular-nums">
+						<thead>
+							<tr class="border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
+								<th scope="col" class="px-2 py-1.5 font-medium">Date</th>
+								<th scope="col" class="px-2 py-1.5 font-medium">Operation</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Qty</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Price</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Value</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Fee</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Goal</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Goal price</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">Net</th>
+								<th scope="col" class="w-14 px-1 py-1.5"><span class="sr-only">Edit or delete</span></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each [...summary.orders].reverse() as o (o.id)}
+								<tr class="border-b border-stone-100 dark:border-stone-800/70 last:border-0 text-stone-700 dark:text-stone-300">
+									<td class="whitespace-nowrap px-2 py-1.5 text-stone-500 dark:text-stone-400">{fmtDate(o.date)} · {shortDuration(o.date, ageLang)}</td>
+									<td class="whitespace-nowrap px-2 py-1.5 font-semibold"><span class={o.side === 'BUY' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{o.side}</span></td>
+									<td class="whitespace-nowrap px-2 py-1.5 text-right">{fmtCoin(o.qty)} {coinLabel(o.ticker, orgId)}</td>
+									<td class="px-2 py-1.5 text-right">{fmtMoney(o.unitPrice)}</td>
+									<td class="px-2 py-1.5 text-right">{fmtMoney(o.value)}</td>
+									<td class="px-2 py-1.5 text-right">
+										<span class="inline-flex items-center justify-end gap-1">
+											{fmtMoney(roundTripFee(o.fees))}
+											{#if o.value > 0}
+												<span class="text-stone-400 dark:text-stone-500">({((roundTripFee(o.fees) / o.value) * 100).toFixed(2)}%)</span>
+											{/if}
+											{#if feeBothWays}
+												<span title="Total fee: charged on both buy and sell" class="inline-flex">
+													<ArrowRightLeft class="h-3 w-3 shrink-0 text-stone-400 dark:text-stone-500" />
+												</span>
+											{/if}
+										</span>
+									</td>
+									<td class="px-2 py-1.5 text-right">{(o.targetPct * 100).toFixed(1)}%</td>
+									<td class="px-2 py-1.5 text-right">{o.side === 'SELL' ? '—' : fmtMoney(o.goalPrice)}</td>
+									<td class="px-2 py-1.5 text-right" title={o.side === 'SELL' ? 'Net of the sale' : 'What the position nets if sold at the goal price'}>{o.side === 'SELL' ? fmtMoney(o.net) : fmtMoney(o.netAtGoal)}</td>
+									<td class="px-1 py-1.5 text-center">
+										{#if o.id === latestOrderId}
+											<span class="inline-flex items-center gap-0.5">
+												<button
+													type="button"
+													aria-label="Edit latest order"
+													class="grid h-6 w-6 place-items-center rounded-full text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-700 dark:hover:text-stone-200"
+													onclick={() => startEditOrder(o)}
+												><Pencil class="h-3 w-3" /></button>
+												<button
+													type="button"
+													aria-label="Delete latest order"
+													class="grid h-6 w-6 place-items-center rounded-full text-base leading-none text-stone-300 dark:text-stone-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400"
+													onclick={() => (confirmingOrder = o.id)}
+												>&times;</button>
+											</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			{:else}
 				<div class="max-w-full overflow-x-auto rounded-2xl border border-stone-200 dark:border-stone-800">
 					<table class="w-full min-w-[640px] border-collapse text-left text-[11px] tabular-nums">
@@ -601,33 +827,57 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 								<th scope="col" class="px-2 py-1.5 text-right font-medium">Qty</th>
 								<th scope="col" class="px-2 py-1.5 text-right font-medium">Unit</th>
 								<th scope="col" class="px-2 py-1.5 text-right font-medium">Value</th>
-								<th scope="col" class="px-2 py-1.5 text-right font-medium">B3 fee</th>
-								<th scope="col" class="px-2 py-1.5 text-right font-medium">Dedo-duro</th>
+								<th scope="col" class="px-2 py-1.5 text-right font-medium">{orgId === 'ripio' ? 'Fee' : 'B3 fee'}</th>
+								{#if orgId !== 'ripio'}
+									<th scope="col" class="px-2 py-1.5 text-right font-medium">Dedo-duro</th>
+								{/if}
 								<th scope="col" class="px-2 py-1.5 text-right font-medium">Net</th>
 								<th scope="col" class="px-2 py-1.5 text-right font-medium">Profit</th>
-								<th scope="col" class="w-8 px-1 py-1.5"><span class="sr-only">Delete</span></th>
+								<th scope="col" class="w-14 px-1 py-1.5"><span class="sr-only">Edit or delete</span></th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each [...summary.orders].reverse() as o (o.id)}
 								<tr class="border-b border-stone-100 dark:border-stone-800/70 last:border-0 text-stone-700 dark:text-stone-300">
 									<td class="whitespace-nowrap px-2 py-1.5 text-stone-500 dark:text-stone-400">{fmtDate(o.date)} · {shortDuration(o.date, ageLang)}</td>
-									<td class="whitespace-nowrap px-2 py-1.5 font-semibold"><span class={o.side === 'BUY' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{o.side}</span> {o.ticker}</td>
+									<td class="whitespace-nowrap px-2 py-1.5 font-semibold"><span class={o.side === 'BUY' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{o.side}</span> {coinLabel(o.ticker, orgId)}</td>
 									<td class="px-2 py-1.5 text-right">{fmtNum(o.qty, 0)}</td>
 									<td class="px-2 py-1.5 text-right">{fmtMoney(o.unitPrice)}</td>
 									<td class="px-2 py-1.5 text-right">{fmtMoney(o.value)}</td>
-									<td class="px-2 py-1.5 text-right">{fmtMoney(o.fees)}</td>
-									<td class="px-2 py-1.5 text-right">{o.side === 'SELL' ? fmtMoney(o.irrf) : '—'}</td>
+									<td class="px-2 py-1.5 text-right">
+										<span class="inline-flex items-center justify-end gap-1">
+											{fmtMoney(roundTripFee(o.fees))}
+											{#if o.value > 0}
+												<span class="text-stone-400 dark:text-stone-500">({((roundTripFee(o.fees) / o.value) * 100).toFixed(2)}%)</span>
+											{/if}
+											{#if feeBothWays}
+												<span title="Total fee: charged on both buy and sell" class="inline-flex">
+													<ArrowRightLeft class="h-3 w-3 shrink-0 text-stone-400 dark:text-stone-500" />
+												</span>
+											{/if}
+										</span>
+									</td>
+									{#if orgId !== 'ripio'}
+										<td class="px-2 py-1.5 text-right">{o.side === 'SELL' ? fmtMoney(o.irrf) : '—'}</td>
+									{/if}
 									<td class="px-2 py-1.5 text-right">{fmtMoney(o.net)}</td>
-									<td class="px-2 py-1.5 text-right font-medium {o.side === 'SELL' ? (o.profit !== null && o.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400') : 'text-stone-400 dark:text-stone-500'}">{o.side === 'SELL' && o.profit !== null ? `${o.profit >= 0 ? '+' : ''}${fmtMoney(o.profit)}${o.profitPct !== null ? ` (${o.profitPct >= 0 ? '+' : ''}${o.profitPct.toFixed(1)}%)` : ''}` : '—'}</td>
+									<td class="px-2 py-1.5 text-right font-medium {o.side === 'SELL' ? (o.profit !== null && o.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400') : 'text-stone-400 dark:text-stone-500'}">{o.side === 'SELL' && o.profit !== null ? `${o.profit >= 0 ? '+' : ''}${fmtMoney(o.profit)}${o.profitPct !== null ? ` (${o.profitPct >= 0 ? '+' : ''}${o.profitPct.toFixed(2)}%)` : ''}` : '—'}</td>
 									<td class="px-1 py-1.5 text-center">
 										{#if o.id === latestOrderId}
-											<button
-												type="button"
-												aria-label="Delete latest order"
-												class="grid h-6 w-6 place-items-center rounded-full text-base leading-none text-stone-300 dark:text-stone-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400"
-												onclick={() => (confirmingOrder = o.id)}
-											>&times;</button>
+											<span class="inline-flex items-center gap-0.5">
+												<button
+													type="button"
+													aria-label="Edit latest order"
+													class="grid h-6 w-6 place-items-center rounded-full text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-700 dark:hover:text-stone-200"
+													onclick={() => startEditOrder(o)}
+												><Pencil class="h-3 w-3" /></button>
+												<button
+													type="button"
+													aria-label="Delete latest order"
+													class="grid h-6 w-6 place-items-center rounded-full text-base leading-none text-stone-300 dark:text-stone-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400"
+													onclick={() => (confirmingOrder = o.id)}
+												>&times;</button>
+											</span>
 										{/if}
 									</td>
 								</tr>
@@ -654,19 +904,6 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	/>
 {/if}
 
-{#if confirmingDisable}
-	{@const cd = confirmingDisable}
-	<ConfirmDialog
-		title="Disable {cd.name}?"
-		message="The venue leaves the switcher until re-enabled. Orders and quotes stay stored."
-		confirmLabel="Disable venue"
-		cancelLabel="Cancel"
-		confirmTone="danger"
-		onConfirm={() => void setOrgEnabled(cd.id, false)}
-		onCancel={() => (confirmingDisable = null)}
-	/>
-{/if}
-
 {#if detailTicker}
 	{@const dp = summary?.positions.find((x) => x.ticker === detailTicker)}
 	{#if dp}
@@ -685,30 +922,56 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 		role="dialog"
 		aria-modal="true"
-		aria-label="New {side === 'BUY' ? 'buy' : 'sale'}"
+		aria-label="{editingOrderId ? 'Edit' : 'New'} {side === 'BUY' ? 'buy' : 'sale'}"
 		tabindex="-1"
-		onclick={(e) => { if (e.target === e.currentTarget) orderOpen = null; }}
-		onkeydown={(e) => { if (e.key === 'Escape') orderOpen = null; }}
+		onclick={(e) => { if (e.target === e.currentTarget) closeOrder(); }}
+		onkeydown={(e) => { if (e.key === 'Escape') closeOrder(); }}
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
 		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">New {side === 'BUY' ? 'buy' : 'sale'}</h2>
-			{#if side === 'SELL'}
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">{editingOrderId ? 'Edit' : 'New'} {side === 'BUY' ? 'buy' : 'sale'}</h2>
+			{#if editingOrderId}
+				<p class="mt-1 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Correct the latest order. Value, fees and net are recomputed with the rates recorded with it; the ticker and side stay.</p>
+				{#if editCosts}
+					<div class="mt-3 rounded-xl bg-stone-100 dark:bg-stone-800 px-3 py-2 text-[11px] tabular-nums leading-relaxed text-stone-600 dark:text-stone-300">
+						<p class="text-[9px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Costs at the buy</p>
+						<p>
+							fee {editCosts.feeRatePct.toFixed(2)}%{#if editCosts.feeRatePct > 0}
+								<span class="text-stone-400 dark:text-stone-500">· total {(editCosts.feeRatePct * 2).toFixed(2)}% (buy + sell)</span>
+							{/if}
+						</p>
+						{#if editCosts.irrfRatePct > 0}
+							<p>dedo-duro {editCosts.irrfRatePct.toFixed(2)}%</p>
+						{/if}
+						{#if editCosts.spreadRatePct > 0}
+							<p>spread {editCosts.spreadRatePct.toFixed(2)}%</p>
+						{/if}
+						{#if editCosts.fixedFee > 0}
+							<p>fixed {fmtMoney(editCosts.fixedFee)}</p>
+						{/if}
+						{#if editFeePreview}
+							<p class="mt-0.5">{fmtMoney(editFeePreview.fee)} this order{#if editCosts.feeRatePct > 0} · {fmtMoney(editFeePreview.both)} both ways{/if}</p>
+						{/if}
+						<p class="mt-0.5 text-stone-400 dark:text-stone-500">Fixed when the order was recorded. Change rules in Fees; new buys use the new values.</p>
+					</div>
+				{/if}
+			{:else if side === 'SELL'}
 				<p class="mt-1 text-[11px] leading-snug text-stone-400 dark:text-stone-500">A sale always closes the full position. Enter the full open quantity.</p>
 			{/if}
-			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="trade-ticker">Ticker</label>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="trade-ticker">{orgId === 'ripio' ? 'Coin' : 'Ticker'}</label>
 			<div class="relative">
 				<input
 					id="trade-ticker"
-					class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base uppercase text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-					aria-label="Ticker"
+					class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base uppercase text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600 disabled:opacity-60"
+					disabled={editingOrderId !== null}
+					aria-label={orgId === 'ripio' ? 'Coin' : 'Ticker'}
 					aria-expanded={tickerFocus && tickerSuggestions.length > 0}
 					aria-controls="ticker-listbox"
 					aria-activedescendant={tickerFocus && tickerSuggestions[tickerActive] ? `ticker-${tickerSuggestions[tickerActive]}` : undefined}
 					role="combobox"
 					aria-autocomplete="list"
 					autocomplete="off"
-					placeholder={orgId === "ripio" ? "BTC_USDC" : "PETR4"}
+					placeholder={orgId === "ripio" ? "BTC" : "PETR4"}
 					value={fTicker}
 					onfocus={() => {
 						tickerFocus = true;
@@ -726,6 +989,7 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 							const q = openQty(fTicker);
 							if (q > 0) fQty = String(q);
 						}
+						if (fTicker.trim()) fGoal = goalFor(fTicker);
 					}}
 					onkeydown={(e) => {
 						if (e.key === 'ArrowDown' && tickerSuggestions.length > 0) {
@@ -789,6 +1053,23 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 						oninput={(e) => (fPrice = e.currentTarget.value)}
 					/>
 				</div>
+				{#if orderOpen === 'BUY'}
+					<div class="col-span-2">
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="trade-goal">Goal %</label>
+						<input
+							id="trade-goal"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+							aria-label="Goal %"
+							type="number" step="any" min="0"
+							placeholder="3"
+							value={fGoal}
+							oninput={(e) => (fGoal = e.currentTarget.value)}
+						/>
+						<p class="mt-1 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
+							Net profit over the total cost, after the venue fee. Change it later from the trade detail.
+						</p>
+					</div>
+				{/if}
 			</div>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="trade-date">Date</label>
 			<input
@@ -802,16 +1083,90 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 				<button
 					type="button"
 					class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => (orderOpen = null)}
+					onclick={closeOrder}
 				>Cancel</button>
 				<button
 					type="button"
 					class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
 					onclick={() => void saveOrder()}
-				>Save {side === 'BUY' ? 'buy' : 'sale'}</button>
+				>{editingOrderId ? 'Save changes' : `Save ${side === 'BUY' ? 'buy' : 'sale'}`}</button>
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if sellPos}
+	<div
+		class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Sell all {coinLabel(sellPos.ticker, orgId)}"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) closeSell(); }}
+		onkeydown={(e) => { if (e.key === 'Escape') closeSell(); }}
+		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
+	>
+		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Sell all {coinLabel(sellPos.ticker, orgId)}</h2>
+			<p class="mt-1 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
+				A sale closes the whole position: {fmtCoin(sellPos.qty)} {coinLabel(sellPos.ticker, orgId)}. Record the unit price the venue offers you.
+			</p>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="sell-price">Sale price ({orgId === 'ripio' ? 'US$' : 'R$'})</label>
+			<input
+				id="sell-price"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+				type="number" step="any" min="0"
+				value={sellPrice}
+				oninput={(e) => (sellPrice = e.currentTarget.value)}
+			/>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="sell-date">Date</label>
+			<input
+				id="sell-date"
+				type="date"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+				value={sellDate}
+				oninput={(e) => (sellDate = e.currentTarget.value)}
+			/>
+			{#if sellPreview}
+				{@const profit = sellPreview.net - sellPos.cost}
+				{@const profitPct = sellPos.cost > 0 ? (profit / sellPos.cost) * 100 : null}
+				<p class="mt-3 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
+					Gross {fmtMoney(sellPreview.value)} · net after fees {fmtMoney(sellPreview.net)} · cost {fmtMoney(sellPos.cost)}
+				</p>
+				<p class="mt-1 flex items-center gap-1 text-[11px] font-medium tabular-nums {profit > 0 ? 'text-emerald-600 dark:text-emerald-400' : profit < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-stone-500 dark:text-stone-400'}" title="Net proceeds minus the cost paid, after every venue fee">
+					{#if profit > 0}<TrendingUp class="h-3 w-3 shrink-0" />{:else if profit < 0}<TrendingDown class="h-3 w-3 shrink-0" />{/if}
+					<span>{profit >= 0 ? 'Earns' : 'Loses'} {fmtMoney(Math.abs(profit))}{#if profitPct !== null} ({profit >= 0 ? '+' : '−'}{Math.abs(profitPct).toFixed(2)}%){/if}</span>
+				</p>
+				{#if profit < 0}
+					<p class="mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">Below cost after fees — this sale loses money.</p>
+				{/if}
+			{/if}
+			<div class="mt-4 flex justify-end gap-2">
+				<button
+					type="button"
+					class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+					onclick={closeSell}
+				>Cancel</button>
+				<button
+					type="button"
+					class="rounded-full bg-rose-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600"
+					onclick={confirmSale}
+				>Sell all</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if confirmingSale}
+	<ConfirmDialog
+		title="Record the sale of {coinLabel(confirmingSale.ticker, orgId)}?"
+		message={`Sell all ${fmtCoin(confirmingSale.qty)} at ${fmtMoney(confirmingSale.price)}${sellPreview ? ` for a net of ${fmtMoney(sellPreview.net)}` : ''}. The position closes and the row enters the diary.`}
+		confirmLabel="Record sale"
+		cancelLabel="Cancel"
+		confirmTone="danger"
+		onConfirm={() => void saveSale()}
+		onCancel={() => (confirmingSale = null)}
+	/>
 {/if}
 
 {#if settingsOpen && org}
@@ -827,8 +1182,14 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	>
 		<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
 			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">{org.name} rules</h2>
-			<p class="mt-1 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Fees apply to buys and sales. Dedo-duro applies to sales only. New orders use these values; past orders keep theirs.</p>
-			<div class="mt-3 grid grid-cols-2 gap-2">
+			<p class="mt-1 text-[11px] leading-snug text-stone-400 dark:text-stone-500">
+				{#if orgId === 'ripio'}
+					One percentage, charged on every buy and every sale. Write what it covers in the comment. New orders use this value; past orders keep theirs.
+				{:else}
+					Fees apply to buys and sales. Dedo-duro applies to sales only. New orders use these values; past orders keep theirs.
+				{/if}
+			</p>
+			<div class="mt-3 grid gap-2 {orgId === 'ripio' ? '' : 'grid-cols-2'}">
 				<div>
 					<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-fee">Fee %</label>
 					<input
@@ -839,36 +1200,51 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 						oninput={(e) => (sFee = e.currentTarget.value)}
 					/>
 				</div>
-				<div>
-					<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-irrf">Dedo-duro %</label>
-					<input
-						id="org-irrf"
-						class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
-						type="number" step="any" min="0"
-						value={sIrrf}
-						oninput={(e) => (sIrrf = e.currentTarget.value)}
-					/>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-fixed">Fixed fee ({orgId === 'ripio' ? 'US$' : 'R$'})</label>
-					<input
-						id="org-fixed"
-						class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
-						type="number" step="any" min="0"
-						value={sFixed}
-						oninput={(e) => (sFixed = e.currentTarget.value)}
-					/>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-limit">Monthly limit ({orgId === 'ripio' ? 'US$' : 'R$'})</label>
-					<input
-						id="org-limit"
-						class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
-						type="number" step="any" min="0"
-						value={sLimit}
-						oninput={(e) => (sLimit = e.currentTarget.value)}
-					/>
-				</div>
+					{#if orgId === 'ripio'}
+					<div>
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-note">Comment</label>
+						<input
+							id="org-note"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
+							type="text"
+							maxlength="160"
+							placeholder="What this fee covers"
+							value={sNote}
+							oninput={(e) => (sNote = e.currentTarget.value)}
+						/>
+					</div>
+				{:else}
+					<div>
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-irrf">Dedo-duro %</label>
+						<input
+							id="org-irrf"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+							type="number" step="any" min="0"
+							value={sIrrf}
+							oninput={(e) => (sIrrf = e.currentTarget.value)}
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-fixed">Fixed fee (R$)</label>
+						<input
+							id="org-fixed"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+							type="number" step="any" min="0"
+							value={sFixed}
+							oninput={(e) => (sFixed = e.currentTarget.value)}
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="org-limit">Monthly limit (R$)</label>
+						<input
+							id="org-limit"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+							type="number" step="any" min="0"
+							value={sLimit}
+							oninput={(e) => (sLimit = e.currentTarget.value)}
+						/>
+					</div>
+				{/if}
 			</div>
 			<div class="mt-4 flex justify-end gap-2">
 				<button
@@ -898,8 +1274,8 @@ import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
 		<div class="w-full max-w-xs rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl" transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}>
-			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Target for {targetTicker}</h2>
-			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="target-pct">Target %</label>
+			<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Goal for {coinLabel(targetTicker, orgId)}</h2>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="target-pct">Goal %</label>
 			<input
 				id="target-pct"
 				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"

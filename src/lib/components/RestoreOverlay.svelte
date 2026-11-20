@@ -23,6 +23,9 @@
 	];
 
 	const currentIndex = $derived(phase === 'done' ? STEPS.length : STEPS.findIndex((s) => s.id === phase));
+	// A restore in progress must not be dismissed halfway: the root layout
+	// replays Escape only into dialogs that do not opt out.
+	const dismissible = $derived(phase === 'done' || Boolean(error));
 </script>
 
 <div
@@ -31,6 +34,12 @@
 	aria-modal="true"
 	aria-label="Restoring your journal"
 	tabindex="-1"
+	data-escape={dismissible ? undefined : 'ignore'}
+	onkeydown={(e) => {
+		if (e.key !== 'Escape' || !dismissible) return;
+		e.preventDefault();
+		onClose();
+	}}
 >
 	<div class="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 p-5 shadow-xl">
 		{#if error}

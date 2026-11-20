@@ -12,23 +12,19 @@
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from '$lib/chat-models';
 	import { isAppleDevice } from '$lib/platform';
-	import { splitTrailingHashtags } from '$lib/hashtags';
+	import { splitHashtags } from '$lib/hashtags';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
 	import { nostrAccount } from '$lib/nostr.svelte';
 	import { nostrBackup } from '$lib/nostr-backup.svelte';
 	import { miniApps } from '$lib/mini-apps.svelte';
 	import { timeTracker } from '$lib/time-tracker.svelte';
-	import MiniAppsFab from '$lib/components/MiniAppsFab.svelte';
-	import MiniAppsModal from '$lib/components/MiniAppsModal.svelte';
 	import TimeTrackerBar from '$lib/components/TimeTrackerBar.svelte';
 	import { showToast } from '$lib/toast.svelte';
 	import { invalidateTagChoices } from '$lib/tag-suggest';
 	import { tagColors } from '$lib/tag-colors.svelte';
-	import { formatNotesForClipboard } from '$lib/note-export';
 	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
 	import RestoreOverlay from '$lib/components/RestoreOverlay.svelte';
-	import CopyFallback from '$lib/components/CopyFallback.svelte';
 	import Grid3x3 from '@lucide/svelte/icons/grid-3x3';
 	import House from '@lucide/svelte/icons/house';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
@@ -40,12 +36,29 @@
 	import HoldingsCarousel from '$lib/components/HoldingsCarousel.svelte';
 	import MarketCard from '$lib/components/MarketCard.svelte';
 	import TradingStrip from '$lib/components/TradingStrip.svelte';
+	import { tradingStrip } from '$lib/trading-strip.svelte';
+	import { fmtCurrency } from '$lib/currency';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
 	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
+
+	// The market rail belongs to the section views. Heatmaps, tags, a single
+	// note or task, Ask and Diagnostics open without investment numbers.
+	const MARKET_SECTIONS = new Set([
+		'/admin/notes',
+		'/admin/todo',
+		'/admin/library',
+		'/admin/principles',
+		'/admin/influences',
+		'/admin/stocks',
+		'/admin/businesses/cubiq'
+	]);
+	const showMarket = $derived(
+		MARKET_SECTIONS.has(page.url.pathname) || page.url.pathname.startsWith('/admin/businesses/trading')
+	);
 
 	let heatmapLoading = $derived(navigating.to?.url.pathname === '/admin/heatmap');
 	let tagsLoading = $derived(navigating.to?.url.pathname === '/admin/tags');
@@ -87,6 +100,16 @@ function langTag(p: Lang): string {
 	const pager = new NotePager();
 	pager.featured = 'exclude';
 	let notes = $derived(pager.notes);
+	/** The Published pill limits the timeline to published notes. */
+	let publishedOnly = $state(false);
+	async function togglePublished() {
+		publishedOnly = !publishedOnly;
+		pager.published = publishedOnly ? 'only' : null;		try {
+			await pager.open();
+		} catch (e) {
+			showToast((e as Error)?.message ?? 'Failed to load notes.');
+		}
+	}
 	let featured = $state<Note[]>([]);
 	type Props = { children: Snippet };
 	let { children }: Props = $props();
@@ -97,8 +120,8 @@ function langTag(p: Lang): string {
 
 	let lastSection = $state<SectionId>('notes');
 	/** The URL is the section: no view state, no sessionStorage to restore.
-	 *  A mini app route under /admin (for example /admin/time-tracker) is not
-	 *  a section. Return null there instead of falling back to Notes: a false
+	 *  A route that is not a section (for example /admin/diagnostics) must
+	 *  return null instead of falling back to Notes: a false
 	 *  fallback selects the Notes pill and shows its composer on another page. */
 	const section = $derived.by((): View | null => {
 		const parts = page.url.pathname.split('/');
@@ -134,6 +157,16 @@ function langTag(p: Lang): string {
 	let apple = $state(false);
 	onMount(() => {
 		apple = isAppleDevice();
+		// The global New note command can fire from any page. When the notes
+		// timeline is mounted, put the saved row in place without a reload.
+		const onNoteCreated = (e: Event) => {
+			const note = (e as CustomEvent<Note>).detail;
+			if (!note || page.url.pathname !== '/admin/notes') return;
+			if (pager.notes.some((n) => n.id === note.id)) return;
+			pager.insertSorted(note);
+		};
+		window.addEventListener('notes:created', onNoteCreated);
+		return () => window.removeEventListener('notes:created', onNoteCreated);
 	});
 
 	// Section shortcuts are a two-key sequence: `G` then `1…5`, with an
@@ -203,9 +236,6 @@ function langTag(p: Lang): string {
 		restoreName = '';
 	}
 
-	let copied = $state(false);
-	let copyText = $state<string | null>(null);
-
 	// Temporary overflow hunt: `?debug=overflow` outlines every element
 	// sticking out of the viewport and lists it below. Removed once the
 	// trading-view shift is identified.
@@ -242,20 +272,6 @@ function langTag(p: Lang): string {
 			clearInterval(timer);
 		};
 	});
-
-	async function copyLoadedNotes() {
-		const text = formatNotesForClipboard(notes, config.entriesLang);
-		if (!text) return;
-		try {
-			if (!navigator.clipboard) throw new Error('clipboard unavailable');
-			await navigator.clipboard.writeText(text);
-			copied = true;
-			setTimeout(() => (copied = false), 1500);
-		} catch {
-			// Plain-HTTP origins have no navigator.clipboard: show the text.
-			copyText = text;
-		}
-	}
 
 	async function runRestore(file: File) {
 		showSettings = false;
@@ -334,6 +350,9 @@ function langTag(p: Lang): string {
 		void loadFeatured();
 		void tagColors.load();
 		void loadHoldings();
+		// The strip owns its own 60-second reload and goal alerts, so the
+		// collapsed Trading section still shows its totals.
+		tradingStrip.start();
 		refreshSummaryAnswer(true, null, false);
 		void loadAsks();
 		void nostrAccount.load();
@@ -450,7 +469,9 @@ function langTag(p: Lang): string {
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to update note.');
 			const saved = d.note as Note;
-			pager.patch(saved);
+			// The published-only filter loses an unpublished note immediately.
+			if (publishedOnly && !saved.published) pager.remove(saved.id);
+			else pager.patch(saved);
 			featured = featured.map((f) => (f.id === saved.id ? saved : f));
 			showToast(saved.published ? 'Note published.' : 'Note unpublished.', 'success');
 		} catch (e) {
@@ -725,10 +746,10 @@ function langTag(p: Lang): string {
 		if (!cd.trim() || NO_STATE.has(cd)) return;
 		if (!page.url.pathname.startsWith('/admin/notes')) void goto('/admin/notes');
 		saving = true;
-		const { content, tags } = splitTrailingHashtags(cd);
+		const { content, tags } = splitHashtags(cd);
 		if (!content) {
 			saving = false;
-			showToast('A note needs text before the hashtags.');
+			showToast('A note needs text besides its hashtags.');
 			return;
 		}
 		const now = Date.now();
@@ -802,10 +823,11 @@ function langTag(p: Lang): string {
 		}
 	}
 
-	async function handleEdit(id: string, content: string, video?: string, createdAt?: number) {
-		const body: { content: string; video?: string; created_at?: number } = { content };
+	async function handleEdit(id: string, content: string, video?: string, createdAt?: number, title?: string) {
+		const body: { content: string; video?: string; created_at?: number; title?: string } = { content };
 		if (video !== undefined) body.video = video;
 		if (createdAt !== undefined) body.created_at = createdAt;
+		if (title !== undefined) body.title = title;
 		const res = await loading.track(fetch(`/api/notes/${id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
@@ -951,6 +973,10 @@ function langTag(p: Lang): string {
 			get notes() {
 				return notes;
 			},
+			get publishedOnly() {
+				return publishedOnly;
+			},
+			onTogglePublished: () => void togglePublished(),
 			get hasMore() {
 				return pager.hasMore;
 			},
@@ -963,11 +989,7 @@ function langTag(p: Lang): string {
 			onFeatureNote: handleFeature,
 			onPublishNote: handlePublish,
 			onCoverNote: handleCover,
-			onRemoveTag: removeTag,
-			onCopyLoaded: copyLoadedNotes,
-			get copied() {
-				return copied;
-			}
+			onRemoveTag: removeTag
 		},
 		ask: {
 			get asks() {
@@ -1056,8 +1078,15 @@ function langTag(p: Lang): string {
 			</div>
 		</header>
 
+		{#if showMarket}
 		<section class="mb-4" aria-label="Market">
 			<MarketCard refreshing={marketRefreshing} onRefresh={() => void refreshMarket()}>
+				{#snippet tradingSummary()}
+					{@const t = tradingStrip.totals}
+					{#if t && t.count > 0}
+						{t.count} · {fmtCurrency(t.now.USD ?? NaN, 'USD', 0)}{#if t.now.BRL !== null} · {fmtCurrency(t.now.BRL, 'BRL', 0)}{/if}{#if t.now.UYU !== null} · {fmtCurrency(t.now.UYU, 'UYU', 0)}{/if}
+					{/if}
+				{/snippet}
 				{#snippet holdingsRail()}
 					<HoldingsCarousel
 						summary={holdings}
@@ -1076,13 +1105,13 @@ function langTag(p: Lang): string {
 					<TradingStrip
 						bare
 						onOpen={() => void goto('/admin/businesses/trading/b3')}
-						onError={(m) => showToast(m)}
 						onRefreshTicker={(t) => void refreshTicker(t)}
 						refreshingTicker={refreshingTicker}
 					/>
 				{/snippet}
 			</MarketCard>
 		</section>
+		{/if}
 
 		<div class="mb-4" role="tablist" aria-label="Views">
 			<SectionBar
@@ -1095,10 +1124,6 @@ function langTag(p: Lang): string {
 		</div>
 
 		{@render children()}
-
-		{#if copyText !== null}
-			<CopyFallback text={copyText} onClose={() => (copyText = null)} />
-		{/if}
 
 		{#if overflowOn}
 			<div class="fixed inset-x-0 bottom-0 z-[999] max-h-44 overflow-y-auto bg-black/90 p-2 font-mono text-[10px] leading-snug text-white">
@@ -1184,8 +1209,6 @@ function langTag(p: Lang): string {
 			/>
 		{/if}
 
-		<MiniAppsFab />
-		<MiniAppsModal />
 	</div>
 {/if}
 </main>

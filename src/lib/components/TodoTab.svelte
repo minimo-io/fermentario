@@ -15,6 +15,9 @@
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import FixedBottomBar from '$lib/components/FixedBottomBar.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
+	import ImagePlus from '@lucide/svelte/icons/image-plus';
+	import X from '@lucide/svelte/icons/x';
+	import { fileToPhotoUrl } from '$lib/stock-photo';
 	import { loading } from '$lib/loading.svelte';
 	import { tagColors } from '$lib/tag-colors.svelte';
 
@@ -31,6 +34,8 @@
 	let groupField = $state<HTMLInputElement | null>(null);
 	let newItem = $state('');
 	let newItemVideo = $state('');
+	// The image is resized in the browser and uploaded after the item exists.
+	let newItemPhoto = $state<string | null>(null);
 	let renaming = $state<string | null>(null);
 	let renameText = $state('');
 	let renameField = $state<HTMLInputElement | null>(null);
@@ -255,12 +260,44 @@
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to add item.');
+			let item = d.item as TodoItem;
+			const photo = newItemPhoto;
 			newItem = '';
 			newItemVideo = '';
+			newItemPhoto = null;
 			addingItem = false;
-			items = [...items, d.item];
+			items = [...items, item];
+			// The item exists now; the image needs its id. A failed upload keeps
+			// the task and says so instead of dropping the text too.
+			if (photo) {
+				try {
+					const up = await fetch(`/api/todo/items/${item.id}/photo`, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ photo })
+					});
+					if (!up.ok) throw new Error();
+					const saved = (await up.json()) as { id: string };
+					item = { ...item, photoId: saved.id };
+					items = items.map((x) => (x.id === item.id ? item : x));
+				} catch {
+					onError('Task saved, but the image could not be uploaded.');
+				}
+			}
 		} catch (e) {
 			onError((e as Error)?.message ?? 'Failed to add item.');
+		}
+	}
+
+	async function pickItemPhoto(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		try {
+			newItemPhoto = await fileToPhotoUrl(file);
+		} catch {
+			onError('Could not read the image.');
 		}
 	}
 
@@ -658,6 +695,16 @@
 					{:else}
 						<!-- Mobile, bare row: pill alone is right-aligned on its own line. -->
 						<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(item)}</div>
+					{/if}
+					{#if item.photoId}
+						<div class="mt-1.5 pl-12 sm:pl-0">
+							<img
+								src={`/api/todo/photos/${item.photoId}`}
+								alt=""
+								loading="lazy"
+								class="h-20 w-28 rounded-xl object-cover"
+							/>
+						</div>
 					{/if}
 					{#if item.video}
 						<div class="mt-1.5 pl-12 text-left sm:pl-0 sm:text-right"><VideoPill id={item.video} /></div>
@@ -1097,7 +1144,7 @@
 		<button
 			type="button"
 			class="flex min-h-11 w-full flex-1 items-center justify-center gap-1.5 rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
-			onclick={() => { newItem = ''; newItemVideo = ''; addingItem = true; }}
+			onclick={() => { newItem = ''; newItemVideo = ''; newItemPhoto = null; addingItem = true; }}
 			aria-keyshortcuts={isMac ? 'Meta+Shift+A' : 'Control+Shift+A'}
 		><Plus class="h-4 w-4" /> Add<Kbd keys={addShortcutKeys} tone="dark" /></button>
 	</FixedBottomBar>
@@ -1120,7 +1167,7 @@
 				bind:this={itemField}
 				rows="3"
 				class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-				placeholder="Describe the task… (trailing #tags work too)"
+				placeholder="Describe the task… (#tags work anywhere)"
 				aria-label="Task text"
 				value={newItem}
 				oninput={(e) => { newItem = e.currentTarget.value; autosizeItem(); }}
@@ -1137,11 +1184,30 @@
 				placeholder="https://www.youtube.com/watch?v=…"
 				inputmode="url"
 			/>
+			<div class="mt-3">
+				<span class="block text-xs font-medium text-stone-500 dark:text-stone-400">Image (optional)</span>
+				{#if newItemPhoto}
+					<div class="mt-1 flex items-start gap-2">
+						<img src={newItemPhoto} alt="" class="h-20 w-28 rounded-xl object-cover" />
+						<button
+							type="button"
+							class="grid h-7 w-7 shrink-0 place-items-center rounded-full text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-rose-600 dark:hover:text-rose-400"
+							aria-label="Remove task image"
+							onclick={() => (newItemPhoto = null)}
+						><X class="h-4 w-4" /></button>
+					</div>
+				{:else}
+					<label class="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 px-3 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800">
+						<ImagePlus class="h-3.5 w-3.5" /> Choose image
+						<input type="file" accept="image/*" class="sr-only" onchange={pickItemPhoto} />
+					</label>
+				{/if}
+			</div>
 			<div class="mt-4 flex justify-end gap-2">
 				<button
 					type="button"
 					class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-					onclick={() => (addingItem = false)}
+					onclick={() => { addingItem = false; newItemPhoto = null; }}
 				>Cancel</button>
 				<button
 					type="button"

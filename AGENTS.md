@@ -13,6 +13,12 @@
   `motion-reduce:transition-none`. Follow the Holdings/Stock status pattern.
   Do not add a toggle without it. Text truncation folds are the only exception.
 
+## Shortcuts
+- Every keyboard shortcut lives in `src/lib/shortcuts.ts`. Add or change it
+  there in the same change that wires it, so the help dialog always lists the
+  real shortcuts. Mini app shortcuts also carry a `shortcut` field in
+  `src/lib/mini-apps.svelte.ts`.
+
 ## Testing effort
 - For small changes — CSS, Tailwind classes, markup, copy, icons, docs — do not
   run `pnpm run check`, `pnpm run build`, `pnpm test`, or browser automation.

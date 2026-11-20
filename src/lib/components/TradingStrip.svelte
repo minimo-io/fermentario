@@ -1,73 +1,49 @@
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Minus from '@lucide/svelte/icons/minus';
+	import TrendingDown from '@lucide/svelte/icons/trending-down';
+	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import { slide } from 'svelte/transition';
 	import { motionMs } from '$lib/motion';
+	import { fmtCurrency } from '$lib/currency';
 	import TradingPositionCard from '$lib/components/TradingPositionCard.svelte';
 	import TradingPositionModal from '$lib/components/TradingPositionModal.svelte';
+	import { tradingStrip } from '$lib/trading-strip.svelte';
 	import type { TradingStripItem } from '$lib/types';
-	import { showToast } from '$lib/toast.svelte';
 
 	// Home-page strip below the holdings carousel: same card rail, one card
 	// per open trading ticker. Tapping a card opens Businesses → Trading.
+	// The positions, totals and goal alerts live in the trading-strip store,
+	// outside the collapsible body: a collapse must still show the totals.
 	type Props = {
 		onOpen: () => void;
-		onError: (msg: string) => void;
 		bare?: boolean;
 		/** The admin layout owns the quote refresh so it can update holdings too. */
 		onRefreshTicker?: (ticker: string) => void;
 		refreshingTicker?: string | null;
 	};
-	let { onOpen, onError, bare = false, onRefreshTicker, refreshingTicker = null }: Props = $props();
+	let { onOpen, bare = false, onRefreshTicker, refreshingTicker = null }: Props = $props();
 
-	let positions = $state<TradingStripItem[] | null>(null);
-	let refreshing = $state(false);
+	const positions = $derived(tradingStrip.positions);
+	const totals = $derived(tradingStrip.totals);
+	// Now against invested: the total card's own line, green when the rail
+	// is in profit and red when it is not.
+	const delta = $derived.by(() => {
+		const t = totals;
+		if (!t) return null;
+		const now = t.now.USD;
+		const invested = t.invested.USD;
+		if (now === null || invested === null || !(invested > 0)) return null;
+		return { value: now - invested, pct: ((now - invested) / invested) * 100 };
+	});
+
 	let selected = $state<TradingStripItem | null>(null);
 
 	const COLLAPSED_KEY = 'ferm:trading-collapsed';
 	let collapsed = $state(false);
 
-	// Goal-hit alert: a position whose quote reaches or passes its target
-	// pings once through the global sound toast. Edge-triggered per
-	// orgId:ticker and remembered in storage, so the 60-second reload and a
-	// page reload never repeat an alert; falling below the target forgets
-	// the key, and a closed position is forgotten too.
-	const ALERT_KEY = 'ferm:trading-goal-alerts';
-	let alerted: Set<string> | null = null;
-
-	function loadAlerted(): Set<string> {
-		if (alerted) return alerted;
-		alerted = new Set();
-		try {
-			const raw = JSON.parse(localStorage.getItem(ALERT_KEY) ?? '[]') as unknown;
-			if (Array.isArray(raw)) for (const k of raw) if (typeof k === 'string') alerted.add(k);
-		} catch {
-			// Bad storage just means the session alerts from scratch.
-		}
-		return alerted;
-	}
-
-	function checkGoalAlerts(items: TradingStripItem[]) {
-		const set = loadAlerted();
-		const key = (p: TradingStripItem) => `${p.orgId}:${p.ticker}`;
-		// 'sell' and 'daytrade' are exactly "at or above the target" with a
-		// live quote; 'hold' and 'waiting' are not (see journal strip build).
-		const hits = items.filter((p) => p.recommendation === 'sell' || p.recommendation === 'daytrade');
-		const hitKeys = new Set(hits.map(key));
-		let changed = false;
-		for (const k of [...set]) if (!hitKeys.has(k)) { set.delete(k); changed = true; }
-		const fresh = hits.filter((p) => !set.has(key(p)));
-		for (const p of fresh) { set.add(key(p)); changed = true; }
-		if (!changed) return;
-		try {
-			localStorage.setItem(ALERT_KEY, JSON.stringify([...set]));
-		} catch {}
-		if (fresh.length === 0) return;
-		if (fresh.length === 1) {
-			const p = fresh[0];
-			showToast(`${p.ticker} reached its target — goal ${(p.targetPct * 100).toFixed(1)}%, now ${(p.potentialPct ?? 0).toFixed(1)}%`, 'success', true);
-		} else {
-			showToast(`${fresh.length} positions reached their target — ${fresh.map((p) => p.ticker).join(', ')}`, 'success', true);
-		}
+	function money(value: number | null, currency: string): string {
+		return value === null ? '—' : fmtCurrency(value, currency, 0);
 	}
 
 	$effect(() => {
@@ -82,52 +58,6 @@
 			localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
 		} catch {}
 	}
-
-	async function load() {
-		try {
-			const d = await (await fetch('/api/trading/strip')).json();
-			positions = Array.isArray(d.positions) ? d.positions : [];
-			checkGoalAlerts(positions ?? []);
-			// A position without a quote has never been refreshed: fetch once.
-			if ((positions ?? []).some((p) => p.quote === null)) await refresh(true);
-		} catch {
-			onError('Failed to load open trades.');
-		}
-	}
-
-	async function refresh(quiet = false) {
-		const orgs = [...new Set((positions ?? []).map((p) => p.orgId))];
-		if (orgs.length === 0) return;
-		try {
-			if (!quiet) refreshing = true;
-			for (const org of orgs) {
-				await fetch(`/api/trading/summary?org=${encodeURIComponent(org)}&refresh=1`);
-			}
-			const d = await (await fetch('/api/trading/strip')).json();
-			positions = Array.isArray(d.positions) ? d.positions : [];
-			checkGoalAlerts(positions ?? []);
-		} catch {
-			if (!quiet) onError('Failed to refresh trade quotes.');
-		} finally {
-			refreshing = false;
-		}
-	}
-
-	$effect(() => {
-		void load();
-		const onChange = () => void load();
-		const onVisible = () => {
-			if (!document.hidden) void load();
-		};
-		const timer = setInterval(() => void load(), 60000);
-		window.addEventListener('trading:changed', onChange);
-		document.addEventListener('visibilitychange', onVisible);
-		return () => {
-			clearInterval(timer);
-			window.removeEventListener('trading:changed', onChange);
-			document.removeEventListener('visibilitychange', onVisible);
-		};
-	});
 </script>
 
 {#if positions !== null}
@@ -162,6 +92,45 @@
 				aria-label="Open trades"
 				transition:slide={{ duration: motionMs(180) }}
 			>
+			{#if totals}
+				<!-- First card is the rail's money, in the holdings total-card
+					style: invested (buy net), now (a sale at the stored quote),
+					and at goals (the net each goal asks for). -->
+				<div
+					role="listitem"
+					class="flex w-40 shrink-0 snap-start flex-col rounded-2xl bg-stone-950 text-stone-50 dark:border dark:border-stone-700 p-3"
+				>
+					<p class="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+						Totals · {totals.count} {totals.count === 1 ? 'trade' : 'trades'}
+					</p>
+					<div class="mt-1 space-y-2 text-[11px] tabular-nums leading-tight">
+						<div>
+							<p class="uppercase tracking-wider text-stone-400">Invested</p>
+							<p class="break-all font-bold">{money(totals.invested.USD, 'USD')}</p>
+							<p class="truncate text-[10px] text-stone-400">{money(totals.invested.BRL, 'BRL')} · {money(totals.invested.UYU, 'UYU')}</p>
+						</div>
+						<div>
+							<p class="uppercase tracking-wider text-stone-400">Now</p>
+							<p class="break-all font-bold">{money(totals.now.USD, 'USD')}</p>
+							<p class="truncate text-[10px] text-stone-400">{money(totals.now.BRL, 'BRL')} · {money(totals.now.UYU, 'UYU')}</p>
+							{#if delta}
+								<p class="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium {delta.value > 0 ? 'text-emerald-400' : delta.value < 0 ? 'text-rose-400' : 'text-stone-400'}" title="Current value minus invested">
+									{#if delta.value > 0}<TrendingUp class="h-3 w-3 shrink-0" />{:else if delta.value < 0}<TrendingDown class="h-3 w-3 shrink-0" />{:else}<Minus class="h-3 w-3 shrink-0" />{/if}
+									<span class="truncate">{delta.value >= 0 ? '+' : '−'}{money(Math.abs(delta.value), 'USD')} ({delta.pct >= 0 ? '+' : ''}{delta.pct.toFixed(2)}%)</span>
+								</p>
+							{/if}
+						</div>
+						<div>
+							<p class="uppercase tracking-wider text-stone-400">At goals</p>
+							<p class="break-all font-bold text-emerald-400">{money(totals.atGoal.USD, 'USD')}</p>
+							<p class="truncate text-[10px] text-emerald-400/80">{money(totals.atGoal.BRL, 'BRL')} · {money(totals.atGoal.UYU, 'UYU')}</p>
+						</div>
+					</div>
+					{#if totals.missingQuotes > 0}
+						<p class="mt-auto pt-1 text-[10px] text-amber-400">{totals.missingQuotes} without quote</p>
+					{/if}
+				</div>
+			{/if}
 			{#each positions ?? [] as p (p.orgId + p.ticker)}
 				<div role="listitem" class="flex w-40 shrink-0 snap-start">
 					<button

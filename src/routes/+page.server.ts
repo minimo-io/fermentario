@@ -1,4 +1,4 @@
-import { getPublicConfig, listNotesPage } from '$lib/server/db';
+import { getPublicConfig, listNotesPage, listPublicTagCounts } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 /** Server-rendered public feed: published notes only, so crawlers see HTML. */
@@ -7,5 +7,13 @@ export const load: PageServerLoad = async ({ url }) => {
 	const page = publicConfig.notesEnabled
 		? listNotesPage({ limit: 50, published: 'only' })
 		: { notes: [], hasMore: false, nextCursor: null };
-	return { notes: page.notes, hasMore: page.hasMore, nextCursor: page.nextCursor, origin: url.origin, publicConfig };
+	const tags = publicConfig.notesEnabled ? listPublicTagCounts() : [];
+	return {
+		notes: page.notes,
+		hasMore: page.hasMore,
+		nextCursor: page.nextCursor,
+		tags,
+		origin: url.origin,
+		publicConfig
+	};
 };

@@ -13,8 +13,10 @@ export async function PATCH({ params, request }) {
 	const row = body as Record<string, unknown>;
 	const saved = updateTradingOrg(String(params.id ?? ''), {
 		feeRate: row?.feeRate,
+		spreadRate: row?.spreadRate,
 		irrfRate: row?.irrfRate,
 		fixedFee: row?.fixedFee,
+		feeNote: row?.feeNote,
 		exemptLimit: row?.exemptLimit,
 		enabled: row?.enabled
 	});

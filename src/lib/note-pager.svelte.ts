@@ -27,6 +27,8 @@ export class NotePager {
 	loading = $state(false);
 	tag: string | null;
 	featured: 'only' | 'exclude' | null = null;
+	/** `only` limits the pager to published notes (the admin filter pill). */
+	published: 'only' | null = null;
 
 	constructor(tag: string | null = null) {
 		this.tag = tag;
@@ -48,6 +50,7 @@ export class NotePager {
 		}
 		if (this.tag) q.set('tag', this.tag);
 		if (this.featured) q.set('featured', this.featured);
+		if (this.published) q.set('published', this.published);
 		const res = await fetch(`/api/notes?${q.toString()}`);
 		if (!res.ok) throw new Error('Failed to load notes.');
 		return (await res.json()) as NotesPage;

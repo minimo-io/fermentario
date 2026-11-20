@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { listTodoItems, createTodoItem, setTodoItemTags, setTodoItemOrder } from '$lib/server/db';
-import { splitTrailingHashtags } from '$lib/hashtags';
+import { splitHashtags } from '$lib/hashtags';
 import { splitLeadingSubgroup } from '$lib/subgroups';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -23,9 +23,9 @@ export async function POST({ params, request }) {
 	const body = await request.json();
 	const raw = String(body?.content ?? '').trim();
 	if (!raw) return json({ error: 'empty item' }, { status: 400 });
-	// Same tag system as notes: trailing hashtags become the item's tags.
+	// Same tag system as notes: hashtags anywhere become the item's tags.
 	// A leading (subgroup) assigns the subgroup, creating it by naming it.
-	const { content, tags } = splitTrailingHashtags(raw);
+	const { content, tags } = splitHashtags(raw);
 	if (!content) return json({ error: 'empty item' }, { status: 400 });
 	const group = splitLeadingSubgroup(content);
 	if (!group.content) return json({ error: 'empty item' }, { status: 400 });

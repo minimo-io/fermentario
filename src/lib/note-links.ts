@@ -12,8 +12,17 @@ function esc(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function linkHref(id: string, kind: LinkRef['kind']): string {
-	return kind === 'principle' ? `/admin/principles/${id}` : `/admin/notes/${id}`;
+/** Where a linked entry opens. Public surfaces must stay public, so a note
+ *  link there points at `/notes/<id>`; principles have no public page.
+ *  All note surfaces render through one body component, so the target is
+ *  chosen per surface, never per component copy. */
+export function linkHref(
+	id: string,
+	kind: LinkRef['kind'],
+	opts: { publicUi?: boolean } = {}
+): string {
+	if (kind === 'principle') return `/admin/principles/${id}`;
+	return opts.publicUi ? `/notes/${id}` : `/admin/notes/${id}`;
 }
 
 /** Inline link pill, shared by rendered note text and the header row. */
@@ -25,7 +34,8 @@ export const LINK_PILL_CLASS =
  *  render as muted text instead of a link. */
 export function renderNoteLinks(
 	html: string,
-	labels: Record<string, LinkRef> | Map<string, LinkRef>
+	labels: Record<string, LinkRef> | Map<string, LinkRef>,
+	opts: { publicUi?: boolean } = {}
 ): string {
 	const get = (id: string): LinkRef | undefined =>
 		labels instanceof Map ? labels.get(id) : labels[id];
@@ -34,15 +44,19 @@ export function renderNoteLinks(
 		if (target === undefined) {
 			return `<span class="text-stone-400 dark:text-stone-500" title="Linked entry not found">⧉ ${esc(id.slice(0, 8))}…</span>`;
 		}
-		return `<a href="${linkHref(id, target.kind)}" class="${LINK_PILL_CLASS}">${esc(target.label)}</a>`;
+		return `<a href="${linkHref(id, target.kind, opts)}" class="${LINK_PILL_CLASS}">${esc(target.label)}</a>`;
 	});
 }
 
 /** Full pipeline for note body text: markdown, then bare URLs, then link pills. */
-export function renderNoteContent(source: string, links?: LinkRef[]): string {
+export function renderNoteContent(
+	source: string,
+	links?: LinkRef[],
+	opts: { publicUi?: boolean } = {}
+): string {
 	const map: Record<string, LinkRef> = {};
 	for (const l of links ?? []) map[l.id] = l;
-	return renderNoteLinks(linkifyUrls(inlineMarkdown(source)), map);
+	return renderNoteLinks(linkifyUrls(inlineMarkdown(source)), map, opts);
 }
 
 /** Links-only pipeline for surfaces that stay markdown-free (principles):

@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
+	import Timer from '@lucide/svelte/icons/timer';
 	import Timeline from '$lib/components/Timeline.svelte';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
@@ -10,8 +11,11 @@
 	import { invalidateTagChoices } from '$lib/tag-suggest';
 	import { tagColors } from '$lib/tag-colors.svelte';
 	import TagColorModal from '$lib/components/TagColorModal.svelte';
+	import TagChip from '$lib/components/TagChip.svelte';
 	import { contentWidthClass } from '$lib/display';
-	import type { Note, TodoItem, Principle } from '$lib/types';
+	import { dayLocale } from '$lib/dates';
+	import { formatDuration } from '$lib/time-tracker.svelte';
+	import type { Note, TodoItem, Principle, TimeEntry } from '$lib/types';
 
 	let { data } = $props();
 	const pager = new NotePager();
@@ -19,9 +23,32 @@
 	let pinned = $state<Note[]>([]);
 	let todoItems = $state<TodoItem[]>([]);
 	let principleItems = $state<Principle[]>([]);
+	let timeEntries = $state<TimeEntry[]>([]);
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let colorOpen = $state(false);
+
+	type TagView = 'all' | 'featured' | 'notes' | 'time' | 'todo' | 'principles';
+	let view = $state<TagView | null>(null);
+
+	const groups = $derived(
+		[
+			{ id: 'featured' as const, label: 'Featured', count: pinned.length },
+			{ id: 'notes' as const, label: 'Notes', count: pager.count },
+			{ id: 'time' as const, label: 'Time', count: timeEntries.length },
+			{ id: 'todo' as const, label: 'To-Do', count: todoItems.length },
+			{ id: 'principles' as const, label: 'Principles', count: principleItems.length }
+		].filter((s) => s.count > 0)
+	);
+	const total = $derived(groups.reduce((sum, s) => sum + s.count, 0));
+	const sections = $derived(
+		total > 0 ? [{ id: 'all' as const, label: 'All', count: total }, ...groups] : []
+	);
+	const active = $derived(sections.find((s) => s.id === view)?.id ?? 'all');
+
+	$effect(() => {
+		if (view && !sections.some((s) => s.id === view)) view = null;
+	});
 
 	$effect(() => {
 		pager.seed({
@@ -34,6 +61,7 @@
 		pinned = data.pinned ?? [];
 		todoItems = data.todoItems ?? [];
 		principleItems = data.principleItems ?? [];
+		timeEntries = data.timeEntries ?? [];
 	});
 
 	onMount(() => {
@@ -104,6 +132,15 @@
 		pinned = pinned.map((x) => (x.id === n.id ? { ...x, coverId } : x));
 	}
 
+	function fmtWhen(at: number): string {
+		return new Date(at).toLocaleString(dayLocale(lang), {
+			day: 'numeric',
+			month: 'short',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
 	async function toggleTodo(item: TodoItem) {
 		try {
 			const res = await loading.track(fetch(`/api/todo/items/${item.id}`, {
@@ -133,11 +170,12 @@
 		}
 	}
 
-	async function edit(id: string, content: string, video?: string, createdAt?: number) {
+	async function edit(id: string, content: string, video?: string, createdAt?: number, title?: string) {
 		try {
-			const body: { content: string; video?: string; created_at?: number } = { content };
+			const body: { content: string; video?: string; created_at?: number; title?: string } = { content };
 			if (video !== undefined) body.video = video;
 			if (createdAt !== undefined) body.created_at = createdAt;
+			if (title !== undefined) body.title = title;
 			const res = await loading.track(fetch(`/api/notes/${id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
@@ -193,11 +231,36 @@
 			</h1>
 			<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">
 				{pager.count}
-				{pager.count === 1 ? 'note' : 'notes'} with this tag{#if todoItems.length > 0} · {todoItems.length} {todoItems.length === 1 ? 'to-do' : 'to-dos'}{/if}
+				{pager.count === 1 ? 'note' : 'notes'} with this tag{#if todoItems.length > 0} · {todoItems.length} {todoItems.length === 1 ? 'to-do' : 'to-dos'}{/if}{#if timeEntries.length > 0} · {timeEntries.length} {timeEntries.length === 1 ? 'time entry' : 'time entries'}{/if}
 			</p>
 		</header>
 
-		{#if pinned.length > 0}
+		{#if sections.length > 0}
+			<div
+				class="no-scrollbar -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
+				role="tablist"
+				aria-label="Tag sections"
+			>
+				{#each sections as section (section.id)}
+					<button
+						type="button"
+						role="tab"
+						aria-selected={active === section.id}
+						class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium select-none {active === section.id
+							? 'bg-stone-900 text-white dark:bg-stone-700'
+							: 'text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800'}"
+						onclick={() => (view = section.id)}
+					>{section.label}<span
+							class="tabular-nums {active === section.id
+								? 'text-white/70'
+								: 'text-stone-400 dark:text-stone-500'}">{section.count}</span
+						></button
+					>
+				{/each}
+			</div>
+		{/if}
+
+		{#if pinned.length > 0 && (active === 'all' || active === 'featured')}
 			<section class="mb-5" aria-label="Featured notes">
 				<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Featured</h2>
 				<Timeline
@@ -217,12 +280,12 @@
 			</section>
 		{/if}
 
-		{#if pager.notes.length === 0 && pinned.length === 0 && todoItems.length === 0 && principleItems.length === 0}
+		{#if sections.length === 0}
 			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-6 text-center text-sm text-stone-500 dark:text-stone-400">
-				No notes carry this tag yet.
+				Nothing carries this tag yet.
 			</p>
 		{:else}
-			{#if pager.notes.length > 0}
+			{#if pager.notes.length > 0 && (active === 'all' || active === 'notes')}
 				<section class="mb-5" aria-label="Notes with this tag">
 					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Notes</h2>
 					<Timeline
@@ -241,7 +304,42 @@
 					/>
 				</section>
 			{/if}
-			{#if todoItems.length > 0}
+			{#if timeEntries.length > 0 && (active === 'all' || active === 'time')}
+				<section class="mb-5" aria-label="Time entries with this tag">
+					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Time</h2>
+					<ul class="space-y-2">
+						{#each timeEntries as entry (entry.id)}
+							<li class="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0 flex-1">
+										<p class="text-[15px] text-stone-800 dark:text-stone-200">{entry.comment || 'No comment'}</p>
+										{#if entry.tags?.length}
+											<div class="mt-1 flex flex-wrap gap-1">
+												{#each entry.tags as tag (tag)}
+													<TagChip {tag} picker={false} />
+												{/each}
+											</div>
+										{/if}
+										<p class="mt-0.5 text-[11px] text-stone-400 dark:text-stone-500">
+											{fmtWhen(entry.startedAt)}{#if entry.endedAt} · {fmtWhen(entry.endedAt)}{/if}
+										</p>
+									</div>
+									<div class="shrink-0 text-right">
+										{#if entry.endedAt}
+											<p class="font-mono text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{formatDuration(entry.endedAt - entry.startedAt)}</p>
+										{:else}
+											<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+												<Timer class="h-3 w-3" /> Running
+											</span>
+										{/if}
+									</div>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
+			{#if todoItems.length > 0 && (active === 'all' || active === 'todo')}
 				<section aria-label="To-do items with this tag">
 					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">To-Do</h2>
 					<ul class="space-y-2">
@@ -269,7 +367,7 @@
 					</ul>
 				</section>
 			{/if}
-			{#if principleItems.length > 0}
+			{#if principleItems.length > 0 && (active === 'all' || active === 'principles')}
 				<section class="mt-5" aria-label="Principles with this tag">
 					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Principles</h2>
 					<ol class="space-y-2">

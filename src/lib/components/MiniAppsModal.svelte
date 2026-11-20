@@ -1,28 +1,36 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
-	import { MINI_APPS, miniApps } from '$lib/mini-apps.svelte';
+	import { miniApps, openMiniApp } from '$lib/mini-apps.svelte';
+	import { shortcutKeys } from '$lib/shortcuts';
+	import { isAppleDevice } from '$lib/platform';
+	import Kbd from '$lib/components/Kbd.svelte';
 	import { timeTracker } from '$lib/time-tracker.svelte';
 
 	function close() {
 		miniApps.closeModal();
 	}
 
-	function openApp(id: string, href: string) {
-		miniApps.recordUse(id);
-		close();
-		void goto(href);
-	}
-
 	function isRunning(id: string): boolean {
 		return id === 'time-tracker' && !!timeTracker.running;
 	}
 
+	let apple = $state(false);
+	onMount(() => {
+		apple = isAppleDevice();
+	});
+
 	const latest = $derived(miniApps.latestUsedId());
 	const apps = $derived(miniApps.orderedApps());
 </script>
+
+<svelte:window
+	onkeydown={(e) => {
+		if (miniApps.open && e.key === 'Escape') close();
+	}}
+/>
 
 {#if miniApps.open}
 	<div
@@ -57,7 +65,7 @@
 						<button
 							type="button"
 							class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-stone-100 dark:hover:bg-stone-800"
-							onclick={() => openApp(app.id, app.href)}
+							onclick={() => openMiniApp(app)}
 						>
 							<span class="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200">
 								<Icon class="h-4.5 w-4.5" />
@@ -71,12 +79,17 @@
 									{#if latest === app.id}
 										<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">Latest used</span>
 									{/if}
-									{#if running}
+									{#if app.id === 'time-tracker' && timeTracker.chiming}
+										<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">Chiming</span>
+									{:else if running}
 										<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">Running</span>
 									{/if}
 								</span>
 								<span class="mt-0.5 block text-[12px] text-stone-500 dark:text-stone-400">{app.description}</span>
 							</span>
+							{#if app.shortcut}
+								<span class="shrink-0 self-center"><Kbd keys={shortcutKeys(app.shortcut, apple)} /></span>
+							{/if}
 						</button>
 					</li>
 				{/each}

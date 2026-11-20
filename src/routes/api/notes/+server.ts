@@ -8,7 +8,7 @@ import {
 	setNoteVideo
 } from '$lib/server/db';
 import { ensureIndexed, indexNote } from '$lib/server/rag';
-import { splitTrailingHashtags } from '$lib/hashtags';
+import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
 const MAX_TAG_FILTER = 60;
@@ -50,7 +50,7 @@ export async function POST({ request }) {
 	if (!raw) {
 		return json({ error: 'empty note' }, { status: 400 });
 	}
-	const { content, tags } = splitTrailingHashtags(raw);
+	const { content, tags } = splitHashtags(raw);
 	if (!content) {
 		return json({ error: 'empty note' }, { status: 400 });
 	}
@@ -64,7 +64,7 @@ export async function POST({ request }) {
 	}
 	void indexNote(note.id, content).catch(() => {});
 	if (tags.length > 0) {
-		// Tags come only from hashtags the user typed at the end of the note.
+		// Tags come only from hashtags the user typed in the note.
 		setNoteTags(note.id, tags);
 		note.tags = tags;
 	}

@@ -4,7 +4,7 @@
 	import { BACKDROP_MS, motionMs } from '$lib/motion';
 	import { createSpeech, browserSupportsSpeech } from '$lib/speech';
 	import { showToast } from '$lib/toast.svelte';
-	import { splitTrailingHashtags } from '$lib/hashtags';
+	import { splitHashtags } from '$lib/hashtags';
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import Mic from '@lucide/svelte/icons/mic';
 	import Square from '@lucide/svelte/icons/square';
@@ -45,7 +45,7 @@
 
 	let interim = $state('');
 	let speech = $state<ReturnType<typeof createSpeech> | null>(null);
-	let pendingTags = $derived(view === 'notes' ? splitTrailingHashtags(text).tags : []);
+	let pendingTags = $derived(view === 'notes' ? splitHashtags(text).tags : []);
 	const focusHint = $derived(apple ? '⇧⌘L' : 'Ctrl+⇧L');
 	const listeningLabel = $derived(lang === 'es' ? 'Escuchando…' : lang === 'pt' ? 'A ouvir…' : 'Listening…');
 	// Long placeholder text overflows the bar on phones. Shorten it below sm.

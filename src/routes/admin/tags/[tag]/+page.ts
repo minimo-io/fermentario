@@ -1,5 +1,5 @@
 import type { PageLoad } from './$types';
-import type { Note, TodoItem, Principle } from '$lib/types';
+import type { Note, TodoItem, Principle, TimeEntry } from '$lib/types';
 import { PAGE_SIZE } from '$lib/note-pager.svelte';
 
 export const load: PageLoad = async ({ params, fetch, depends }) => {
@@ -7,7 +7,17 @@ export const load: PageLoad = async ({ params, fetch, depends }) => {
 	const tag = decodeURIComponent(params.tag).trim().toLowerCase().slice(0, 60);
 	const res = await fetch(`/api/notes?limit=${PAGE_SIZE}&tag=${encodeURIComponent(tag)}&featured=exclude`);
 	if (!res.ok) {
-		return { tag, notes: [] as Note[], pinned: [] as Note[], todoItems: [] as TodoItem[], principleItems: [], count: 0, hasMore: false, nextCursor: null };
+		return {
+			tag,
+			notes: [] as Note[],
+			pinned: [] as Note[],
+			todoItems: [] as TodoItem[],
+			principleItems: [] as Principle[],
+			timeEntries: [] as TimeEntry[],
+			count: 0,
+			hasMore: false,
+			nextCursor: null
+		};
 	}
 	const d = await res.json();
 	const pinnedRes = await fetch(`/api/notes?limit=100&tag=${encodeURIComponent(tag)}&featured=only`);
@@ -16,12 +26,15 @@ export const load: PageLoad = async ({ params, fetch, depends }) => {
 	const todoItems = todoRes.ok ? (((await todoRes.json()).items ?? []) as TodoItem[]) : [];
 	const principleRes = await fetch(`/api/principles?tag=${encodeURIComponent(tag)}`);
 	const principleItems = principleRes.ok ? (((await principleRes.json()).principles ?? []) as Principle[]) : [];
+	const timeRes = await fetch(`/api/time-tracker?tag=${encodeURIComponent(tag)}`);
+	const timeEntries = timeRes.ok ? (((await timeRes.json()).entries ?? []) as TimeEntry[]) : [];
 	return {
 		tag,
 		notes: (d.notes ?? []) as Note[],
 		pinned,
 		todoItems,
 		principleItems,
+		timeEntries,
 		count: d.count ?? 0,
 		hasMore: !!d.hasMore,
 		nextCursor: d.nextCursor ?? null

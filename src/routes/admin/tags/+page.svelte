@@ -26,6 +26,7 @@
 		if (t.notes > 0) parts.push(`${t.notes} ${t.notes === 1 ? 'note' : 'notes'}`);
 		if (t.todos > 0) parts.push(`${t.todos} ${t.todos === 1 ? 'to-do' : 'to-dos'}`);
 		if (t.principles > 0) parts.push(`${t.principles} ${t.principles === 1 ? 'principle' : 'principles'}`);
+		if (t.time > 0) parts.push(`${t.time} ${t.time === 1 ? 'time entry' : 'time entries'}`);
 		return parts.join(' · ');
 	}
 </script>
@@ -44,7 +45,7 @@
 			{#if !data.error && data.tags.length > 0}
 				<p class="mt-1 text-sm text-stone-500 dark:text-stone-400">
 					{data.tags.length}
-					{data.tags.length === 1 ? 'tag' : 'tags'} across notes, to-dos and principles.
+					{data.tags.length === 1 ? 'tag' : 'tags'} across notes, to-dos, principles and time entries.
 				</p>
 			{/if}
 		</header>
@@ -55,7 +56,7 @@
 			</p>
 		{:else if data.tags.length === 0}
 			<p class="rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-6 text-center text-sm text-stone-500 dark:text-stone-400">
-				No tags yet. Add a #hashtag to a note, to-do or principle.
+				No tags yet. Add a #hashtag to a note, to-do, principle or time entry.
 			</p>
 		{:else}
 			<nav class="flex flex-wrap items-center gap-2" aria-label="Tag cloud">

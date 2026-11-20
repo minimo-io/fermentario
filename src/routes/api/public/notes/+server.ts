@@ -14,6 +14,7 @@ export async function GET({ url }) {
 	const limit = num(url.searchParams.get('limit')) ?? 50;
 	const before = num(url.searchParams.get('before'));
 	const beforeId = url.searchParams.get('before_id');
-	const page = listNotesPage({ limit, before, beforeId, published: 'only' });
+	const tag = (url.searchParams.get('tag') ?? '').trim().toLowerCase().slice(0, 60) || null;
+	const page = listNotesPage({ limit, before, beforeId, tag, published: 'only' });
 	return json(page);
 }

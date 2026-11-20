@@ -1,5 +1,7 @@
 import type { SqlDb } from './sqlite.ts';
 import { SCHEMA } from './journal.ts';
+import { splitTimeEntryHashtags } from '../hashtags.ts';
+import { SLOGAN } from '../brand.ts';
 
 /**
  * Ordered schema migrations for every journal database.
@@ -825,6 +827,49 @@ const timeTracker: Migration = {
 };
 
 /** Project/tag association for time entries. */
+/** A venue spread is not a tax: Ripio fills a sale at the bid, below the
+ *  price the card shows. It joins the sell-side cost of the projection. */
+const tradingSpread: Migration = {
+	version: 35,
+	name: 'trading-spread',
+	up(db) {
+		db.exec('ALTER TABLE trading_orgs ADD COLUMN spread_rate REAL NOT NULL DEFAULT 0;');
+	}
+};
+
+/** Ripio charges one percentage per operation, with a free comment the
+ *  user writes. The spread and the fixed fee made its maths noisy, so the
+ *  venue keeps a single fee. B3 rows are untouched. */
+const tradingFeeNote: Migration = {
+	version: 36,
+	name: 'trading-fee-note',
+	up(db) {
+		db.exec("ALTER TABLE trading_orgs ADD COLUMN fee_note TEXT NOT NULL DEFAULT '';");
+		db.exec("UPDATE trading_orgs SET spread_rate = 0, fixed_fee = 0 WHERE id = 'ripio'");
+	}
+};
+
+/** Every order keeps the cost rules it was recorded with. A later fee edit
+ *  belongs to future orders only: the stored money, the edit sheet and the
+ *  goal price of an open position all read these columns. The backfill uses
+ *  today's venue rules; rows recorded before this migration keep the money
+ *  they already stored. */
+const tradingOrderCosts: Migration = {
+	version: 37,
+	name: 'trading-order-costs',
+	up(db) {
+		db.exec('ALTER TABLE trading_orders ADD COLUMN fee_rate REAL NOT NULL DEFAULT 0;');
+		db.exec('ALTER TABLE trading_orders ADD COLUMN spread_rate REAL NOT NULL DEFAULT 0;');
+		db.exec('ALTER TABLE trading_orders ADD COLUMN irrf_rate REAL NOT NULL DEFAULT 0;');
+		db.exec('ALTER TABLE trading_orders ADD COLUMN fixed_fee REAL NOT NULL DEFAULT 0;');
+		db.exec(`UPDATE trading_orders SET
+			fee_rate = COALESCE((SELECT o.fee_rate FROM trading_orgs o WHERE o.id = trading_orders.org_id), 0),
+			spread_rate = COALESCE((SELECT o.spread_rate FROM trading_orgs o WHERE o.id = trading_orders.org_id), 0),
+			irrf_rate = COALESCE((SELECT o.irrf_rate FROM trading_orgs o WHERE o.id = trading_orders.org_id), 0),
+			fixed_fee = COALESCE((SELECT o.fixed_fee FROM trading_orgs o WHERE o.id = trading_orders.org_id), 0)`);
+	}
+};
+
 const timeEntryTags: Migration = {
 	version: 34,
 	name: 'time-entry-tags',
@@ -836,6 +881,93 @@ const timeEntryTags: Migration = {
 				PRIMARY KEY (entry_id, tag)
 			);
 			CREATE INDEX IF NOT EXISTS time_entry_tags_tag ON time_entry_tags(tag);
+		`);
+	}
+};
+
+/** Older time entries could start with the hashtag run (`#cubiq deep work`).
+ *  The parser ignored it, so those entries had no tag rows and never reached
+ *  the tag pages. Read the leading run once and make the stored form the same
+ *  as a fresh start: text without the run, tags in `time_entry_tags`. */
+const timeEntryLeadingTags: Migration = {
+	version: 38,
+	name: 'time-entry-leading-tags',
+	up(db) {
+		const rows = db
+			.prepare("SELECT id, comment FROM time_entries WHERE comment LIKE '#%'")
+			.all() as { id: string; comment: string }[];
+		const hasTag = db.prepare('SELECT 1 AS ok FROM time_entry_tags WHERE entry_id = ? LIMIT 1');
+		const insert = db.prepare('INSERT OR IGNORE INTO time_entry_tags (entry_id, tag) VALUES (?, ?)');
+		const update = db.prepare('UPDATE time_entries SET comment = ? WHERE id = ?');
+		db.transaction(() => {
+			for (const row of rows) {
+				if (hasTag.get(row.id)) continue;
+				const split = splitTimeEntryHashtags(row.comment);
+				if (split.tags.length === 0) continue;
+				for (const tag of split.tags) insert.run(row.id, tag);
+				update.run(split.content, row.id);
+			}
+		});
+	}
+};
+
+/** One scratch note per journal, owned by the quick note mini app. It is not a
+ *  `notes` row on purpose: it must stay out of the timeline, tags, search and
+ *  publishing. */
+const quickNote: Migration = {
+	version: 39,
+	name: 'quick-note',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS quick_note (
+				id         INTEGER PRIMARY KEY CHECK (id = 1),
+				content    TEXT NOT NULL DEFAULT '',
+				updated_at INTEGER NOT NULL DEFAULT 0
+			);
+			INSERT OR IGNORE INTO quick_note (id, content, updated_at) VALUES (1, '', 0);
+		`);
+	}
+};
+
+/** The public description doubles as the slogan. Keep any text the user wrote
+ *  and replace only the old placeholder. */
+const publicSlogan: Migration = {
+	version: 40,
+	name: 'public-slogan',
+	up(db) {
+		db.prepare('UPDATE public_config SET description = ? WHERE description = ?').run(
+			SLOGAN,
+			'Published notes.'
+		);
+	}
+};
+
+/** Optional note titles. An empty string means the note has none. */
+const noteTitle: Migration = {
+	version: 41,
+	name: 'note-title',
+	up(db) {
+		const noteColumns = columns(db, 'notes');
+		if (!noteColumns.has('title')) {
+			db.exec("ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT ''");
+		}
+	}
+};
+
+/** One image per to-do item, chosen in the New task form. */
+const todoItemPhotos: Migration = {
+	version: 42,
+	name: 'todo-item-photos',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS todo_item_photos (
+				id         TEXT PRIMARY KEY,
+				item_id    TEXT NOT NULL REFERENCES todo_items(id) ON DELETE CASCADE,
+				photo      BLOB NOT NULL,
+				mime       TEXT NOT NULL DEFAULT 'image/jpeg',
+				created_at INTEGER NOT NULL
+			);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_todo_item_photos_item ON todo_item_photos (item_id);
 		`);
 	}
 };
@@ -874,7 +1006,15 @@ export const MIGRATIONS: Migration[] = [
 	nostrProfile,
 	nostrEventPubkey,
 	timeTracker,
-	timeEntryTags
+	timeEntryTags,
+	tradingSpread,
+	tradingFeeNote,
+	tradingOrderCosts,
+	timeEntryLeadingTags,
+	quickNote,
+	publicSlogan,
+	noteTitle,
+	todoItemPhotos
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

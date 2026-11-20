@@ -2755,6 +2755,11 @@
   duplicated the BTC/coinbase quote-log entry and broke the smoke's Logs
   contract on the first run. Reads that only refresh a comparison should
   not write the fetch log at all.
+- `loadRipio` reused one `force` suffix for two URLs. The Ripio URL already
+  had `?pair=`, so `&force=1` was right; the global URL had no query, so the
+  card's Refresh asked `/api/quotes/btc-global&force=1`, got the 404 HTML,
+  and cleared the card. Build one flag per URL (`?force=1` vs `&force=1`)
+  instead of sharing a fragment across endpoints with different shapes.
 
 ## Session: Ripio full trading + side-aware spread
 - Bulk find/replace poisoned its own anchor: swapping every 'BRL' to a new
@@ -2900,3 +2905,481 @@
 - A delete changes data that another component already fetched. `TimeTrackerChart` takes a `revision` prop and reloads in `$effect`, because it otherwise keeps stale bars until remount.
 - A single-ticker refresh must write the same quote to both surfaces, so it goes through one extracted write helper (`storeTradingQuote`), not a second copy of the SQL. Keep `refreshMarket` on its existing multi-ticker run: adding a per-ticker path must not change the global button. Guard the holdings update with `price_auto = 1` and `category != 'cash'`, or one click overwrites a hand-set price.
 - The admin layout maps the URL segment to a section and used `'notes'` as the fallback for anything unknown. A new page under `/admin` then selected the Notes pill and rendered its composer. Return `null` for an unknown segment and type the fallback as `View | null`; do not hide an unknown route inside a real section. Add the page to `scripts/web-smoke.mjs` so the golden records its chrome.
+
+## Session: Ripio spread in the fees modal
+- One field, one meaning. Ripio needs its spread, not a copy of the B3
+  cost rules: the modal now shows Fee %, Spread % and Fixed fee for Ripio,
+  and keeps Dedo-duro % and the monthly limit on B3 only. Do not build a
+  second cost model when one column and one subtraction answer the question.
+- The spread belongs to the sell side of the projection, not to recorded
+  orders: an order stores the price the user actually got, so adding the
+  spread there would count it twice. It lowers `netValue` and raises
+  `targetPrice` through the same `1 − fee − spread − irrf` rate.
+- A schema-adding migration also means: bump the hardcoded version check in
+  `scripts/web-smoke.mjs` (the legacy-import assertion), then update the
+  golden with `pnpm run test:web:update` and read the diff. Here every diff
+  was the new `spreadRate` key and no B3 number moved, which is the proof
+  the spread is inert on B3.
+- A global market refresh (`trading:changed`) re-read only the trading
+  summary, so the Ripio comparison card kept its old venue and Coinbase
+  prices while the position cards moved. Any component that shows data from
+  a second endpoint must re-read it in that handler too; the summary is not
+  the whole page.
+- Ripio sells a coin against a stablecoin: its only Bitcoin market is
+  `BTC_USDC`, quoted in dollars, and the app must keep that string as the
+  stored ticker because quotes, positions and orders are keyed by it. The
+  screens should still say `BTC` — `src/lib/trading-pairs.ts` maps label to
+  pair (`venuePair`) and back (`coinLabel`) at the UI edge. Never rename the
+  stored ticker to make the order form look nicer.
+
+## Session: Trading totals across venues
+- A collapsed section unmounts its children, so a total that must stay in
+  the header cannot live inside the body. The strip's positions, totals and
+  goal alerts moved to `src/lib/trading-strip.svelte.ts`; the layout starts
+  that store once, and the collapsed summary and the rail read one state.
+- Money from two venues in two currencies never adds up directly. Convert
+  each venue sum to USD with `fxToUsd()`, then rebuild BRL and UYU by
+  dividing by the stored rate, exactly like holdings `displayTotals`. A
+  missing rate stays `null`, never 1:1.
+- The goal is defined on net after sell costs, so "at goals" is
+  `cost × (1 + targetPct)` and needs no quote. "Now" sums `netValue` and
+  reports the count of positions without a quote instead of counting them
+  as zero.
+- `/api/trading/strip` now answers `{ positions, totals }`. The web smoke
+  records it, so run `pnpm run test:web:update` and read the diff: the only
+  new keys were `totals`.
+
+## Session: Ripio spread lines removed
+- The two BTC cards state the two prices; the spread, bid/ask and
+  "vs Coinbase" lines under them read as noise, so they are gone.
+  `btcCompare` and its fallback branch went with the markup: leaving a
+  derived value with no reader only hides dead code in the file.
+
+## Session: Ripio cannot be disabled
+- Ripio is always on, so the venue panel has no `Disable` button and no
+  confirmation dialog. Do not re-add a switch for a venue that must never
+  leave the strip.
+
+## Session: Correcting the latest order
+- An edit is the same shape as a delete: only the latest order of a venue
+  may change, because earlier rows are the cost basis of the sales that
+  follow. `updateTradingOrder` repeats that guard and recomputes value,
+  fees, net and `month` from the venue rules; the API never trusts the
+  client's numbers.
+- Do not let an edit move the date behind the previous order. The replay
+  would reach a sale with no open position, so the new date is rejected
+  when it is earlier than `MAX(date)` of the other rows.
+- A rename would orphan `trading_targets`, which is keyed by org and
+  ticker. The edit sheet opens prefilled with the ticker disabled; a wrong
+  ticker is a delete plus a new order.
+- A sale still has to close the full position: the edit path replays the
+  other orders and rejects a quantity that does not match.
+
+## Session: Selling from the position card
+- A full-position sale belongs to the position, not to the header or the
+  diary: the card's `Sell` button opens a sheet that asks only for the
+  offer price and the date, prints gross and net, and then asks for a
+  confirmation. The top `− Sell` button is gone; do not re-add it, because
+  it forces the reader to retype the quantity the app already knows.
+- Nested buttons inside the card's `role="button"` wrapper need
+  `e.stopPropagation()`, or the tap opens the trade detail behind the sheet.
+
+## Session: Percentage precision on trading surfaces
+- The card printed the position trend with two decimals and the sale sheet
+  printed the same trend with one, so the same P&L read as `-0.27%` and
+  `-0.3%`. It was rounding, not arithmetic. Every profit or delta
+  percentage on a trading surface now uses `toFixed(2)`; the goal rate
+  keeps one decimal, because it is a setting the user types.
+
+## Session: Money at the goal on the card
+- The goal line now states the net and the gain, derived on the client as
+  `cost × (1 + target)` and `cost × target`. Those are the same numbers the
+  server puts in the diary (`netAtGoal`), so the card needs no new field:
+  the cost basis already carries the buy fee and the goal price already
+  carries the sell fee.
+
+## Session: Cost rules snapshotted per order
+- A venue fee is not a global that recomputes history. `trading_orders` now
+  stores `fee_rate`, `spread_rate`, `irrf_rate` and `fixed_fee` (migration
+  37), and `updateTradingOrder` recomputes from that row, never from
+  `trading_orgs`. Editing a fee in Fees changes new buys only.
+- The goal price is a property of the buys that opened the position, so it
+  uses the net-weighted average of their rates (`goalRules`). Without that,
+  a fee edit silently moved the target of a position that already existed.
+  The market projection (`netValue`, `sellFees`) still uses today's venue
+  rules: a sale happening now really pays today's fee. Two meanings, two
+  sources, each labelled.
+- Multi-buy positions blend their rates by net. It is an average, not a
+  replay; a fixed fee is taken as the largest buy rule, because one sale
+  pays it once.
+- The smoke test hardcodes the journal schema version (`web-smoke.mjs`) and
+  now says 37. Bump it with `LATEST_SCHEMA_VERSION` on every migration, or
+  the import check fails before any page runs.
+
+## Session: Time entries on the tag pages, and a running-timer edit
+- `listTagCounts` is a UNION over the three tag tables. A tag that only a
+  time entry carries was invisible, so the time tracker's tags never showed
+  on `/admin/tags`, even though the timer card printed the chip. The union
+  now includes `time_entry_tags`, `TagCount` carries `time`, and
+  `/api/time-tracker?tag=<tag>` lists the entries for one tag. A tag page
+  proves the source list, not the card.
+- Editing a running timer needs a write path, not a client-side patch.
+  `PATCH /api/time-tracker/<id>` rewrites `comment` and its tags from the
+  same parser that starts a timer, so text and tags never disagree. The edit
+  field is prefilled with `withTrailingHashtags`, because one editable string
+  for both is simpler than a separate tag editor.
+- Hashtags were trailing-only, by design, for notes. A timer typed as
+  `#cubiq deep work` therefore stored no tag at all, and no tag page could
+  find it. Time entries now accept a leading run as a fallback, and migration
+  38 backfills the existing rows. Keep the rule narrow: a hashtag in the
+  middle of prose stays text.
+- `kill <pnpm pid>` does not always kill the node child that holds port 3000.
+  The next server log can still say `Listening` while requests go to the old
+  process, which imports build chunk names the new build deleted
+  (`ERR_MODULE_NOT_FOUND` in `/api/tag-cloud`). Confirm with
+  `lsof -nP -iTCP:3000 -sTCP:LISTEN` and kill the listener pid before the next
+  start.
+
+## Session: Time tracker chime interval
+- A repeating alert must be counted from `startedAt`, not from a tick count.
+  `setInterval` in a background tab is throttled and can jump several marks;
+  comparing `floor(elapsed / interval)` against the last fired mark sounds once
+  instead of a burst after the tab wakes.
+- On load, set the last fired mark to the current one. Otherwise a page opened
+  after 40 minutes of a 15-minute alert chimes three times at once.
+- Changing the interval mid-run must re-anchor the same way, to the current
+  mark, or a smaller interval chimes for every mark already passed.
+- The interval is a browser preference, not journal data, so it lives in
+  `localStorage` under `fermentario.time-alerts` and needs no migration. It is
+  set before the timer starts and editable while it runs, from the same panel.
+- `playChime()` reuses the gesture-unlocked `AudioContext` in `$lib/sound.ts`.
+  No audio files, and silence before the first interaction is a browser rule.
+
+## Session: Public page column width
+- The `/admin` container width comes from `contentWidthClass(config.contentWidth)`,
+  a browser preference in `localStorage['fermentario.config']`. The server cannot
+  read it, so the public homepage rendered `max-w-2xl` while `/admin` was
+  `max-w-4xl` in the same browser. `/` now reads the same entry on mount and
+  passes the class to the container and to `TimeTrackerBar`.
+- A hardcoded width in a public page is a bug: any page outside `/admin` must
+  call `contentWidthClass()` with the stored `contentWidth`, as
+  `/notes/<id>` already did.
+
+## Session: Repeating chime
+- A repeat alert needs its own timer, separate from the one-second ticker: the
+  ticker decides *when* a mark starts, the repeat interval decides *how often*
+  and *how long* it sounds (`2.5 s`, `30 s` or until stopped).
+- Stop the repeat in the same places the timer stops (stop, discard, delete,
+  ticker teardown). Otherwise a discarded timer keeps chiming behind an empty
+  card.
+- One timer can cross a new mark while an old repeat still sounds. Clear the
+  repeat before playing the new mark, so two intervals never overlap.
+- Keep the mode beside the interval in browser storage
+  (`fermentario.time-alert-mode`) and read both in `load()`; a default of
+  `once` in the initial state keeps SSR and hydration identical.
+
+## Session: Tools outside /admin
+- Tools are not admin features. `MINI_APPS` points at `/tools/<id>`, and the
+  pages there read no `APP_KEY` context. The admin layout must not mount the
+  mini apps button or the modal: the root layout does, once, for every route.
+- `MiniAppsFab` sits in the root layout, so its `fixed` position is global.
+  The only opt-out is `/admin/book/*`, where the reader owns the viewport.
+- The root layout calls `timeTracker.load()` when `loaded` is false. Without it
+  the button cannot show its running dot on pages that have no timer bar.
+- The public homepage lists tools from the same `MINI_APPS` array, so a new
+  tool appears in the modal, the palette and the homepage at once.
+
+## Session: Shared public header
+- `PublicHeader` is the single header for non-admin routes: site title, `Admin`
+  pill, and a home button only off `/`. A new public or tool page renders it
+  inside its own width container; do not copy the old inline homepage header.
+- The tools page needs `+page.server.ts` with `getPublicConfig()` for the title,
+  the same call the homepage uses. Without a loader the header title is blank
+  until a client fetch finishes.
+
+## Session: Quick note mini app
+- A scratchpad must not live in `notes`: a hidden row still reaches the
+  timeline, tags, search and publishing. One table with `CHECK (id = 1)` keeps
+  the surface small, and every reader stays one row.
+- Autosave needs its own write on close. A 3 s interval alone loses the last
+  keystrokes when the modal closes; `close()` fires a final save without
+  blocking the animation.
+- A mini app that opens UI instead of a page needs `kind` in `MiniAppDef`.
+  `href` becomes optional, and every entry point (picker, palette, homepage)
+  goes through `openMiniApp(app)` so they cannot drift.
+- The smoke schema assertion and the legacy fixture both carry the schema
+  number: bump `journal.schema_version !== 38` in `scripts/web-smoke.mjs` with
+  every migration, or the run stops before any check.
+- `onkeydown` is lowercase in Svelte 5 component props; `{onKeydown}` shorthand
+  fails type checking on a DOM element.
+
+## Session: Quick note is local-first
+- A scratchpad the user types in must never depend on a round trip. The first
+  quick note loaded from the server and saved every 3 s, so a reload before the
+  first tick lost the text. It now writes `localStorage` on every keystroke,
+  synchronously, and never reads the server on open.
+- The server copy is an explicit backup. Keep its button disabled until a login
+  exists (`quickNote.signedIn`); do not wire backup into open, close or typing.
+- Local writes can throw (private mode, quota). Catch them and show the error in
+  the header; never let a textarea guard swallow the failure silently.
+
+## Session: Quick note local-first follow-ups
+- A command palette that lists mini apps must keep them in the result set while
+  typing. Showing apps only for an empty query makes typing "quick" hide Quick
+  note. Filter apps in the same derived list and offset the hit indices by the
+  app count so ↑/↓ and `Enter` walk one sequence.
+- The backup button is enabled while admin stays unprotected. The login will
+  flip `quickNote.backupEnabled` per session; do not hard-code false.
+- Shortcut labels belong to the app definition (`shortcut: ['Mod','Shift','K']`)
+  with `Mod` resolved to ⌘ or Ctrl at render, so the modal, palette and any
+  future surface cannot disagree.
+
+## Session: Help dialog, slogan and chime feedback
+- A shortcut that is not in `src/lib/shortcuts.ts` does not exist for the user.
+  The registry, the help dialog and AGENTS.md must move together.
+- Chime feedback needs its own short state. `alerting` is false in `once` mode,
+  so a 1.6 s `chiming` flash set by `#startAlert()` drives every animation.
+- Full-screen memory belongs in local storage next to the note, not in the
+  server row: `fermentario.quickNote.full`.
+- Migration 40 rewrites only the exact old placeholder `Published notes.`, so a
+  user-written description survives.
+
+## Session: Escape, search scope and header scope
+- A dialog keydown handler on the panel only fires when focus is inside it. The
+  mini apps picker, the help dialog and the quick note listen on `window`
+  instead, guarded by the open flag; the quick note keeps a local handler only
+  to stop the same Escape from running twice.
+- The market rail is section furniture, not page furniture. Use an exact route
+  list plus the trading prefix rather than "not heatmap" logic, so new detail
+  pages are excluded by default.
+- Search kinds carry their destination in `searchHref`. Composite ids such as
+  `<org>|<ticker>` keep rows unique in a keyed list and still resolve to one
+  route.
+
+## Session: Note titles, save keys and public insets
+- Migration 41 adds `notes.title` with a non-null empty default. Every note
+  query uses `SELECT *`/`SELECT n.*` and maps through `rowToNote`, so the new
+  field reaches the API and both pages without further SQL.
+- A title-only PATCH must enter the flags fast path. Without `title` in that
+  condition the request falls through to the content path, which rejects an
+  empty body with `empty note`.
+- `setNoteTitle` updates `updated_at` but never touches FTS, vectors or tags:
+  the title is metadata, not note text. It collapses whitespace before the
+  120-character cap, because the API accepts more than the single-line input
+  can send.
+- The time tracker page had two horizontal insets (the tools page wrapper and
+  `TimeTrackerTab`). The tab now adds none; the page owns `px-2 sm:px-6`, so
+  the tracker lines up with the header at every width.
+- `EditNoteDialog` listens for Mod+Enter on the dialog root, after the finders.
+  NoteFinder stops plain Enter and sets `defaultPrevented`; modified Enter
+  passes through and saves from any field. Both note edit paths ignore
+  `isComposing`, so an IME confirmation never saves.
+- The quick note already writes on every keystroke. Mod+Enter is a close
+  gesture, not a second save path.
+
+## Session: Commands in search
+- A command's code is its identity. Labels are display text; the code is what
+  the user types, what search matches and what runs. A duplicate or malformed
+  code must fail at module load, not silently shadow another command.
+- Command mode is the `:` prefix, consumed by the palette input,
+  not a separate button. The one exception to command isolation is a bare
+  **exact** code in normal search: it adds a Commands group above the other
+  results and selects it first. Bare prefix matches stay out, or an ordinary
+  word would turn into a command.
+- The prefix parser must run before the search effect sees the value; the
+  field keeps focus and the blue pill is only the visual state. Backspace on
+  an empty command query exits the mode, and a pill close button gives the
+  same path to mouse users.
+- Adding a group above the others means shifting every index offset, not only
+  the visual order: commands, then mini apps, then search hits. Miss one offset
+  and `Enter` opens the row above or below the highlighted one.
+- Close the palette and `await tick()` before running a command. The palette's
+  close effect restores focus; without the wait, that restore steals focus
+  from the dialog the command opens.
+- `New note` is a root-layout capture surface, not the admin composer. It
+  posts to the existing `/api/notes`, so it works on public routes; the admin
+  layout listens for `notes:created` to insert the saved row when the notes
+  timeline is mounted.
+- The help dialog renders the command registry directly. A command added to
+  `src/lib/commands.ts` appears in the Commands tab without another list.
+
+## Session: Compact time tracker surfaces
+- The running bar reads stored `comment` and `tags`, not the raw typed input;
+  `splitTimeEntryHashtags` drops the hashtag position. Put the primary tag
+  before the comment preview so it stays fixed while the comment truncates.
+  Never use `TagChip` in the bar: it contains a link inside the bar's button
+  and its padding changes the one-line height.
+- The active timer card was a vertical stack at every width. Use a metadata row
+  and a single main row on wide screens: timer, comment or edit field, actions.
+  Stack below `md`; do not let the wide layout squeeze the comment to nothing.
+
+## Session: Tag lookup and vim command trigger
+- `#` in the palette is a separate tag mode backed by the cached tag cloud, not
+  a text search. It shows no notes or mini apps, so `Enter` cannot open the
+  wrong kind of row. Prefix filtering matches the composer's tag finder.
+- Command mode is `:` alone. The colon is consumed immediately, so `:note` is
+  the fast path and no Space is required. The bare exact-code group in normal
+  search stays as the secondary discovery path.
+- The tag page's `All` pill is a view, not a sixth content group: it stacks
+  every section exactly as the page did before filtering. Keep it first and
+  make it the fallback when the active group empties.
+
+## Session: Tag finder in the New note modal
+- The command modal is a note editor, so it mounts `TagFinder` like the
+  composer and the edit dialog. Without it, typing `#` shows no tag choices and
+  the modal looks like it ignores hashtags, even though the save path already
+  parses a trailing run.
+- `TagFinder` floats above the field. A modal panel with `overflow-y-auto`
+  clips a floating menu, so the modal renders it in flow below the field with
+  `inline`.
+
+## Session: Hashtags anywhere in the text
+- A tag counts at the start, middle or end of a line. `splitHashtags` scans
+  every line and removes each `#tag` token. The old `splitTrailingHashtags`
+  only walked back from the end, so `#asdas blablabla` stayed untagged while
+  `blablabla #asdas` worked. That asymmetry was the bug.
+- Keep the boundaries: the `#` must start the line or follow whitespace, and
+  the token must end at whitespace or the line end. That keeps
+  `url.com/#anchor`, `foo#bar`, `# Heading` and `## Heading` as prose.
+- The save path and the tag finder must agree. `tagQueryAt` no longer requires
+  the token to be at the end of the field; it checks that the token is
+  complete and that non-whitespace after it does not continue the token.
+- Lines that held only tags disappear; other blank lines stay. Collapse spaces
+  only on lines that had a tag, so a note without hashtags keeps its exact
+  formatting.
+- Migration 38 replays the old parser. `splitTimeEntryHashtags` stays frozen
+  for that replay; new time-entry saves use `splitHashtags`.
+
+## Session: One note body for every surface
+- CORRECTED LATER: the public index is a blog list and must keep its
+  `excerpt()`. Do not put `NoteBody` on `/`. See "The public index is a blog
+  list" below.
+- The note body was hand-written three times (admin timeline, admin note page,
+  public note page), plus a separate `excerpt()` list on the homepage. The
+  three copies drifted from each other.
+- Fold state moved out of `Timeline` into `src/lib/note-fold.svelte.ts`.
+  `Timeline` mounts it; the collapsed map and the
+  `ferm:collapsed-notes` key stay module-shared, the DOM refs stay per note.
+  Call `loadOnce()` inside `$effect`, never at module or component init: a
+  direct `localStorage` read breaks SSR.
+- `linkHref` now takes `{ publicUi }`. Before, every inline pill on a public
+  page pointed at `/admin/...`.
+- `NoteBody` sets `picker={false}` on public tags. Otherwise a visitor could
+  open the admin color modal from a published note.
+
+## Session: The public index is a blog list
+- I read "make the note rendering consistent" as "render the full body on `/`
+  too" and replaced the homepage `excerpt()` with `NoteBody`. That is wrong.
+  The public index is a blog list: title, or a 160-character excerpt when the
+  note has no title, plus date, comment count and linked pills. It must not
+  render the body, fold, tags or video.
+- Consistency means the two note pages (`/notes/<id>` and
+  `/admin/notes/<id>`) render the note the same way. The admin timeline and
+  tag pages also use `NoteBody`; `/` does not.
+- When a request says "consistent", check which surfaces the user means
+  before moving a shared component onto a new one.
+
+## Session: The fold stays on single note pages
+- I left `variant="page"` unfolded, so `/notes/<id>` and `/admin/notes/<id>`
+  rendered a different note than the admin list: no chevron, no collapse.
+  That is a real inconsistency. The body now folds on every note surface:
+  admin timeline, tag pages, admin note page, public note page.
+- `variant` now changes only the title size and the cover cap. Nothing about
+  the body.
+- The fold renders only after the client measures the text, so a plain
+  `curl` of `/notes/<id>` never contains the chevron. Check the hydrated DOM,
+  not the SSR HTML, when the toggle "is missing".
+
+## Session: Quick note opens in view, `e` edits
+- `openModal()` used to force edit mode. It now picks the mode from the text:
+  view when the note has content, edit when it is empty, so an empty note is
+  never a dead "Nothing yet." screen.
+- A single-letter shortcut inside a modal needs all of these guards, or it
+  steals keystrokes: open flag, current mode, no modifier, no key repeat, no
+  focused `INPUT`/`TEXTAREA`/`SELECT`/contenteditable, and no other
+  `[role="dialog"]` on screen. The quick note and the search palette share
+  z-50, so the last check is not theoretical.
+- The backdrop `onkeydown` and the `svelte:window` handler both call
+  `onKeydown`. Making it return "consumed" and calling `stopPropagation()` in
+  the backdrop keeps one press from switching modes twice; the window handler
+  also returns early on `defaultPrevented`.
+- Focusing the textarea on switch is not enough: without
+  `setSelectionRange(end, end)` a long note opens with the caret at position 0
+  and the scroll at the top.
+
+## Session: Escape for every dialog
+- The quote Logs modal did not close on Escape because its `onkeydown` sits on
+  the dialog element and nothing focused that element: the key went to the
+  button that opened it, then to `window`, where no one listened. Same hole in
+  every modal that does not focus itself.
+- Svelte 5 delegates `keydown` to the document. A synthetic
+  `dispatchEvent(new KeyboardEvent('keydown', …))` must use `bubbles: true`,
+  or the dialog's own handler never runs. The first attempt used
+  `bubbles: false` and appeared to do nothing.
+- The root layout now does two things: focus a newly mounted dialog (keeps Tab
+  and Escape natural), and replay Escape into the topmost dialog when focus is
+  outside it. Replays are tagged in a `WeakSet`; a `document` keydown listener
+  stops them before the window listeners (search palette, admin settings) see
+  the key twice.
+- `topDialog()` sorts by computed `z-index` and then DOM order, skips hidden
+  boxes, and skips `data-escape="ignore"`. That attribute is the only opt-out;
+  `RestoreOverlay` uses it while a restore runs.
+- A dev `console.warn` for an unhandled replay was useless: most modals close
+  without `preventDefault()`, so it fired on success too. Removed.
+
+## Session: Task images, public tags and the published pill
+- Schema 42 adds `todo_item_photos`, shaped like `note_photos`. The smoke
+  script hard-codes the expected schema version, so it must move with
+  `LATEST_SCHEMA_VERSION`; the run failed with "did not register an active v41
+  journal" until the script said 42.
+- The task image cannot ride on the create request: the photo row needs the
+  item id. Create first, then `POST /api/todo/items/<id>/photo`. A failed
+  upload must not delete the task.
+- Every `TodoItem` payload now carries `photoId: null`, which changed four
+  golden API checks. That is the intended diff, not a regression.
+- Public tag data needs its own query. `listTagCounts` counts to-dos,
+  principles and time entries too, so the homepage map would leak private
+  counts; `listPublicTagCounts` joins `notes` and filters `published = 1`.
+- `/tags/<tag>` used to be a 307 redirect to `/admin/tags/<tag>`. Removing
+  that `+page.ts` and adding `+page.server.ts` is the whole change of route
+  type; SvelteKit prefers the server load.
+- The `/api/notes` route can take ~10 s on a cold journal because
+  `ensureIndexed()` loads the embedding model. A UI check that waits 3 s after
+  clicking the Published pill sees the old list and looks like a broken
+  filter; wait for the response, not a fixed short timeout.
+- `getByRole('button', { name: /^Add/ })` matches the icon-only group button
+  first in `TodoTab`; select the fixed bottom bar button by its text instead.
+- Soft tint pairs are not a toggle state. The Published pill first used
+  `emerald-50` vs `emerald-100`; both read as the same pill, so the user could
+  not tell the filter was on. A pressed filter needs a shape change the eye
+  catches without comparing: a solid `emerald-600` fill, white text and a
+  leading `Check` icon, against a white muted outline when off.
+- The notes header's `Copy all` button is gone. Copying the loaded page is not
+  a journal action: it copied an arbitrary slice of the timeline, and every
+  note already has `Copy to clipboard` in its own ⋮ menu.
+
+## Session: One metadata row per note card
+- The timeline card had three competing meta zones: a left column (star,
+  `Public`, time), a separate bottom-right `edited` row, and the comment pill plus ⋮
+  inline after the text. A short note still needed three chrome rows, and the
+  body started at a different x offset than the card's date. One header row now
+  carries star, time, `Public`, `edited` on the left and comments + ⋮ on the
+  right; the body spans the full card width under it.
+- `edited` belonged to the row renderer (`NoteBody`), so every surface that
+  reused it inherited a separate bottom line. It is timeline metadata now:
+  `NoteBody` renders title, body, links, tags and video only. The single-note
+  pages already print `· edited` in their own date row.
+- Removing a used-in-template prop (`lang` in `NoteBody`) is a compile risk in
+  runes mode. Keep the optional prop in the Props type for callers, drop it
+  from the `$props()` destructure.
+
+## Session: Stop the timer at the click, not at the reply
+- `stop()` awaited `/api/time-tracker/stop` before touching `running`, so the
+  interval kept moving `now` and the big counter grew during the round trip,
+  then jumped back. The end of work is the click time.
+- The store now records `pendingStopAt = Date.now()` before the fetch and
+  `elapsedMs` reads that instant while it is set. `#tick` returns early, so no
+  chime fires mid-request and `now` does not advance. A failed request clears
+  `pendingStopAt`, and the interval (never cleared) resumes live counting.
+- Anything that shows a live duration must use `elapsedMs` or the same
+  `pendingStopAt ?? now` pair, or it keeps counting through the freeze.

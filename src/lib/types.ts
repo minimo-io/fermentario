@@ -18,12 +18,17 @@ export type {
 	TradingPosition,
 	TradingMonthRow,
 	TradingSummary,
+	TradingStrip,
 	TradingStripItem,
+	TradingStripTotals,
+	TradingMoneyTriple,
 	TradingQuotePoint
 } from './platform/journal';
 
 export interface Note {
 	id: string;
+	/** Optional single-line title; empty or missing when none. */
+	title?: string;
 	content: string;
 	created_at: number;
 	updated_at: number;
@@ -211,6 +216,8 @@ export interface TodoItem {
 	commentCount?: number;
 	subgroup: string;
 	video: string;
+	/** Optional image, set when the task is created. */
+	photoId?: string | null;
 	position: number;
 	created_at: number;
 	updated_at: number;

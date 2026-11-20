@@ -6,22 +6,55 @@ export interface HashtagSplit {
 const MAX_TAGS = 8;
 const MAX_TAG_LENGTH = 30;
 
-const TRAILING_TAG = /(?:\s|^)(#[\p{L}\p{N}][\p{L}\p{N}_-]{0,29})$/u;
 export const TAG_TOKEN = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,29}$/u;
 
-/** Split a note into its text and the hashtags typed at the end of it.
- *
- *  Only a trailing run counts: every remaining token after the last prose must
- *  be a hashtag, otherwise nothing is extracted. The `#` must follow
- *  whitespace or start the content, so `url.com/#anchor` and `# Heading` are
- *  left alone. Returns lowercase, deduped tags and the text with the hashtag
- *  run removed. */
-export function splitTrailingHashtags(input: string): HashtagSplit {
-	const trimmed = input.replace(/\s+$/, '');
-	if (!trimmed) return { content: input.trim(), tags: [] };
+// A tag starts the line or follows whitespace, so `url.com/#anchor` and
+// `foo#bar` stay text. It ends at whitespace or the end of the line, so
+// `# Heading` and `## Heading` stay text as well.
+const TAG_ANYWHERE = /(^|\s)#([\p{L}\p{N}][\p{L}\p{N}_-]{0,29})(?=\s|$)/gu;
 
+/** Split text into its prose and its hashtags. A tag counts anywhere: at the
+ *  start, in the middle or at the end. The `#` must start the line or follow
+ *  whitespace, and the tag must end at whitespace or the end of the line.
+ *  `url.com/#anchor`, `foo#bar`, `# Heading` and `## Heading` stay prose.
+ *
+ *  Removes each tag token from its line and collapses the leftover spaces.
+ *  A line that held only tags disappears. Other blank lines stay. Returns
+ *  lowercase, deduped tags (at most 8) and the cleaned text. */
+export function splitHashtags(input: string): HashtagSplit {
 	const tags: string[] = [];
-	let rest = trimmed;
+	const kept: string[] = [];
+	let changed = false;
+
+	for (const line of input.split('\n')) {
+		let found = false;
+		const next = line.replace(TAG_ANYWHERE, (_match, _lead: string, raw: string) => {
+			found = true;
+			const tag = raw.toLowerCase();
+			if (tags.length < MAX_TAGS && !tags.includes(tag)) tags.push(tag);
+			return '';
+		});
+		if (!found) {
+			kept.push(line);
+			continue;
+		}
+		changed = true;
+		const tidy = next.replace(/\s+/g, ' ').trim();
+		if (tidy) kept.push(tidy);
+	}
+
+	if (!changed) return { content: input.trim(), tags: [] };
+	return { content: kept.join('\n').trim(), tags };
+}
+
+const TRAILING_TAG = /(?:\s|^)(#[\p{L}\p{N}][\p{L}\p{N}_-]{0,29})$/u;
+
+/** Frozen parser for migration 38. It must replay the old rule exactly:
+ *  trailing hashtags first, then a leading run, and nothing from prose. New
+ *  saves use `splitHashtags`. Do not change this to match new behavior. */
+export function splitTimeEntryHashtags(input: string): HashtagSplit {
+	const tags: string[] = [];
+	let rest = input.replace(/\s+$/, '');
 	for (;;) {
 		const m = TRAILING_TAG.exec(rest);
 		if (!m) break;
@@ -31,7 +64,16 @@ export function splitTrailingHashtags(input: string): HashtagSplit {
 		if (tags.length >= MAX_TAGS) break;
 		if (!rest.trim()) break;
 	}
+	if (tags.length > 0) return { content: rest.trim(), tags };
 
+	rest = input.trim();
+	while (tags.length < MAX_TAGS) {
+		const m = /^#[\p{L}\p{N}][\p{L}\p{N}_-]{0,29}(?=\s|$)/u.exec(rest);
+		if (!m) break;
+		const tag = m[0].slice(1).toLowerCase();
+		if (!tags.includes(tag)) tags.push(tag);
+		rest = rest.slice(m[0].length).trimStart();
+	}
 	if (tags.length === 0) return { content: input.trim(), tags: [] };
 	return { content: rest.trim(), tags };
 }

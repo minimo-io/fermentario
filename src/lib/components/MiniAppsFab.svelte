@@ -15,6 +15,14 @@
 >
 	<LayoutGrid class="h-5 w-5" />
 	{#if timeTracker.running}
-		<span class="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-stone-950" aria-label="A mini app is running"></span>
+		<span
+			class="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full ring-2 ring-white dark:ring-stone-950 {timeTracker.chiming
+				? 'bg-amber-400'
+				: 'bg-emerald-500'}"
+			aria-label={timeTracker.chiming ? 'The timer is chiming' : 'A mini app is running'}
+		></span>
+		{#if timeTracker.chiming}
+			<span class="absolute -right-0.5 -top-0.5 h-3 w-3 animate-ping rounded-full bg-amber-400/70 motion-reduce:animate-none"></span>
+		{/if}
 	{/if}
 </button>

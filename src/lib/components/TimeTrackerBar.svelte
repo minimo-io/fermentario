@@ -14,6 +14,18 @@
 	let confirming = $state(false);
 	let deleting = $state(false);
 
+	const running = $derived(timeTracker.running);
+	const tags = $derived(running?.tags ?? []);
+	const primaryTag = $derived(tags[0] ?? '');
+	const extraTags = $derived(Math.max(0, tags.length - 1));
+	const statusLabel = $derived(timeTracker.chiming ? 'Chiming' : 'Time tracker running');
+	const openLabel = $derived.by(() => {
+		const parts = ['Open time tracker', statusLabel];
+		if (running?.comment) parts.push(running.comment);
+		for (const tag of tags) parts.push(`#${tag}`);
+		return parts.join('. ');
+	});
+
 	async function stop() {
 		stopping = true;
 		const result = await timeTracker.stop();
@@ -45,19 +57,38 @@
 
 {#if timeTracker.running}
 	<div class="mx-auto {widthClass} mb-4">
-		<div class="flex items-center gap-2 rounded-full border border-emerald-200/80 bg-white/95 px-3 py-1.5 shadow-sm shadow-stone-900/5 dark:border-emerald-900/60 dark:bg-stone-900/95">
+		<div class="flex items-center gap-2 rounded-full border bg-white/95 px-3 py-1.5 shadow-sm shadow-stone-900/5 transition-colors duration-200 dark:bg-stone-900/95 {timeTracker.chiming
+			? 'animate-pulse border-amber-400 ring-2 ring-amber-300/70 motion-reduce:animate-none dark:border-amber-600 dark:ring-amber-700/60'
+			: 'border-emerald-200/80 dark:border-emerald-900/60'}">
 				<button
 					type="button"
 					class="flex min-w-0 flex-1 items-center gap-2 text-left"
-					onclick={() => void goto('/admin/time-tracker')}
-					aria-label="Open time tracker"
+					onclick={() => void goto('/tools/time-tracker')}
+					aria-label={openLabel}
+					title={openLabel}
 				>
 					<span class="relative grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
 						<span class="pointer-events-none absolute inset-0 rounded-full ring-2 ring-emerald-300 animate-pulse motion-reduce:animate-none dark:ring-emerald-700"></span>
 						<Timer class="relative h-3.5 w-3.5" />
 					</span>
-					<span class="min-w-0 flex-1 truncate text-xs font-medium text-stone-700 dark:text-stone-200">
-						{timeTracker.running.comment || 'Time tracker running'}
+					<span class="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+						<span
+							class="shrink-0 font-medium {timeTracker.chiming
+								? 'text-amber-700 dark:text-amber-400'
+								: 'text-stone-700 dark:text-stone-200'}">{statusLabel}</span
+						>
+						{#if primaryTag}
+							<span
+								class="min-w-0 max-w-[7rem] truncate font-medium text-emerald-700 dark:text-emerald-300"
+								title={`#${primaryTag}`}>· #{primaryTag}</span
+							>
+						{/if}
+						{#if extraTags > 0}
+							<span class="shrink-0 text-stone-400 dark:text-stone-500">+{extraTags}</span>
+						{/if}
+						{#if running?.comment}
+							<span class="min-w-0 flex-1 truncate text-stone-500 dark:text-stone-400">· {running.comment}</span>
+						{/if}
 					</span>
 					<span class="shrink-0 font-mono text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
 						{formatDuration(timeTracker.elapsedMs)}

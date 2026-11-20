@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getPrinciple, listNotesLinkingTo, updatePrinciple, deletePrinciple, setPrincipleTags, setPrincipleVideo } from '$lib/server/db';
-import { splitTrailingHashtags } from '$lib/hashtags';
+import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
 /** The principle plus the notes that cross-mention it through `[[id]]`. */
@@ -24,7 +24,7 @@ export async function PATCH({ params, request }) {
 			nextVideo = '';
 		}
 	}
-	const { content, tags } = splitTrailingHashtags(String(body?.content ?? ''));
+	const { content, tags } = splitHashtags(String(body?.content ?? ''));
 	if (!content.trim()) return json({ error: 'principle not found or empty' }, { status: 404 });
 	const p = updatePrinciple(params.id, content);
 	if (!p) return json({ error: 'principle not found or empty' }, { status: 404 });

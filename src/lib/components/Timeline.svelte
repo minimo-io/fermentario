@@ -1,62 +1,24 @@
 <script module lang="ts">
-	// Fold state is module-shared on purpose: the home page (and tag pages)
-	// mount MORE THAN ONE timeline at once (featured section + history), all
-	// holding the same storage key. One shared map loaded once is the only
-	// way no instance's write can clobber another instance's folds.
-	let collapsed = $state<Record<string, boolean>>({});
-	let foldedLoaded = false;
-	const COLLAPSED_KEY = 'ferm:collapsed-notes';
-
-	// Comment-count deltas are module-shared for the same reason: the same
-	// note renders in the featured section AND the history list, and both
-	// pills must show the same number without waiting for a reload.
+	// Comment-count deltas are module-shared: the same note renders in the
+	// featured section AND the history list, and both pills must show the same
+	// number without waiting for a reload. Fold state lives in note-fold.
 	let commentDelta = $state<Record<string, number>>({});
-
-	function loadFoldedOnce() {
-		if (foldedLoaded) return;
-		foldedLoaded = true;
-		try {
-			const raw = localStorage.getItem(COLLAPSED_KEY);
-			if (!raw) return;
-			const parsed = JSON.parse(raw) as unknown;
-			if (!Array.isArray(parsed)) return;
-			for (const id of parsed) {
-				if (typeof id === 'string') collapsed[id] = true;
-			}
-		} catch {
-			// Bad storage never breaks the timeline.
-		}
-	}
-
-	function persistFolded() {
-		try {
-			localStorage.setItem(COLLAPSED_KEY, JSON.stringify(Object.keys(collapsed)));
-		} catch {
-			// Storage full/blocked: the fold still works for the session.
-		}
-	}
 </script>
 
 <script lang="ts">
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Star from '@lucide/svelte/icons/star';
 	import type { Note } from '$lib/types';
 	import { goto } from '$app/navigation';
-	import { tick } from 'svelte';
 	import { dayLocale } from '$lib/dates';
 	import { withTrailingHashtags } from '$lib/hashtags';
-	import { renderNoteContent } from '$lib/note-links';
-	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
-	import { motionMs } from '$lib/motion';
+	import NoteBody from '$lib/components/NoteBody.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
-	import TagChip from '$lib/components/TagChip.svelte';
-	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import { loading } from '$lib/loading.svelte';
 
@@ -64,7 +26,7 @@
 		notes: Note[];
 		summaryLoading: boolean;
 		onDelete: (id: string) => void;
-		onEdit: (id: string, content: string, video?: string, createdAt?: number) => Promise<void>;
+		onEdit: (id: string, content: string, video?: string, createdAt?: number, title?: string) => Promise<void>;
 		onFeature: (note: Note) => void;
 		onPublish: (note: Note) => void;
 		onCover: (note: Note, coverId: string | null) => void;
@@ -93,110 +55,10 @@
 	let menuNote = $state<Note | null>(null);
 	let confirmNote = $state<Note | null>(null);
 	let editNote = $state<Note | null>(null);
+	let editTitle = $state('');
 	let editContent = $state('');
 	let editVideo = $state('');
 	let tagTarget = $state<{ note: Note; tag: string } | null>(null);
-
-	// Folded notes: one rendered line (CSS line-clamp), folded on tap,
-	// expanded on tap again. Fold ids persist in localStorage (module-shared
-	// map above) until the user expands them again — page reloads keep the
-	// fold. Default is expanded; only notes longer than one rendered line
-	// are foldable, so short notes stay plain text. Opening a note lives in
-	// the ⋮ menu. The fold animates by measuring the full text height: the
-	// clamp comes off before expansion and returns only after contraction.
-	let textEls: Record<string, HTMLElement | null> = {};
-	let foldEls: Record<string, HTMLElement | null> = {};
-	let foldable = $state<Record<string, boolean>>({});
-	let maxHeights = $state<Record<string, string>>({});
-	let unclamped = $state<Record<string, boolean>>({});
-
-	$effect(() => {
-		loadFoldedOnce();
-	});
-
-	$effect(() => {
-		// Measure after the DOM updates: widening the window can turn a
-		// multi-line note back into a single-line one. A fold maps id → true.
-		const onResize = () => void measureFoldable();
-		onResize();
-		window.addEventListener('resize', onResize);
-		return () => window.removeEventListener('resize', onResize);
-	});
-
-	function measureFoldable() {
-		// Measure unfolded notes only: a persisted fold is trusted as-is
-		// and gets re-measured the moment it is expanded.
-		for (const n of notes) {
-			const el = textEls[n.id];
-			if (!el) continue;
-			const lh = parseFloat(getComputedStyle(el).lineHeight) || 20.6;
-			if (n.id in collapsed) {
-				// A reloaded fold carries only the flag; WebKit under-clamps
-				// with the flag alone and shows the card half contracted.
-				// Give it the same one-line cap a manual fold ends with
-				// (`finishFold` keeps it for exactly this reason).
-				if (maxHeights[n.id] === undefined) maxHeights[n.id] = `${Math.ceil(lh)}px`;
-				continue;
-			}
-			if (maxHeights[n.id] !== undefined) continue;
-			// Unfolded: content height over one and a half line = foldable.
-			foldable[n.id] = el.getBoundingClientRect().height > lh * 1.5;
-		}
-	}
-
-	function finishFold(id: string, e: TransitionEvent) {
-		if (e.target !== e.currentTarget || e.propertyName !== 'max-height') return;
-		// Keep the one-line cap while the note stays folded: clearing it here
-		// leaves one frame where the wrapper has no cap before the clamp
-		// paints, so a folded card flickers back to full height (WebKit).
-		if (id in collapsed) {
-			delete unclamped[id];
-			return;
-		}
-		delete maxHeights[id];
-		delete unclamped[id];
-		measureFoldable();
-	}
-
-	async function toggleFolded(id: string) {
-		const wrapper = foldEls[id];
-		const duration = motionMs(180);
-
-		if (!wrapper || !duration) {
-			if (id in collapsed) {
-				foldable[id] = true;
-				delete collapsed[id];
-			} else {
-				collapsed[id] = true;
-			}
-			persistFolded();
-			delete maxHeights[id];
-			delete unclamped[id];
-			return;
-		}
-
-		const start = wrapper.getBoundingClientRect().height;
-
-		if (id in collapsed) {
-			foldable[id] = true;
-			delete collapsed[id];
-			persistFolded();
-			maxHeights[id] = `${start}px`;
-			await tick();
-			void wrapper.getBoundingClientRect();
-			const full = Math.max(wrapper.scrollHeight, textEls[id]?.getBoundingClientRect().height ?? 0);
-			maxHeights[id] = `${full}px`;
-		} else {
-			collapsed[id] = true;
-			persistFolded();
-			unclamped[id] = true;
-			maxHeights[id] = `${start}px`;
-			await tick();
-			void wrapper.getBoundingClientRect();
-			const line = parseFloat(getComputedStyle(textEls[id] ?? wrapper).lineHeight) || 20.6;
-			maxHeights[id] = `${Math.ceil(line)}px`;
-		}
-	}
 
 	// Comments follow the one modal standard: the modal only takes text for
 	// ONE new comment and closes on success; the list lives on the note's
@@ -229,6 +91,7 @@
 	function openEdit(n: Note) {
 		menuNote = null;
 		editNote = n;
+		editTitle = n.title ?? '';
 		editContent = withTrailingHashtags(n.content, n.tags);
 		// Prefill the URL, not the stored id: the id would fail the API's URL
 		// check on a text-only edit.
@@ -347,93 +210,46 @@
 			{#each group.items as n (n.id)}
 				<li>
 					<div
-						class="relative flex items-start gap-3 rounded-2xl border bg-white/70 dark:bg-stone-900/70 px-4 py-3 max-sm:flex-col max-sm:gap-1 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80 dark:border-stone-800/80'}"
+						class="rounded-2xl border bg-white/70 dark:bg-stone-900/70 px-4 py-3 {n.pending ? 'opacity-60' : ''} {n.featured ? 'border-amber-400' : 'border-stone-200/80 dark:border-stone-800/80'}"
 						aria-busy={n.pending ? 'true' : undefined}
 					>
-						<span class="mt-px flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{#if n.featured}<Star class="h-3 w-3 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}{#if n.published}<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-1.5 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300" title="Published on the homepage">Public</span>{/if}{#if n.pending}<span>{n.hour}</span>{:else}<a href={`/admin/notes/${n.id}`} class="-mx-1 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>{/if}</span>
-						<div class="flex min-w-0 flex-1 items-start gap-3 max-sm:w-full">
-						<div class="min-w-0 flex-1">
-							{#if (n.linkedNotes?.length ?? 0) > 0}
-								<div class="mb-1.5"><NoteLinkPills links={n.linkedNotes ?? []} /></div>
-							{/if}
-							{#if n.id in collapsed || foldable[n.id]}
-								<div
-									bind:this={foldEls[n.id]}
-									class="transition-[max-height] duration-[180ms] ease-out motion-reduce:transition-none {maxHeights[n.id] !== undefined || n.id in collapsed ? 'overflow-hidden' : ''}"
-									style:max-height={maxHeights[n.id]}
-									ontransitionend={(e) => finishFold(n.id, e)}
-								>
-									<!-- The fold lives on a small chevron, never on
-										the text: the body must stay selectable and
-										copyable everywhere. The chevron stays under one
-										text line so the one-line max-height cap never
-										clips it. -->
-									<div class="flex items-start">
-										<button
-											type="button"
-											class="-ml-1 mt-px grid h-5 w-5 shrink-0 place-items-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
-											aria-label={n.id in collapsed ? 'Expand note' : 'Collapse note'}
-											aria-expanded={n.id in collapsed ? 'false' : 'true'}
-											onclick={() => void toggleFolded(n.id)}
-										><ChevronDown class="h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none {n.id in collapsed ? '-rotate-90' : ''}" /></button>
-										<div
-											bind:this={textEls[n.id]}
-											class="min-w-0 flex-1 whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {n.id in collapsed && !unclamped[n.id] ? 'line-clamp-1' : ''}"
-										>
-											{@html renderNoteContent(n.content, n.linkedNotes)}
-										</div>
-									</div>
-								</div>
+						<div class="flex min-h-7 items-center gap-2 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+							{#if n.featured}<Star class="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
+							{#if n.pending}
+								<span>{n.hour}</span>
+								<LoaderCircle class="ml-auto h-4 w-4 animate-spin" aria-label="Saving" />
 							{:else}
-								<p bind:this={textEls[n.id]} class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html renderNoteContent(n.content, n.linkedNotes)}</p>
-							{/if}
-							{#if n.video}
-								<div class="mt-2"><VideoPill id={n.video} /></div>
-							{/if}
-							{#if n.tags?.length}
-								<div class="mt-2 flex flex-wrap gap-1">
-									{#each n.tags as tag (tag)}
-										{#if onRemoveTag}
-											<TagChip {tag} onRemove={(t) => (tagTarget = { note: n, tag: t })} />
-										{:else}
-											<TagChip {tag} />
-										{/if}
-									{/each}
-								</div>
-							{/if}
-							{#if n.updated_at > n.created_at}
-								<div
-									class="mt-1 text-left text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500 sm:text-right"
-									title={new Date(n.updated_at).toLocaleString(locale, {
-										day: 'numeric',
-										month: 'short',
-										year: 'numeric',
-										hour: '2-digit',
-										minute: '2-digit'
-									})}
-								>
-									edited
-								</div>
-							{/if}
-							{#if !n.pending}
-								<div class="mt-1.5 flex justify-end sm:hidden">{@render commentPill(n)}</div>
+								<a href={`/admin/notes/${n.id}`} class="-mx-1 shrink-0 rounded px-1 py-0.5 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300 focus-visible:bg-stone-100 dark:focus-visible:bg-stone-800 focus-visible:text-stone-600 dark:focus-visible:text-stone-300 focus-visible:outline-none" aria-label={`Open note from ${n.hour}`}>{n.hour}</a>
+								{#if n.published}
+									<span class="shrink-0 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-1.5 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300" title="Published on the homepage">Public</span>
+								{/if}
+								{#if n.updated_at > n.created_at}
+									<span
+										class="shrink-0 text-[10px] uppercase tracking-wide"
+										title={new Date(n.updated_at).toLocaleString(locale, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+									>edited</span
+									>
+								{/if}
+								<span class="ml-auto flex shrink-0 items-center gap-1">
+									{@render commentPill(n)}
+									<button
+										type="button"
+										class="-mr-1 grid h-8 w-8 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
+										aria-label="Note actions"
+										onclick={() => (menuNote = n)}
+									>
+										<EllipsisVertical class="h-4 w-4" />
+									</button>
+								</span>
 							{/if}
 						</div>
-						{#if !n.pending}
-							<div class="ml-auto max-sm:hidden">{@render commentPill(n)}</div>
-						{/if}
-						{#if n.pending}
-							<LoaderCircle class="max-sm:absolute max-sm:top-1 max-sm:right-2 mt-0.5 h-5 w-5 shrink-0 animate-spin text-stone-400 dark:text-stone-500" aria-label="Saving" />
-						{:else}
-							<button
-								type="button"
-								class="max-sm:absolute max-sm:top-1 max-sm:right-2 max-sm:bg-white/90 dark:max-sm:bg-stone-900/90 grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-300 dark:text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300"
-								aria-label="Note actions"
-								onclick={() => (menuNote = n)}
-							>
-								<EllipsisVertical class="h-5 w-5" />
-							</button>
-						{/if}
+						<div class="mt-1">
+							<NoteBody
+								note={n}
+								removableTags={!!onRemoveTag}
+								onRemoveTag={(t) => (tagTarget = { note: n, tag: t })}
+								{lang}
+							/>
 						</div>
 					</div>
 				</li>
@@ -475,13 +291,15 @@
 	{@const editing = editNote}
 	<EditNoteDialog
 		note={editing}
+		title={editTitle}
 		content={editContent}
 		video={editVideo}
 		coverId={editing.coverId ?? null}
+		onTitle={(v) => (editTitle = v)}
 		onContent={(v) => (editContent = v)}
 		onVideo={(v) => (editVideo = v)}
-		onSave={async (content, video, createdAt, cover) => {
-			await onEdit(editing.id, content, video, createdAt);
+		onSave={async (content, video, createdAt, cover, title) => {
+			await onEdit(editing.id, content, video, createdAt, title);
 			if (cover !== undefined) await uploadCover(editing, cover);
 			editNote = null;
 		}}

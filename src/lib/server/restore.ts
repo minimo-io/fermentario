@@ -410,11 +410,17 @@ export function copyUploadIntoTarget(
 				'DELETE FROM public_config',
 				`INSERT INTO public_config (id, site_title, description, notes_enabled, show_cover_images, updated_at)
 					SELECT 1, ${column('public_config', 'site_title', "'fermentario'")},
-						${column('public_config', 'description', "'Published notes.'")},
+						${column('public_config', 'description', "'Your sovereign life''s dashboard'")},
 						${column('public_config', 'notes_enabled', '1')},
 						${column('public_config', 'show_cover_images', '1')},
 						${column('public_config', 'updated_at', '0')}
 					FROM backup.public_config WHERE id = 1`
+			);
+		}
+		if (has('quick_note')) {
+			statements.push(
+				'DELETE FROM quick_note',
+				'INSERT INTO quick_note (id, content, updated_at) SELECT 1, content, updated_at FROM backup.quick_note WHERE id = 1'
 			);
 		}
 		if (has('trading_orgs')) {

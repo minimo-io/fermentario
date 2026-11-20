@@ -2,14 +2,14 @@
  *
  *  `library` and `influences` are reserved for their future sections. No query
  *  returns them yet, so the palette never renders an empty group. */
-export type SearchKind = 'note' | 'todo' | 'principle' | 'library' | 'influences';
+export type SearchKind = 'note' | 'todo' | 'principle' | 'holding' | 'trading' | 'library' | 'influences';
 
 export interface SearchHit {
 	kind: SearchKind;
 	id: string;
 	/** One-line preview, clipped around the first match. */
 	text: string;
-	/** Extra line under the preview: task group and state. Empty elsewhere. */
+	/** Extra line under the preview: task group and state, holding type, org. */
 	context: string;
 	/** Sort timestamp: note/task update time, principle creation time. */
 	at: number;
@@ -20,6 +20,8 @@ export const SEARCH_GROUPS: { kind: SearchKind; label: string }[] = [
 	{ kind: 'note', label: 'Notes' },
 	{ kind: 'todo', label: 'To-Do' },
 	{ kind: 'principle', label: 'Principles' },
+	{ kind: 'holding', label: 'Holdings' },
+	{ kind: 'trading', label: 'Trading' },
 	{ kind: 'library', label: 'Library' },
 	{ kind: 'influences', label: 'Influences' }
 ];
@@ -33,6 +35,11 @@ export function searchHref(hit: Pick<SearchHit, 'kind' | 'id'>): string | null {
 			return `/admin/todo/${hit.id}`;
 		case 'principle':
 			return `/admin/principles/${hit.id}`;
+		case 'holding':
+			return '/admin/stocks';
+		case 'trading':
+			// Trading ids are `<org>|<ticker>`, so a ticker opens its own venue.
+			return `/admin/businesses/trading/${encodeURIComponent(hit.id.split('|')[0] ?? 'b3')}`;
 		default:
 			return null;
 	}

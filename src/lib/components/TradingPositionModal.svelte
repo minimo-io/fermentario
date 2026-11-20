@@ -7,6 +7,7 @@
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { fmtCurrency } from '$lib/currency';
 	import ValueChart from '$lib/components/ValueChart.svelte';
+	import { coinLabel } from '$lib/trading-pairs';
 	import type { TradingPosition, TradingQuotePoint } from '$lib/types';
 
 	// Full position view, opened by tapping its card or its info button:
@@ -23,6 +24,12 @@
 
 	// Ripio venues quote in USD (BTC_USDC); B3 stays BRL.
 	const cur = $derived(p.orgId === 'ripio' ? 'USD' : 'BRL');
+	// Ripio positions hold fractions of a coin; B3 positions hold shares.
+	const qtyText = $derived(
+		p.orgId === 'ripio'
+			? `${p.qty.toLocaleString('pt-BR', { maximumFractionDigits: 8 })} ${coinLabel(p.ticker, p.orgId)}`
+			: `${Number.isInteger(p.qty) ? p.qty : p.qty.toFixed(2)} shares`
+	);
 
 	let points = $state<TradingQuotePoint[] | null>(null);
 
@@ -42,6 +49,27 @@
 	const gap = $derived(p.targetPrice !== null && p.quote !== null ? p.targetPrice - p.quote : null);
 	const trend = $derived(p.potentialPct === null || Math.abs(p.potentialPct) < 0.005 ? 0 : p.potentialPct);
 	const gross = $derived(p.quote === null ? null : p.qty * p.quote);
+	// What the goal price pays: gross at that price, the sale costs taken off
+	// it, and the net the goal promises (`cost × (1 + target)`). The card
+	// prints the same four numbers, so the modal never claims a net the
+	// reader cannot rebuild from the price.
+	const goal = $derived.by(() => {
+		if (p.targetPrice === null || !(p.cost > 0) || !(p.targetPct > 0)) return null;
+		const atGoal = p.qty * p.targetPrice;
+		const net = p.cost * (1 + p.targetPct);
+		// The goal is priced with the rates the buys were recorded with, not
+		// with today's venue rules: a fee edit must not move an old target.
+		const f = p.goalFees;
+		return {
+			gross: atGoal,
+			net,
+			gain: net - p.cost,
+			fee: atGoal * (f.feeRatePct / 100),
+			spread: atGoal * (f.spreadRatePct / 100),
+			irrf: atGoal * (f.irrfRatePct / 100),
+			fixed: f.fixedFee
+		};
+	});
 
 	function fmtWhen(at: number | null): string {
 		if (at === null) return '—';
@@ -79,7 +107,7 @@
 	class="fixed inset-0 z-50 grid place-items-center bg-stone-900/40 dark:bg-black/60 backdrop-blur-md p-4"
 	role="dialog"
 	aria-modal="true"
-	aria-label="{p.ticker} position"
+	aria-label="{coinLabel(p.ticker, p.orgId)} position"
 	tabindex="-1"
 	onclick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
 	onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Escape') onClose(); }}
@@ -91,9 +119,9 @@
 	>
 		<div class="flex items-start justify-between gap-2">
 			<div class="min-w-0">
-				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">{p.ticker}</h2>
+				<h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">{coinLabel(p.ticker, p.orgId)}</h2>
 				<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
-					{Number.isInteger(p.qty) ? p.qty : p.qty.toFixed(2)} shares{#if age} · {age}{/if} · bought {fmtDate(p.since)}
+					{qtyText}{#if age} · {age}{/if} · bought {fmtDate(p.since)}
 				</p>
 				{#if p.quoteSource}
 					<p class="mt-0.5 text-[11px] tabular-nums text-stone-500 dark:text-stone-400">via {p.quoteSource}</p>
@@ -160,8 +188,7 @@
 				{@const f = p.sellFees}
 				<div class="rounded-xl bg-stone-100 dark:bg-stone-800 px-3 py-2 text-[11px] tabular-nums leading-relaxed text-stone-600 dark:text-stone-300">
 					{fmtCurrency(gross, cur, 2)} at market<br />
-					− {fmtCurrency(f?.fee ?? 0, cur, 2)} B3 fee ({pct(f?.feeRatePct ?? 0)})<br />
-					− {fmtCurrency(f?.irrf ?? 0, cur, 2)} dedo-duro ({pct(f?.irrfRatePct ?? 0)}){#if (f?.fixed ?? 0) > 0}<br />− {fmtCurrency(f?.fixed ?? 0, cur, 2)} fixed fee{/if}<br />
+					− {fmtCurrency(f?.fee ?? 0, cur, 2)} fee ({pct(f?.feeRatePct ?? 0)}){#if (f?.irrf ?? 0) > 0}<br />− {fmtCurrency(f!.irrf, cur, 2)} dedo-duro ({pct(f?.irrfRatePct ?? 0)}){/if}{#if (f?.spread ?? 0) > 0}<br />− {fmtCurrency(f!.spread, cur, 2)} spread ({pct(f?.spreadRatePct ?? 0)}){/if}{#if (f?.fixed ?? 0) > 0}<br />− {fmtCurrency(f!.fixed, cur, 2)} fixed fee{/if}<br />
 					= <strong>{fmtCurrency(p.netValue, cur, 2)} net</strong> · Profit = net − cost
 				</div>
 			{/if}
@@ -176,6 +203,25 @@
 					{/if}
 				</dd>
 			</div>
+			{#if goal}
+				<div class="rounded-xl bg-stone-100 dark:bg-stone-800 px-3 py-2 text-[11px] tabular-nums leading-relaxed text-stone-600 dark:text-stone-300">
+					{fmtCurrency(goal.gross, cur, 2)} at goal<br />
+					{#if p.goalFees.feeRatePct > 0}
+						− {fmtCurrency(goal.fee, cur, 2)} fee ({pct(p.goalFees.feeRatePct)})<br />
+					{/if}
+					{#if goal.irrf > 0}
+						− {fmtCurrency(goal.irrf, cur, 2)} dedo-duro ({pct(p.goalFees.irrfRatePct)})<br />
+					{/if}
+					{#if goal.spread > 0}
+						− {fmtCurrency(goal.spread, cur, 2)} spread ({pct(p.goalFees.spreadRatePct)})<br />
+					{/if}
+					{#if goal.fixed > 0}
+						− {fmtCurrency(goal.fixed, cur, 2)} fixed fee<br />
+					{/if}
+					= <strong>{fmtCurrency(goal.net, cur, 2)} net</strong> ·
+					<span class="font-medium text-emerald-600 dark:text-emerald-400">+{fmtCurrency(goal.gain, cur, 2)} gain</span>
+				</div>
+			{/if}
 		</dl>
 
 		<div class="mt-4 flex justify-end gap-2">

@@ -2,10 +2,9 @@
 	import { onMount } from 'svelte';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
-	import TagChip from '$lib/components/TagChip.svelte';
-	import { renderNoteContent } from '$lib/note-links';
-	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
-	import VideoPill from '$lib/components/VideoPill.svelte';
+	import NoteBody from '$lib/components/NoteBody.svelte';
+	import PublicHeader from '$lib/components/PublicHeader.svelte';
+	import { SLOGAN } from '$lib/brand';
 	import CommentItem from '$lib/components/CommentItem.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import { contentWidthClass } from '$lib/display';
@@ -26,7 +25,7 @@
 	const publicConfig = $derived(
 		data.publicConfig ?? {
 			siteTitle: 'fermentario',
-			description: 'Published notes.',
+			description: SLOGAN,
 			notesEnabled: true,
 			showCoverImages: true,
 			updatedAt: 0
@@ -77,23 +76,24 @@
 </script>
 
 <svelte:head>
-	<title>{note.content.slice(0, 40)} · {publicConfig.siteTitle}</title>
+	<title>{note.title || note.content.slice(0, 40)} · {publicConfig.siteTitle}</title>
 	<meta name="description" content={seoDesc} />
 	<link rel="canonical" href="{data.origin}/notes/{note.id}" />
 	<meta property="og:type" content="article" />
-	<meta property="og:title" content="{note.content.slice(0, 60)} · {publicConfig.siteTitle}" />
+	<meta property="og:title" content="{note.title || note.content.slice(0, 60)} · {publicConfig.siteTitle}" />
 	<meta property="og:description" content={seoDesc} />
 	<meta property="og:url" content="{data.origin}/notes/{note.id}" />
 	{#if ogImage}<meta property="og:image" content={ogImage} />{/if}
 	<meta property="article:published_time" content={new Date(note.created_at).toISOString()} />
 	{#if note.updated_at > note.created_at}<meta property="article:modified_time" content={new Date(note.updated_at).toISOString()} />{/if}
 	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="{note.content.slice(0, 60)} · {publicConfig.siteTitle}" />
+	<meta name="twitter:title" content="{note.title || note.content.slice(0, 60)} · {publicConfig.siteTitle}" />
 	<meta name="twitter:description" content={seoDesc} />
 </svelte:head>
 
 <main class="min-h-dvh">
 	<div class="mx-auto {contentClass} px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24">
+		<PublicHeader siteTitle={publicConfig.siteTitle} />
 		<header class="mb-5">
 			<a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200">
 				<ArrowLeft class="h-3.5 w-3.5" /> All published notes
@@ -112,23 +112,13 @@
 		</header>
 
 		<article class="relative rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70 px-4 py-3">
-			<div class="min-w-0">
-				{#if note.coverId && publicConfig.showCoverImages}<img src="/api/notes/photos/{note.coverId}" alt="" class="mb-2 max-h-80 w-full rounded-xl object-cover" />{/if}
-				{#if (note.linkedNotes?.length ?? 0) > 0}
-					<div class="mb-1.5"><NoteLinkPills links={note.linkedNotes ?? []} /></div>
-				{/if}
-				<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html renderNoteContent(note.content, note.linkedNotes)}</p>
-			</div>
-			{#if (note.tags ?? []).length > 0}
-				<div class="mt-2 flex flex-wrap gap-1">
-					{#each note.tags ?? [] as tag (tag)}
-						<TagChip {tag} />
-					{/each}
-				</div>
-			{/if}
-			{#if note.video}
-				<div class="mt-2"><VideoPill id={note.video} /></div>
-			{/if}
+			<NoteBody
+				{note}
+				variant="page"
+				publicUi
+				showCover={publicConfig.showCoverImages}
+				{lang}
+			/>
 		</article>
 
 		<section class="mt-6" aria-label="Comments on this note">

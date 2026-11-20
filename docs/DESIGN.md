@@ -27,7 +27,31 @@ sizing. Consult this before changing any of them.
 - **Page container** (every route): `mx-auto max-w-2xl px-6 pt-14 pb-24`.
   The width follows the Column width setting (Narrow `max-w-xl`, Standard
   `max-w-2xl`, Wide `max-w-4xl`); one value drives every route so the heatmap,
-  the timeline and the tag pages line up on desktop. The heatmap is the one view that needs more room than
+  the timeline and the tag pages line up on desktop. The public pages (`/`,
+  `/notes/<id>`, `/tools/<id>`) read the same `fermentario.config` entry on
+  mount, so they match `/admin` in the same browser.
+- **Public header** (`PublicHeader.svelte`): every non-admin route shares one
+  header — the `siteTitle` from `public_config`, a `House` button to `/` when
+  the page is not `/` itself, a search button that opens the global palette,
+  a help button, and the `Dashboard` pill to `/admin/notes`. The title links
+  to `/`, and the slogan sits next to it from `md` up. A new public or tool
+  page must render it inside its own container; the admin shell keeps its own
+  header.
+- **Market rail scope**: holdings and trading sit under the header on the
+  section views only (`/admin/notes`, `/admin/todo`, `/admin/library`,
+  `/admin/principles`, `/admin/influences`, `/admin/stocks`,
+  `/admin/businesses/*`). Heatmaps, Tags, a single note or task, Ask,
+  Diagnostics and Settings pages open without the market rail.
+- **Help dialog** (`HelpModal.svelte`, opened from the header): the slogan
+  `Your sovereign life's dashboard` (`src/lib/brand.ts`) and two pill tabs.
+  **Shortcuts** holds the 16:9 walkthrough placeholder and the shortcut list
+  from `src/lib/shortcuts.ts`; **Commands** renders the registry from
+  `src/lib/commands.ts`, with each command's code. Add every new shortcut to
+  that file and every new command to the registry in the same change; AGENTS.md
+  makes it a rule. Shortcut chips use `Kbd always` so they stay visible on
+  small screens. The Commands tab explains `:`, the code, and the
+  bare exact-code search.
+  The heatmap is the one view that needs more room than
   672px for its 53-column grid, so its grid scrolls horizontally inside the
   container rather than widening the page.
 - **Composer** (fixed bottom bar): `mx-auto max-w-2xl px-6 pb-8`. Same width as
@@ -427,9 +451,19 @@ sizing. Consult this before changing any of them.
   same once enabled, prices in USD, and shows a Watch badge while off), open
   positions with live quotes and targets, the diary, and
   the rolling monthly exemption panel. Orders are raw events; a sale always
-  closes the full position and only the latest order can be deleted. The
+  closes the full position and only the latest order can be corrected or
+  deleted (pencil and `×` in the diary row, which prefill the same sheet —
+  the ticker and side are fixed there, and the server recomputes the
+  money). The
   venue rules (fee %, dedo-duro %, fixed fee, monthly limit) are editable;
-  new orders use them, past orders keep theirs. Ripio quotes use the
+  new orders use them, past orders keep theirs. Each order stores the four
+  rates it was recorded with (`fee_rate`, `spread_rate`, `irrf_rate`,
+  `fixed_fee`); the edit sheet shows that snapshot as `Costs at the buy`
+  (rate, the doubled total when the fee applies both ways, and the money at
+  the typed values), an edit recomputes with those rates, and an open
+  position's goal price uses the net-weighted average of its buys' rates.
+  A fee change therefore never rewrites a past order, diary line or target.
+  Ripio quotes use the
   signed Market ticker (`GET /trade/ticker/{pair}`) when API credentials
   are saved in Settings → Trading — real time, and `Test quote` labels the
   source. Without credentials, or after a 401/403 from a bad key, the
@@ -443,15 +477,10 @@ sizing. Consult this before changing any of them.
   `BTC · Global` (Coinbase, `GET /api/quotes/btc-global`, which serves the
   same stored fx_rates BTC row Holdings prices with, under a day old; it
   deliberately never writes the quote log, since refreshRates already logs
-  the Coinbase line) — with the gap under them in value and percent
-  (`Ripio vs Coinbase: +$261.50 (+0.40%)`, emerald up, rose down). When the
-  quote carries bid/ask — the PUBLIC ticker answers with them too, so no key
-  is needed for this — the gap becomes side-aware: `Ripio spread buy−sell`,
-  `Buy pays {ask} · ±$ (±%) vs Coinbase` (rose when the ask is above
-  global), `Sell gets {bid} · …` (rose when the bid is below). `Refresh`
-  bypasses every cache (Ripio `force=1`, Coinbase `force=1`, panel summary
-  `refresh+force`). Disabled venues show a Watch badge and one `Enable`
-  button — trading is live for both orgs. The
+  the Coinbase line). The two prices are the whole panel: no spread, bid/ask
+  or gap line goes under them. `Refresh` bypasses every cache (Ripio
+  `force=1`, Coinbase `force=1`, panel summary `refresh+force`). Ripio has no `Disable` button: the venue stays on. An
+off venue shows a Watch badge and one `Enable` button. The
   forward call and the
   potential percent are net-based through one shared helper: a sale repays
   fees, dedo-duro and the fixed fee from the current rules, so `Sell`
@@ -468,11 +497,25 @@ sizing. Consult this before changing any of them.
   home page carries a trading strip below the holdings carousel, always
   visible once loaded: same card rail, one card per open ticker with its
   swing call
-  (`Sell`, `Day trade`, `Hold`, `No quote`) with the current price, goal
-  price, average buy with the `Δ to goal` gap (red below the goal, green
-  once reached), and trend, plus an empty state that opens
-  Businesses → Trading; the strip reloads on every diary change, every 60
-  seconds, and when the tab becomes visible again. One collapsible Market
+  (`Sell`, `Day trade`, `Hold`, `No quote`) with the quantity, the current
+  price, and a goal group in its own inset box (`rounded-xl`, muted fill,
+  9 px `Goal` label). It is a labelled column, not one ambiguous line:
+  `price R$ 45,36`, `gross R$ 136,08` (price × quantity), `net R$ 136,03`
+  (cost × (1 + target), i.e. after the sale costs) and emerald
+  `gain +R$ 3,96`. The gross row exists so the reader's own multiplication
+  lands on a number the card prints; without it the price and the net look
+  inconsistent. One snippet renders it in compact and detail cards. The
+  trade detail modal repeats the same chain under its `Goal` row: gross at
+  goal, the itemised sale costs at that price, then `= net · +gain`, so the
+  modal never claims a net the reader cannot rebuild from the price. Plus
+  the average
+  buy with the `Δ to goal` gap (red below the goal, green once reached),
+  and the trend, plus an empty state that opens Businesses → Trading. A
+  crypto card prints the bare quantity and drops the coin name after it:
+  `BTC` already sits in the header, and the name after eight decimals
+  squeezed the pill into `Ho…`. B3 keeps `3 shares`, space included. The
+  strip reloads on every diary change, every 60 seconds, and when the tab
+  becomes visible again. One collapsible Market
   card groups the holdings rail, the trading rail and a single action line:
   global `Update` (one forced refresh for holdings plus every open trading
   ticker via `POST /api/market/refresh`, button spinner only, never the
@@ -512,9 +555,21 @@ sizing. Consult this before changing any of them.
   diary table keeps its own internal scroll, grid items carry `min-w-0`, and
   the header action row wraps down to 320 px screens. The diary is a table
   (`Date | Operation | Qty | Unit | Value | B3 fee | Dedo-duro | Net |
-  Profit | delete`): the two levies stay in their own columns, dedo-duro
-  shows `—` on buys. `+ Buy` (emerald) and `− Sell` (rose) live in the
-  Trading header row; the cost rules open from the `Fees` button.
+  Profit | delete`): the two levies stay in their own columns, dedo-duro  shows `—` on buys. The Ripio diary is `Date | Operation | Qty | Price |
+  Value | Fee | Goal | Goal price | Net | delete` — Fee is never dropped
+  when the goal columns are added. Its cell states the round-trip total —
+  the order's fee doubled, since the venue charges it on the buy and again
+  on the sell — with the rate in parentheses and an `ArrowRightLeft` icon.
+  Only `+ Buy` (emerald) sits in the Trading header row; the cost rules
+  open from the `Fees` button. A sale starts from the open-position card's
+  rose `Sell` button, because a sale always closes one whole position:
+  that sheet asks only for the price the venue offers (plus the date) and
+  shows the gross, the net and the delta against the cost — green `Earns`,
+  rose `Loses` with the note "Below cost after fees" — then a
+  `ConfirmDialog` records it. Profit and delta percentages print two
+  decimals on every trading surface (card, sheet, diary, strip); the goal
+  rate prints one decimal where it is shown. One number, one precision. The
+  header no longer carries `− Sell`, and the diary gains no sell action.
 - **To-Do group row**: the new-group `+`, the in-progress filter and every
   group pill share ONE line at every width. The row is a horizontal carousel
   (`overflow-x-auto no-scrollbar snap-x`) and never wraps on desktop; extra
@@ -563,6 +618,27 @@ sizing. Consult this before changing any of them.
   the same count. Principles have a single page too
   (`/principles/[id]`, reached through the card actions menu's first
   "Open" item); it renders content, tags, video and the comments section.
+- **Note titles**: notes have an optional single-line title, edited only in
+  the two edit forms (the timeline dialog and `/admin/notes/[id]`), never in
+  the composer. Whitespace collapses, the value is trimmed and capped at 120
+  characters, and an empty value clears it. A title renders above the content
+  everywhere: 15 px semibold in list rows and an 18 px heading on both
+  single-note views. It never replaces the body. The public index shows the
+  title alone, or the excerpt when the note has no title. The public page `<title>` and social titles use it
+  when present; the description stays derived from the content.
+- **One note body, every note surface**: `src/lib/components/NoteBody.svelte`
+  renders the note on the admin timeline, the tag pages, the admin note page
+  and the public note page. Fixed order: cover, title, linked pills, markdown
+  body, tags, video. The body folds the same way on all four: chevron, one
+  clamped line when collapsed, the same 180 ms animation and the same stored
+  fold ids. `variant` only changes the title size (15 px row, 18 px page) and
+  the cover cap (`max-h-40`, `max-h-80`). Never hand-write this markup again
+  in a note row or a note page.
+- **The public index is a blog list**: `/` lists each published note as
+  cover, title (or the 160-character excerpt when the note has no title),
+  date, comment count and linked pills. It never renders the body, never
+  folds, and shows no tags or video. Only `/notes/<id>` renders the note.
+  Do not reuse `NoteBody` here.
 - **Notes fold + markdown**: any note longer than one rendered line folds
   to one clamped line (native `line-clamp` ellipsis) when you tap the note
   text, and expands on tap again — long paragraphs without newlines are
@@ -591,7 +667,9 @@ sizing. Consult this before changing any of them.
   markdown — `**bold**` and `*italic*` only
   (`src/lib/markdown-inline.ts`, escape-first then two tag rules) — in the
   timeline (folded and full) and the note page; editors, copies and
-  exports stay raw.
+  exports stay raw. The fold lives in `src/lib/note-fold.svelte.ts`, so the
+  public homepage folds exactly like the admin list, with the same storage
+  key. Single-note pages show the full body and do not fold.
 - **Note links**: `[[uuid]]` links to a note or a principle — notes resolve
   first, then principles — and the label always renders live from the
   target's first line, both inline (as a pill) and in the linked-entries pill
@@ -602,7 +680,9 @@ sizing. Consult this before changing any of them.
   text, so copies and exports carry `[[id]]`. Deleted targets render as
   muted text, never a dead link. Links are derived from content at read
   time (`linkedNotes` batched in `withTags` and the principle queries); no
-  link table, no migration. Principle surfaces stay markdown-free: pills
+  link table, no migration. The target follows the surface: public surfaces
+  link notes to `/notes/<id>`, the private app to `/admin/notes/<id>`;
+  principles always open at `/admin/principles/<id>` (no public page). Principle surfaces stay markdown-free: pills
   render through a links-only pass, and tapping a card-embedded pill never
   folds the note or opens the edit dialog.
 - **Holdings add/edit** opens in a global modal (same overlay standard as the
@@ -642,16 +722,16 @@ sizing. Consult this before changing any of them.
   selectable text and must never swallow drag-selection, so copying from
   the list works everywhere. Opening a note lives in the ⋮ menu ("Open
   note"; not offered by the ⋮ menu on the note's own page). Comments use
-  the identical chevron pattern. The hour stamp is a label, not a link. On
-  mobile the ⋮ floats absolute in the top-right corner (translucent white
-  circle so overlapped text stays readable) and the note text spans the
-  full card width; on desktop the ⋮ stays inline after the text. The
-  `edited` marker is left-aligned on mobile, right-aligned on desktop. The
-  same absolute top-right ⋮ applies to the single-note page's article.
-  Stretch caveat: the card's inner content row carries `max-sm:w-full` —
-  under `items-start` + `max-sm:flex-col` a flex child otherwise shrinks
-  to its content width, which broke full-width text and pulled the pill
-  row to a mid-card edge on short notes.
+  the identical chevron pattern. Every note card puts all its metadata in
+  **one** header row, never in a left column: the time link, the `Public`
+  pill, the `edited` marker and the featured star sit on the left; the
+  comment count and the ⋮ actions button sit right, `ml-auto` at 28–32 px
+  so the row is one compact line on mobile and desktop alike. The body and
+  tags then span the full card width under that row. `edited` is inline
+  text at 10 px uppercase with the exact timestamp in its `title`, not a
+  separate bottom row, so a short note uses one line of chrome, not three.
+  The same one-row header standard applies to the single-note pages, whose
+  `edited` marker already sits in the date row.
 
 ## Spacing
 
@@ -682,6 +762,22 @@ Do not introduce a new spacing value without checking this table first.
   destructive confirmations.
 - **Success**: `emerald-600` text, `emerald-50` fills, for confirmations.
 - **Accent**: `amber-400/50` for the weekly recap and processing states.
+- **Published pill**: `/admin/notes` carries one soft green filter pill next to
+  `N notes loaded`. It is off by default and shows every note; pressed, it sets
+  `published=only` on the shared `NotePager`, reloads the same list and updates
+  pagination, so the filter never depends on what was already loaded. OFF is a
+  plain white pill with an `emerald-300` border and emerald text; ON is a solid
+  `emerald-600` fill with white text and a leading `Check` icon, so the state is
+  visible at a glance (soft tints alone read as the same pill). It never uses
+  the `stone-900` active fill of the section pills. Unpublishing a note while
+  the filter is on removes it from the list at once.
+- **Task images**: the `New task` form has the same `Choose image` control as
+  `EditNoteDialog` (`fileToPhotoUrl`, then a 28×20 thumbnail with a remove
+  button). The item is created first, then the image is posted to
+  `/api/todo/items/<id>/photo`, because the image needs the item id; a failed
+  upload keeps the task and says so. The bytes live in `todo_item_photos`
+  (migration 42), one row per item, and the row shows a 112×80 thumbnail under
+  the text. `TodoItem.photoId` is the only field the client needs.
 - **Video**: notes, tasks and principles can carry a YouTube video, marked with a
   `red-600` pill (the brand red — the one deliberate exception to the palette).
   The pill toggles the click-to-load embed below it. On a principle card and a
@@ -749,9 +845,11 @@ Pick an existing size instead of inventing a new one:
 | CommentModal | `max-w-sm` (input only: title, textarea, Add) |
 | NoteActionsMenu, ConfigModal, RestoreOverlay | `max-w-sm` |
 | EditNoteDialog | `max-w-md` |
+| NewNoteModal | `max-w-md` |
 | CopyFallback | `max-w-lg` |
 | ModelsModal | `w-[min(92vw,30rem)]` |
 | GlobalSearch | `max-w-xl` |
+| QuickNoteModal | `max-w-2xl`, `h-[min(80dvh,44rem)]` |
 
 `EditNoteDialog`, `CommentModal` and the edit-principle dialog have a full-screen
 toggle in the header (left of Close when present). Expanded, the panel is
@@ -794,7 +892,17 @@ decide, and late content (status chips, test results) gets clipped.
 - **Overlays** are `fixed inset-0 z-50` with a `stone-900/40` backdrop
   (`black/60` in dark mode; the restore overlay is darker) and
   `backdrop-blur-md`, the same blur as the loading state; the backdrop click and
-  `Escape` close them, except while a long operation runs. Dialogs with long text (`EditNoteDialog`,
+  `Escape` close them, except while a long operation runs.
+- **Escape is guaranteed by the root layout, not by focus.** Every dialog keeps
+  its `onkeydown` Escape on the dialog root, but a key only reaches that root
+  when focus is inside it. `src/routes/+layout.svelte` closes the gap twice: it
+  focuses each dialog when it mounts (unless something inside it already has
+  focus), and, when Escape arrives with focus outside the topmost dialog, it
+  replays a bubbling `keydown` on that dialog. `topDialog()` picks the highest
+  `z-index`, then the later element in the DOM, so `FieldHelp` (`z-60`) wins
+  over the form it sits in. A dialog that must stay open opts out with
+  `data-escape="ignore"` (the restore overlay while it runs). Do not add a
+  `window` Escape listener for a new dialog; the root layout covers it. Dialogs with long text (`EditNoteDialog`,
   `CommentModal`, the edit-principle dialog) offer a header toggle that expands
   the panel to the viewport; `Escape` then collapses it first, and the other
   fields and buttons stay fixed while the textarea scrolls.
@@ -842,20 +950,81 @@ decide, and late content (status chips, test results) gets clipped.
   are reserved until those sections have data. `↑/↓` select, `Enter` opens,
   `Escape` and the backdrop close. The input placeholder is plain text; the
   `Kbd` chip sits at the right edge of the field. Before a query is typed, the
-  palette shows featured mini apps as pre-search options.
+  palette shows featured mini apps as pre-search options, and from 2 typed
+  characters it filters apps by label and description above the note results,
+  in the same ↑/↓ and `Enter` order. Typing `#` switches the palette to a
+  Tags list from the cached `/api/tag-cloud` response: `#` alone lists every
+  tag by use, each further character filters by tag prefix, and `Enter` opens
+  `/admin/tags/<tag>`. Tag mode shows no note or mini-app results. Commands have
+  a code (`note`) that is their identity and execution key, not just a label.
+  Typing `:` at the start of the field consumes the colon, shows a blue `:`
+  pill, and switches the palette to `src/lib/commands.ts`: only commands appear,
+  an empty query lists all, and code prefix, label and keywords filter with the
+  exact code first. A bare **exact** code in normal search adds a Commands group
+  above mini apps and results and selects it first, so `Enter` runs it. Bare
+  prefix matching stays in `:` mode; otherwise an ordinary word would run a
+  command. The same ↑/↓ and `Enter` keys move and run; Backspace on an empty
+  query leaves command mode. The first code, `note`, opens `NewNoteModal` from
+  any route and posts to `/api/notes`. `/admin/notes` listens for
+  `notes:created` and inserts the saved row without a reload; other routes keep
+  the note for the next timeline load.
 - **Mini apps**: a floating action button at the bottom right opens the mini
-  apps modal. Apps are ordered by usage; the last opened app shows a
-  `Latest used` pill and a running app shows a `Running` badge. Usage is stored
-  in local storage. **Time tracker** (`/admin/time-tracker`) starts one timer
-  with an optional comment and stops it later. Trailing hashtags in the comment
+  apps modal. It mounts in the root layout, so every page shows it; the EPUB
+  reader (`/admin/book/*`) is the only exception. Tools live at `/tools/<id>`,
+  outside `/admin`, so a later non-admin viewer can open them. The public
+  homepage lists the same tools in a `Tools` collapsible section at the bottom,
+  with each app's one-line description. Apps are ordered by usage; the last
+  opened app shows a `Latest used` pill and a running app shows a `Running`
+  badge. Usage is stored in local storage. An app with a `shortcut` shows its
+  `Kbd` chip in the modal and in the search palette; `Mod` renders as ⌘ or Ctrl. **Quick note** is the one app with
+  `kind: 'modal'`: it opens `QuickNoteModal` instead of a page, from the picker,
+  the search palette, the homepage `Tools` section, or `Cmd/Ctrl+Shift+K`. It is
+  a big `max-w-2xl` modal with the same full-screen toggle as `EditNoteDialog`
+  (`h-dvh max-w-full rounded-none`, `Escape` collapses first). It has no Save
+  button and no server read: every keystroke writes this browser's local
+  storage, so the header says `Saved on this device 14:32` or the error. The
+  cloud button is the only server path; admin is unprotected today, so it is
+  enabled, and the login will enable it per session.
+  `Edit` and `View` are a segmented toggle; View renders the same markdown as
+  notes (bold, italic, bare URLs, `[[id]]` pills), not headings or lists. A
+  note with text opens in View; an empty one opens in Edit. In View, `E`
+  switches to Edit (no modifier, no key repeat, no focused text field, and no
+  other dialog on screen). The
+  server holds one backup row in `quick_note`, separate from `notes`, so the
+  text never reaches the timeline, tags or publishing. The full-screen choice is remembered in
+  `localStorage['fermentario.quickNote.full']`, so it reopens the size it was
+  left. **Time tracker**
+  (`/tools/time-tracker`) starts one timer
+  with an optional comment and stops it later. The start card is a single row:
+  title, comment field, `Start`, `Cancel`; no reveal step, and the title text
+  hides below `sm` so the row stays one line. Hashtags anywhere in the comment
   become project tags (stored in `time_entry_tags`, first tag is the primary
-  project for stats). Entries live in the journal. While a timer runs, a compact
+  project for stats). A tag starts the line or follows whitespace, so
+  `#project deep work` and `deep work #project` both work. Entries live in the journal. While a timer runs, a compact
   counter bar stays visible at the top of admin pages and on the public
-  homepage, and links to the time tracker. The time tracker page shows a
+  homepage, and links to the time tracker. The bar stays one line: status,
+  the primary tag plus extra-tag count, a truncated comment preview, and the
+  elapsed time. The full comment and all tags live in the button title. On wide
+  screens the active timer card is two rows: status and started metadata, then
+  timer, comment or edit field, and actions. It stacks below `md`. The time tracker page shows a
   period chart (month/day bars, week/day bars, or year/month bars) with stacked
   segments per project and a period dropdown. Each history row has a delete
   button, and a running timer can be stopped or discarded from the page and
-  from the top bar. Both actions confirm through `ConfirmDialog`.
+  from the top bar. Both actions confirm through `ConfirmDialog`. A running
+  timer has `Edit`: the comment field opens in place, prefilled with the text
+  plus its tags as trailing `#tag` tokens, so one field changes both the comment
+  and the tags. `Enter` saves, `Escape` cancels. A `Settings2` gear on the start
+  row and on the active card opens the chime panel: `Off`, `5m`, `15m`, `30m`,
+  `45m`, `1h`, `1h30`. One interval serves every timer (browser local storage key
+  `fermentario.time-alerts`). Each mark sounds once (`Once`), repeats for 30
+  seconds (`30s`), or repeats until stopped (`Until stopped`); the mode lives in
+  `fermentario.time-alert-mode`, and a repeated chime shows a rose stop button on
+  the active card. The gear title states the interval, and the active card
+  shows `Next chime 14:45`. The idle start row keeps its single line. The panel uses `slide` over
+  `motionMs(180)`; the gear turns 90° in 200 ms with
+  `motion-reduce:transition-none`. `/admin/tags/<tag>` lists the
+  matching time entries in a `Time` section, running first, with a `Running`
+  pill instead of a live counter.
 - **Toasts** come from `$lib/toast.svelte` and render once from the root layout
   (`fixed inset-x-0 bottom-28 z-30`). Use them for final action results only,
   never for progress or background work. Auto-clear: 4 s error, 8 s success.
@@ -864,7 +1033,9 @@ decide, and late content (status chips, test results) gets clipped.
   error, so success messages must pass the tone explicitly. The third argument,
   `showToast(text, tone, true)`, asks for the attention **ping**: the sound is
   played only by the global `Toasts` mount via `$lib/sound.ts` (WebAudio, no
-  files), so no caller writes its own audio. Autoplay policy means iOS/Safari
+  files), so no toast caller writes its own audio. The time tracker's interval
+  chime is the one other caller, through `playChime()` in the same module.
+  Autoplay policy means iOS/Safari
   stays silent until the first user gesture unlocks the `AudioContext`; the
   toast itself always shows.
 - **Loading feedback**: a static pill in `app.html` covers hydration no Svelte
@@ -930,24 +1101,32 @@ decide, and late content (status chips, test results) gets clipped.
   change, not a destructive one.
 - Tag chips are links to `/tags/<tag>`; when a removal handler is present they
   also carry a hover `×` that asks for confirmation.
-- Notes get tags only from hashtags the user types at the end of the note.
-  No AI or background pass creates tags. Typing `#` opens tag suggestions
-  (`TagFinder`, above the field): the top tags on a bare `#`, prefix matches
-  with usage counts as you type, plus a `Create #fragment` row when nothing
-  matches exactly. Only tokens in the trailing hashtag run open the menu — a
-  `#` in prose would not be stored, so it offers nothing. No row is selected
-  when the menu opens: plain `Enter` still saves (bar) or inserts a newline
-  (editors); `↑/↓` or a tap selects, the second `Enter` picks, `Escape`
-  closes. The menu mounts in the composer bar, the fullscreen editor and the
-  note edit dialog.
-- `/tags` is the tag cloud index. It counts every tag in `note_tags`,
-  `todo_item_tags` and `principle_tags`, never `tag_colors` alone. The most-used
-  tags come first; ties are alphabetical. Every pill uses the same size and
-  padding, so frequency changes order, not visual weight. Each pill links to
-  `/tags/<tag>`, reuses the shared tag palette, and carries an exact count. The
-  title gives the per-section breakdown. The cloud has no color picker; open a
-  tag to change its color. The home header **Tags** pill opens this page, so the
-  timeline keeps its infinite loading. A tag detail's **Back** control uses
-  browser history, so it returns to `/tags` when opened there and to the
-  previous note when opened from a tag chip. With no history, it falls back to
-  `/tags`.
+- Notes get tags only from hashtags the user types in the note, anywhere in
+  the text. No AI or background pass creates tags. A tag starts the line or
+  follows whitespace and ends at whitespace or the end of the line, so
+  `url.com/#anchor`, `foo#bar`, `# Heading` and `## Heading` stay prose. The
+  tag token leaves the prose; a line that held only tags disappears, and other
+  blank lines stay. Typing `#` opens tag suggestions
+  (`TagFinder`): the top tags on a bare `#`, prefix matches with usage counts
+  as you type, plus a `Create #fragment` row when nothing matches exactly.
+  The menu opens for any `#` the parser would store. No row is selected when
+  the menu opens: plain `Enter` still saves (bar) or inserts a newline (editors); `↑/↓` or a
+  tap selects, the second `Enter` picks, `Escape` closes. The menu mounts in
+  the composer bar, the fullscreen editor, the note edit dialog and the
+  `New note` command modal. It floats above the field, except in that modal,
+  which renders it in flow below the field so the panel does not clip it.
+- **Tags have one admin map and one public map.** `/admin/tags` counts every
+  tag in `note_tags`, `todo_item_tags`, `principle_tags` and
+  `time_entry_tags`, never `tag_colors` alone; the most-used tags come first
+  and ties are alphabetical. `/admin/tags/<tag>` keeps the per-section
+  breakdown and adds pills for All, Featured, Notes, Time, To-Do and
+  Principles. Both use the shared tag palette and carry exact counts, and the
+  pills never change size, so frequency changes order, not visual weight.
+- **The public tag map sits at the bottom of the homepage**, after Tools, in
+  the same `CollapsibleSection` (`ferm:pub-tags`) as the other sections. It
+  lists only tags on published notes (`listPublicTagCounts`), links to
+  `/tags/<tag>`, and is server-rendered with the feed. `/tags/<tag>` is the
+  public counterpart of `/admin/tags/<tag>`: same heading, color dot and count,
+  but published notes only and no admin action, section tabs, to-dos,
+  principles or time entries. Its cards are `PublicNoteCard`, the same blog
+  card as the index.

@@ -1,13 +1,14 @@
 import { TAG_TOKEN } from '$lib/hashtags';
 import type { TagCount } from '$lib/tag-cloud';
 
-const TAIL_RE = /^(\s*#[^\s#]*)?\s*$/u;
 const TOKEN_TAIL_RE = /^[\p{L}\p{N}_-]{0,29}/u;
 
 /** Find a `#tag` token under the caret that the save path would store.
- *  Only a token in the trailing hashtag run counts: prose `#` never opens
- *  the menu, because saving would not store it. Returns the `#` start, the
- *  typed query (lowercase) and the token end. */
+ *  The parser stores tags anywhere, so any `#` that starts the text or
+ *  follows whitespace opens the menu; `foo#bar` and `url/#anchor` do not.
+ *  The token must be complete: a character other than whitespace right
+ *  after it means the parser would keep it as prose. Returns the `#` start,
+ *  the typed query (lowercase) and the token end. */
 export function tagQueryAt(
 	value: string,
 	caret: number
@@ -30,7 +31,7 @@ export function tagQueryAt(
 	const full = (typed + rest).toLowerCase();
 	if (full !== '' && !TAG_TOKEN.test(full)) return null;
 	const tailRest = tail.slice(rest.length);
-	if (!TAIL_RE.test(tailRest)) return null;
+	if (tailRest !== '' && !/^\s/u.test(tailRest)) return null;
 	const start = before.length - (typed.length + 1);
 	return { start, query: typed.toLowerCase(), end: clamped + rest.length };
 }

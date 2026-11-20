@@ -174,6 +174,33 @@ BM25 results and the vector blobs byte for byte.
 
 ## Time tracker
 
-- Routes: `GET /api/time-tracker` returns `{ running, entries }`; `POST /api/time-tracker/start` body `{ comment }` creates a running entry (409 if one is already running); `POST /api/time-tracker/stop` body `{ id? }` stops the running entry (409 if none running); `DELETE /api/time-tracker/<id>` deletes one entry, running or stopped (404 if missing), and its tag rows; `GET /api/time-tracker/stats?period=month|week|year&at=<iso>` returns aggregated buckets/segments for the period chart.
-- Tags/projects: trailing hashtags in the start comment are parsed with `splitTrailingHashtags` (like notes). The comment is stored without the trailing tag run and tags are stored in `time_entry_tags` (migration 34). Stats attribute each entry's duration to its first tag (primary project); untagged time is a neutral segment.
+- Page: `/tools/time-tracker`. The tool page is outside `/admin` and reads no admin context, so it works without the admin shell.
+- Routes: `GET /api/time-tracker` returns `{ running, entries }`; `GET /api/time-tracker?tag=<tag>` returns `{ entries }` for one tag (running first, cap 200, empty list for a blank tag); `PATCH /api/time-tracker/<id>` body `{ comment }` rewrites the comment and its hashtags on a running or stopped entry (404 if missing); `POST /api/time-tracker/start` body `{ comment }` creates a running entry (409 if one is already running); `POST /api/time-tracker/stop` body `{ id? }` stops the running entry (409 if none running); `DELETE /api/time-tracker/<id>` deletes one entry, running or stopped (404 if missing), and its tag rows; `GET /api/time-tracker/stats?period=month|week|year&at=<iso>` returns aggregated buckets/segments for the period chart.
+- Tags/projects: hashtags anywhere in the start or edit comment are parsed with `splitHashtags`. A tag starts the line or follows whitespace and ends at whitespace, so URL fragments and `# Heading` stay prose. The comment is stored without the tags and tags are stored in `time_entry_tags` (migration 34). Migration 38 still uses the frozen `splitTimeEntryHashtags` to backfill leading-run tags for older entries. Stats attribute each entry's duration to its first tag (primary project); untagged time is a neutral segment.
 - Journal tables: `time_entries` (migration 33, `time-tracker`), `time_entry_tags` (migration 34, `time-entry-tags`). One running timer at a time (`ended_at IS NULL`).
+
+## Quick note
+
+- Mini app `quick-note` (`kind: 'modal'`): no page, it opens `QuickNoteModal` from the root layout. Shortcut `Cmd/Ctrl+Shift+K` toggles it; the shortcut ignores text fields and the EPUB reader, like the other section shortcuts.
+- Storage is local only. Every keystroke writes `localStorage['fermentario.quickNote']` (`{ content, updatedAt }`), synchronously, so a reload never loses text. The client never reads or writes the server copy on open, close or typing.
+- Server copy is an explicit backup: `PUT /api/quick-note` body `{ content: string }` returns `{ content, updatedAt }` (400 for a non-string body, 100 000 char cap). The cloud button is enabled today because admin is unprotected (`quickNote.backupEnabled`); the login will set it per session. `GET /api/quick-note` exists for a future restore and is not called by the app.
+- Journal table: `quick_note` (migration 39, `quick-note`), one row `id = 1`. It is not a `notes` row: no tags, no publishing, no timeline entry, no search entry. A restore copies it when the backup has the table.
+
+## Shortcuts
+
+- `src/lib/shortcuts.ts` is the only shortcut registry. `HelpModal` renders it
+  from the public header; `MiniAppDef.shortcut` carries the mini app keys.
+- Current: `Mod+K` search, `Mod+Shift+K` quick note, `1–5` admin section,
+  `Mod+Shift+L` composer, `Mod+Shift+A` add item, `Mod+Enter` save, `Esc` close,
+  `Enter` start timer, `↑/↓` and `Enter` in search.
+- Slogan and meta description: `SLOGAN` in `src/lib/brand.ts`
+  (`Your sovereign life's dashboard`); migration 40 replaces the old
+  `Published notes.` default in `public_config`.
+
+## Global search
+
+- `GET /api/search?q=` returns hits from notes, tasks, principles, holdings
+  (tickers) and trading (venues and their tickers). A holding opens
+  `/admin/stocks`; a trading hit opens `/admin/businesses/trading/<org>`.
+- Trading ids are `<org>|<ticker>`; `searchHref` splits on `|`, so one ticker
+  from Ripio and the same ticker from B3 stay separate rows.

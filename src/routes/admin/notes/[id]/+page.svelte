@@ -5,11 +5,8 @@
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import Star from '@lucide/svelte/icons/star';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
-	import TagChip from '$lib/components/TagChip.svelte';
-	import { renderNoteContent } from '$lib/note-links';
-	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
+	import NoteBody from '$lib/components/NoteBody.svelte';
 	import NoteFinder from '$lib/components/NoteFinder.svelte';
-	import VideoPill from '$lib/components/VideoPill.svelte';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import { fileToPhotoUrl } from '$lib/stock-photo';
 	import ImagePlus from '@lucide/svelte/icons/image-plus';
@@ -21,7 +18,7 @@
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { sortComments } from '$lib/comments';
-	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
+	import { splitHashtags, withTrailingHashtags } from '$lib/hashtags';
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
@@ -35,6 +32,7 @@
 	let lang = $state('en');
 	let contentClass = $state('max-w-2xl');
 	let editing = $state(false);
+	let editTitle = $state('');
 	let editContent = $state('');
 	let editVideo = $state('');
 	let editDate = $state('');
@@ -48,12 +46,13 @@
 	let editCoverPreview = $state<string | null>(null);
 	let editCoverData = $state<string | null | undefined>(undefined);
 	const editUnchanged = $derived(
-		editContent.trim() === withTrailingHashtags(note.content, note.tags).trim() &&
+		editTitle.trim() === (note.title ?? '').trim() &&
+			editContent.trim() === withTrailingHashtags(note.content, note.tags).trim() &&
 			editVideo.trim() === (note.video ? youTubeWatchUrl(note.video) : '') &&
 			editDate === editDateInitial &&
 			editCoverData === undefined
 	);
-	const editEmpty = $derived(splitTrailingHashtags(editContent).content.trim().length === 0);
+	const editEmpty = $derived(splitHashtags(editContent).content.trim().length === 0);
 	let confirming = $state(false);
 	let menuOpen = $state(false);
 	let reading = $state(false);
@@ -169,7 +168,7 @@
 			const res = await loading.track(fetch(`/api/notes/${note.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: editContent.trim(), video: editVideo.trim(), created_at: createdAt })
+				body: JSON.stringify({ content: editContent.trim(), title: editTitle.trim(), video: editVideo.trim(), created_at: createdAt })
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
@@ -201,6 +200,17 @@
 		editError = '';
 		editCoverPreview = null;
 		editCoverData = undefined;
+	}
+
+	function onEditKeydown(e: KeyboardEvent) {
+		if (e.isComposing) return;
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			cancelEdit();
+		} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			void saveEdit();
+		}
 	}
 
 	async function remove() {
@@ -279,6 +289,7 @@
 
 	function openEdit() {
 		menuOpen = false;
+		editTitle = note.title ?? '';
 		editContent = withTrailingHashtags(note.content, note.tags);
 		// Prefill the URL, not the stored id: the id would fail the API's URL
 		// check on a text-only edit.
@@ -312,7 +323,7 @@
 </script>
 
 <svelte:head>
-	<title>{note.content.slice(0, 40)} · fermentario</title>
+	<title>{note.title || note.content.slice(0, 40)} · fermentario</title>
 </svelte:head>
 
 <main class="min-h-dvh">
@@ -350,11 +361,16 @@
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
-					{#if !editing && (note.linkedNotes?.length ?? 0) > 0}
-						<div class="mb-1.5"><NoteLinkPills links={note.linkedNotes ?? []} /></div>
-					{/if}
 					{#if editing}
-						<div class="relative">
+						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-title">Title (optional)</label>
+						<input
+							id="edit-note-title"
+							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+							bind:value={editTitle}
+							onkeydown={onEditKeydown}
+							maxlength={120}
+						/>
+						<div class="relative mt-3">
 							<textarea
 								bind:this={editField}
 								use:focusEditor
@@ -363,15 +379,7 @@
 								placeholder="Note text"
 								value={editContent}
 								oninput={(e) => { editContent = e.currentTarget.value; autosizeEditor(); }}
-								onkeydown={(e) => {
-									if (e.key === 'Escape') {
-										e.preventDefault();
-										cancelEdit();
-									} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-										e.preventDefault();
-										void saveEdit();
-									}
-								}}
+								onkeydown={onEditKeydown}
 							></textarea>
 							<NoteFinder textarea={editField} excludeId={note.id} />
 						</div>
@@ -381,6 +389,7 @@
 							type="datetime-local"
 							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
 							bind:value={editDate}
+							onkeydown={onEditKeydown}
 							max={editMaxDate}
 						/>
 						<p class="mt-1 text-[11px] text-stone-400 dark:text-stone-500">Empty uses the current time.</p>
@@ -390,6 +399,7 @@
 							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
 							value={editVideo}
 							oninput={(e) => (editVideo = e.currentTarget.value)}
+							onkeydown={onEditKeydown}
 							placeholder="https://www.youtube.com/watch?v=…"
 							inputmode="url"
 						/>
@@ -430,8 +440,13 @@
 							>{editSaving ? 'Saving…' : 'Save'}</button>
 						</div>
 					{:else}
-						{#if note.coverId}<img src="/api/notes/photos/{note.coverId}" alt="" class="mb-2 max-h-80 w-full rounded-xl object-cover" />{/if}
-						<p class="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800 dark:text-stone-200">{@html renderNoteContent(note.content, note.linkedNotes)}</p>
+						<NoteBody
+							{note}
+							variant="page"
+							removableTags
+							onRemoveTag={removeTag}
+							{lang}
+						/>
 					{/if}
 				</div>
 				{#if !editing}
@@ -445,16 +460,6 @@
 					</button>
 				{/if}
 			</div>
-			{#if !editing && (note.tags ?? []).length > 0}
-				<div class="mt-2 flex flex-wrap gap-1">
-					{#each note.tags ?? [] as tag (tag)}
-						<TagChip {tag} onRemove={removeTag} />
-					{/each}
-				</div>
-			{/if}
-			{#if !editing && note.video}
-				<div class="mt-2"><VideoPill id={note.video} /></div>
-			{/if}
 		</article>
 
 		<section class="mt-6" aria-label="Comments on this note">

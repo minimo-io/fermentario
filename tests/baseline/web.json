@@ -1,7 +1,7 @@
 {
 	"GET / homepage": {
 		"status": 200,
-		"body": "<!doctype html>\n<html lang=\"en\" data-theme=\"light\">\n\t<head>\n\t\t<meta charset=\"utf-8\" />\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\" />\n\t\t<meta name=\"text-scale\" content=\"scale\" />\n\t\t<script>\n\t\t\t// Apply the saved theme before the first paint, so a dark page never\n\t\t\t// flashes white. The config modal writes the same `theme` key.\n\t\t\t(() => {\n\t\t\t\ttry {\n\t\t\t\t\tconst raw = localStorage.getItem('fermentario.config');\n\t\t\t\t\tconst saved = raw ? JSON.parse(raw)?.theme : null;\n\t\t\t\t\tconst theme = saved === 'light' || saved === 'dark' ? saved : 'system';\n\t\t\t\t\tconst dark =\n\t\t\t\t\t\ttheme === 'dark' ||\n\t\t\t\t\t\t(theme === 'system' &&\n\t\t\t\t\t\t\ttypeof matchMedia === 'function' &&\n\t\t\t\t\t\t\tmatchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tdocument.documentElement.style.colorScheme = dark ? 'dark' : 'light';\n\t\t\t\t} catch {\n\t\t\t\t\t// Blocked storage keeps the light default.\n\t\t\t\t}\n\t\t\t})();\n\t\t</script>\n\t\t<style>\n\t\t\thtml {\n\t\t\t\tbackground: #ffffff;\n\t\t\t}\n\t\t\thtml.dark {\n\t\t\t\tbackground: #0c0a09;\n\t\t\t}\n\t\t\t#boot-loader {\n\t\t\t\tposition: fixed;\n\t\t\t\tinset: 0;\n\t\t\t\tz-index: 60;\n\t\t\t\tdisplay: grid;\n\t\t\t\tplace-items: center;\n\t\t\t\tpadding: 1.5rem;\n\t\t\t\tcursor: wait;\n\t\t\t\tbackground: rgba(255, 255, 255, 0.28);\n\t\t\t\t-webkit-backdrop-filter: blur(8px);\n\t\t\t\tbackdrop-filter: blur(8px);\n\t\t\t\tanimation: boot-timeout 0.3s linear 60s forwards;\n\t\t\t}\n\t\t\t#boot-loader .boot-pill {\n\t\t\t\tdisplay: inline-flex;\n\t\t\t\talign-items: center;\n\t\t\t\tgap: 0.5rem;\n\t\t\t\tborder: 1px solid #e7e5e4;\n\t\t\t\tborder-radius: 9999px;\n\t\t\t\tbackground: rgba(255, 255, 255, 0.95);\n\t\t\t\tpadding: 0.5rem 0.875rem;\n\t\t\t\tfont-family: ui-sans-serif, system-ui, sans-serif;\n\t\t\t\tfont-size: 0.75rem;\n\t\t\t\tfont-weight: 500;\n\t\t\t\tline-height: 1;\n\t\t\t\tcolor: #57534e;\n\t\t\t\tbox-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);\n\t\t\t}\n\t\t\t#boot-loader .boot-spinner {\n\t\t\t\twidth: 1rem;\n\t\t\t\theight: 1rem;\n\t\t\t\tborder: 2px solid #e7e5e4;\n\t\t\t\tborder-top-color: #f59e0b;\n\t\t\t\tborder-radius: 9999px;\n\t\t\t\tanimation: boot-spin 0.7s linear infinite;\n\t\t\t}\n\t\t\thtml.dark #boot-loader {\n\t\t\t\tbackground: rgba(12, 10, 9, 0.28);\n\t\t\t}\n\t\t\thtml.dark #boot-loader .boot-pill {\n\t\t\t\tborder-color: #292524;\n\t\t\t\tbackground: rgba(28, 25, 23, 0.9);\n\t\t\t\tcolor: #d6d3d1;\n\t\t\t\tbox-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);\n\t\t\t}\n\t\t\thtml.dark #boot-loader .boot-spinner {\n\t\t\t\tborder-color: #292524;\n\t\t\t\tborder-top-color: #fbbf24;\n\t\t\t}\n\t\t\t@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {\n\t\t\t\t#boot-loader {\n\t\t\t\t\t-webkit-backdrop-filter: none;\n\t\t\t\t\tbackdrop-filter: none;\n\t\t\t\t\tbackground: rgba(255, 255, 255, 0.85);\n\t\t\t\t}\n\t\t\t\thtml.dark #boot-loader {\n\t\t\t\t\tbackground: rgba(12, 10, 9, 0.9);\n\t\t\t\t}\n\t\t\t}\n\t\t\t@keyframes boot-spin {\n\t\t\t\tto { transform: rotate(360deg); }\n\t\t\t}\n\t\t\t@keyframes boot-timeout {\n\t\t\t\tto { opacity: 0; visibility: hidden; }\n\t\t\t}\n\t\t\t@media (prefers-reduced-motion: reduce) {\n\t\t\t\t#boot-loader .boot-spinner { animation: none; }\n\t\t\t}\n\t\t</style>\n\t\t<noscript><style>#boot-loader { display: none; }</style></noscript>\n\t\t<!--12qhfyh--><meta name=\"description\" content=\"voice journal for life and the bootstrapped journey\"/> <link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"/><!----><!--1uha8ag--><meta name=\"description\" content=\"Published notes.\"/> <link rel=\"canonical\" href=\"<base>/\"/> <meta property=\"og:type\" content=\"website\"/> <meta property=\"og:title\" content=\"fermentario\"/> <meta property=\"og:description\" content=\"Published notes.\"/> <meta property=\"og:url\" content=\"<base>/\"/> <meta name=\"twitter:card\" content=\"summary\"/> <meta name=\"twitter:title\" content=\"fermentario\"/> <meta name=\"twitter:description\" content=\"Published notes.\"/><!----><title>fermentario</title>\n\t\t<link href=\"./_app/immutable/assets/0.<hashed>.$2\" rel=\"stylesheet\">\n\t</head>\n\t<body data-sveltekit-preload-data=\"hover\">\n\t\t<div id=\"boot-loader\" role=\"status\" aria-live=\"polite\">\n\t\t\t<span class=\"boot-pill\"><span class=\"boot-spinner\"></span>Loading…</span>\n\t\t</div>\n\t\t<div style=\"display: contents\"><!--[--><!--[0--><!--[--><!--[-1--><!--[--><main class=\"min-h-dvh\"><div class=\"mx-auto max-w-2xl px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24\"><!--[-1--><!--]--> <!--[-1--><!--]--><!----> <header class=\"mb-5 flex items-center justify-between gap-2\"><h1 class=\"text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100\">fermentario</h1> <a href=\"/admin/notes\" class=\"rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800\">Admin</a></header> <!--[2--><p class=\"rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400\">Nothing published yet.</p><!--]--></div></main><!--]--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----><!--]--><!--]--> <!--[-1--><!--]--><!--]-->\n\t\t\t\n\t\t\t<script>\n\t\t\t\t{\n\t\t\t\t\t__sveltekit_<nonce> = {\n\t\t\t\t\t\tbase: new URL(\".\", location).pathname.slice(0, -1)\n\t\t\t\t\t};\n\n\t\t\t\t\tconst element = document.currentScript.parentElement;\n\n\t\t\t\t\tPromise.all([\n\t\t\t\t\t\timport(\"./_app/immutable/entry/start.<hashed>.$2\"),\n\t\t\t\t\t\timport(\"./_app/immutable/entry/app.<hashed>.$2\")\n\t\t\t\t\t]).then(([kit, app]) => {\n\t\t\t\t\t\tkit.start(app, element, {\n\t\t\t\t\t\t\tnode_ids: [0, 3],\n\t\t\t\t\t\t\tdata: [null,{type:\"data\",data:{notes:[],hasMore:false,nextCursor:null,origin:\"<base>\",publicConfig:{siteTitle:\"fermentario\",description:\"Published notes.\",notesEnabled:true,showCoverImages:true,updatedAt:0}},uses:{}}],\n\t\t\t\t\t\t\tform: null,\n\t\t\t\t\t\t\terror: null\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t</script>\n\t\t</div>\n\t</body>\n</html>"
+		"body": "<!doctype html>\n<html lang=\"en\" data-theme=\"light\">\n\t<head>\n\t\t<meta charset=\"utf-8\" />\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\" />\n\t\t<meta name=\"text-scale\" content=\"scale\" />\n\t\t<script>\n\t\t\t// Apply the saved theme before the first paint, so a dark page never\n\t\t\t// flashes white. The config modal writes the same `theme` key.\n\t\t\t(() => {\n\t\t\t\ttry {\n\t\t\t\t\tconst raw = localStorage.getItem('fermentario.config');\n\t\t\t\t\tconst saved = raw ? JSON.parse(raw)?.theme : null;\n\t\t\t\t\tconst theme = saved === 'light' || saved === 'dark' ? saved : 'system';\n\t\t\t\t\tconst dark =\n\t\t\t\t\t\ttheme === 'dark' ||\n\t\t\t\t\t\t(theme === 'system' &&\n\t\t\t\t\t\t\ttypeof matchMedia === 'function' &&\n\t\t\t\t\t\t\tmatchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', dark);\n\t\t\t\t\tdocument.documentElement.style.colorScheme = dark ? 'dark' : 'light';\n\t\t\t\t} catch {\n\t\t\t\t\t// Blocked storage keeps the light default.\n\t\t\t\t}\n\t\t\t})();\n\t\t</script>\n\t\t<style>\n\t\t\thtml {\n\t\t\t\tbackground: #ffffff;\n\t\t\t}\n\t\t\thtml.dark {\n\t\t\t\tbackground: #0c0a09;\n\t\t\t}\n\t\t\t#boot-loader {\n\t\t\t\tposition: fixed;\n\t\t\t\tinset: 0;\n\t\t\t\tz-index: 60;\n\t\t\t\tdisplay: grid;\n\t\t\t\tplace-items: center;\n\t\t\t\tpadding: 1.5rem;\n\t\t\t\tcursor: wait;\n\t\t\t\tbackground: rgba(255, 255, 255, 0.28);\n\t\t\t\t-webkit-backdrop-filter: blur(8px);\n\t\t\t\tbackdrop-filter: blur(8px);\n\t\t\t\tanimation: boot-timeout 0.3s linear 60s forwards;\n\t\t\t}\n\t\t\t#boot-loader .boot-pill {\n\t\t\t\tdisplay: inline-flex;\n\t\t\t\talign-items: center;\n\t\t\t\tgap: 0.5rem;\n\t\t\t\tborder: 1px solid #e7e5e4;\n\t\t\t\tborder-radius: 9999px;\n\t\t\t\tbackground: rgba(255, 255, 255, 0.95);\n\t\t\t\tpadding: 0.5rem 0.875rem;\n\t\t\t\tfont-family: ui-sans-serif, system-ui, sans-serif;\n\t\t\t\tfont-size: 0.75rem;\n\t\t\t\tfont-weight: 500;\n\t\t\t\tline-height: 1;\n\t\t\t\tcolor: #57534e;\n\t\t\t\tbox-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);\n\t\t\t}\n\t\t\t#boot-loader .boot-spinner {\n\t\t\t\twidth: 1rem;\n\t\t\t\theight: 1rem;\n\t\t\t\tborder: 2px solid #e7e5e4;\n\t\t\t\tborder-top-color: #f59e0b;\n\t\t\t\tborder-radius: 9999px;\n\t\t\t\tanimation: boot-spin 0.7s linear infinite;\n\t\t\t}\n\t\t\thtml.dark #boot-loader {\n\t\t\t\tbackground: rgba(12, 10, 9, 0.28);\n\t\t\t}\n\t\t\thtml.dark #boot-loader .boot-pill {\n\t\t\t\tborder-color: #292524;\n\t\t\t\tbackground: rgba(28, 25, 23, 0.9);\n\t\t\t\tcolor: #d6d3d1;\n\t\t\t\tbox-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);\n\t\t\t}\n\t\t\thtml.dark #boot-loader .boot-spinner {\n\t\t\t\tborder-color: #292524;\n\t\t\t\tborder-top-color: #fbbf24;\n\t\t\t}\n\t\t\t@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {\n\t\t\t\t#boot-loader {\n\t\t\t\t\t-webkit-backdrop-filter: none;\n\t\t\t\t\tbackdrop-filter: none;\n\t\t\t\t\tbackground: rgba(255, 255, 255, 0.85);\n\t\t\t\t}\n\t\t\t\thtml.dark #boot-loader {\n\t\t\t\t\tbackground: rgba(12, 10, 9, 0.9);\n\t\t\t\t}\n\t\t\t}\n\t\t\t@keyframes boot-spin {\n\t\t\t\tto { transform: rotate(360deg); }\n\t\t\t}\n\t\t\t@keyframes boot-timeout {\n\t\t\t\tto { opacity: 0; visibility: hidden; }\n\t\t\t}\n\t\t\t@media (prefers-reduced-motion: reduce) {\n\t\t\t\t#boot-loader .boot-spinner { animation: none; }\n\t\t\t}\n\t\t</style>\n\t\t<noscript><style>#boot-loader { display: none; }</style></noscript>\n\t\t<!--12qhfyh--><meta name=\"description\" content=\"Your sovereign life's dashboard\"/> <link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"/><!----><!--1uha8ag--><meta name=\"description\" content=\"Your sovereign life's dashboard\"/> <link rel=\"canonical\" href=\"<base>/\"/> <meta property=\"og:type\" content=\"website\"/> <meta property=\"og:title\" content=\"fermentario\"/> <meta property=\"og:description\" content=\"Your sovereign life's dashboard\"/> <meta property=\"og:url\" content=\"<base>/\"/> <meta name=\"twitter:card\" content=\"summary\"/> <meta name=\"twitter:title\" content=\"fermentario\"/> <meta name=\"twitter:description\" content=\"Your sovereign life's dashboard\"/><!----><title>fermentario</title>\n\t\t<link href=\"./_app/immutable/assets/0.<hashed>.$2\" rel=\"stylesheet\">\n\t</head>\n\t<body data-sveltekit-preload-data=\"hover\">\n\t\t<div id=\"boot-loader\" role=\"status\" aria-live=\"polite\">\n\t\t\t<span class=\"boot-pill\"><span class=\"boot-spinner\"></span>Loading…</span>\n\t\t</div>\n\t\t<div style=\"display: contents\"><!--[--><!--[0--><!--[--><!--[-1--><!--[--><main class=\"min-h-dvh\"><div class=\"mx-auto max-w-2xl px-6 pt-[max(1rem,env(safe-area-inset-top))] pb-24\"><!--[-1--><!--]--> <!--[-1--><!--]--><!----> <header class=\"mb-5 flex items-center justify-between gap-2\"><div class=\"flex min-w-0 items-baseline gap-3\"><h1 class=\"min-w-0 truncate text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100\"><a href=\"/\" class=\"hover:underline\">fermentario</a></h1> <span class=\"hidden truncate text-xs text-stone-400 dark:text-stone-500 md:inline\">Your sovereign life's dashboard</span></div> <span class=\"flex shrink-0 items-center gap-2\"><!--[-1--><!--]--> <button type=\"button\" class=\"grid h-7 w-7 place-items-center rounded-full border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800\" aria-label=\"Search\" title=\"Search\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-search lucide-icon h-3.5 w-3.5\" aria-hidden=\"true\"><!--[--><!----><path d=\"m21 21-4.34-4.34\"><!----></path><!----><!----><circle cx=\"11\" cy=\"11\" r=\"8\"><!----></circle><!----><!--]--><!----></svg><!----></button> <button type=\"button\" class=\"grid h-7 w-7 place-items-center rounded-full border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800\" aria-label=\"Help and shortcuts\" title=\"Help and shortcuts\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-question-mark lucide-help-circle lucide-circle-help lucide-icon h-3.5 w-3.5\" aria-hidden=\"true\"><!--[--><!----><circle cx=\"12\" cy=\"12\" r=\"10\"><!----></circle><!----><!----><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3\"><!----></path><!----><!----><path d=\"M12 17h.01\"><!----></path><!----><!--]--><!----></svg><!----></button> <a href=\"/admin/notes\" class=\"rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800\">Dashboard</a></span></header> <!--[-1--><!--]--><!----> <!--[2--><p class=\"rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 px-4 py-10 text-center text-sm text-stone-500 dark:text-stone-400\">Nothing published yet.</p><!--]--> <section class=\"mt-6\"><div class=\"mb-1 flex items-center gap-1\"><button type=\"button\" class=\"flex min-w-0 items-center gap-1 rounded-full pr-2 text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-300\" aria-expanded=\"true\" aria-label=\"Collapse tools\"><span class=\"grid h-6 w-6 shrink-0 place-items-center\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down lucide-icon h-4 w-4 transition-transform duration-200 motion-reduce:transition-none \" aria-hidden=\"true\"><!--[--><!----><path d=\"m6 9 6 6 6-6\"><!----></path><!----><!--]--><!----></svg><!----></span> <!--[-1--><!--]--> <span class=\"text-xs font-medium uppercase tracking-widest\">Tools</span> <!--[-1--><!--]--></button> <!--[-1--><!--]--></div> <!--[0--><div><ul class=\"space-y-2\"><!--[--><li><!--[0--><button type=\"button\" class=\"flex w-full items-start gap-3 rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3 text-left hover:bg-stone-100 dark:border-stone-800/80 dark:bg-stone-900/70 dark:hover:bg-stone-800\"><span class=\"mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200\"><!--[--><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-notebook-pen lucide-icon h-4.5 w-4.5\" aria-hidden=\"true\"><!--[--><!----><path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"><!----></path><!----><!----><path d=\"M2 6h4\"><!----></path><!----><!----><path d=\"M2 10h4\"><!----></path><!----><!----><path d=\"M2 14h4\"><!----></path><!----><!----><path d=\"M2 18h4\"><!----></path><!----><!----><path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"><!----></path><!----><!--]--><!----></svg><!--]--></span> <span class=\"min-w-0 flex-1\"><span class=\"flex items-center gap-2\"><span class=\"text-sm font-medium text-stone-900 dark:text-stone-100\">Quick note</span> <!--[-1--><!--]--> <!--[-1--><!--]--></span> <span class=\"mt-0.5 block text-[12px] text-stone-500 dark:text-stone-400\">Scratchpad, saved on this device.</span></span> <!--[0--><span class=\"shrink-0 self-center\"><span class=\"ml-1.5 hidden sm:inline-flex items-center gap-0.5\" aria-hidden=\"true\"><!--[--><kbd class=\"min-w-4 rounded border px-1 py-px text-center font-mono text-[10px] font-medium leading-4 border-stone-300 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400\">Ctrl</kbd><kbd class=\"min-w-4 rounded border px-1 py-px text-center font-mono text-[10px] font-medium leading-4 border-stone-300 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400\">Shift</kbd><kbd class=\"min-w-4 rounded border px-1 py-px text-center font-mono text-[10px] font-medium leading-4 border-stone-300 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400\">K</kbd><!--]--></span><!----></span><!--]--><!----></button><!--]--></li><li><!--[-1--><a href=\"/tools/time-tracker\" class=\"flex items-start gap-3 rounded-2xl border border-stone-200/80 bg-white/70 px-4 py-3 hover:bg-stone-100 dark:border-stone-800/80 dark:bg-stone-900/70 dark:hover:bg-stone-800\"><span class=\"mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200\"><!--[--><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-timer lucide-icon h-4.5 w-4.5\" aria-hidden=\"true\"><!--[--><!----><line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"><!----></line><!----><!----><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"><!----></line><!----><!----><circle cx=\"12\" cy=\"14\" r=\"8\"><!----></circle><!----><!--]--><!----></svg><!--]--></span> <span class=\"min-w-0 flex-1\"><span class=\"flex items-center gap-2\"><span class=\"text-sm font-medium text-stone-900 dark:text-stone-100\">Time tracker</span> <!--[-1--><!--]--> <!--[-1--><!--]--></span> <span class=\"mt-0.5 block text-[12px] text-stone-500 dark:text-stone-400\">Measure time spent on tasks.</span></span> <!--[-1--><!--]--><!----></a><!--]--></li><!--]--></ul><!----></div><!--]--><!----></section> <!--[-1--><!--]--></div></main><!--]--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[0--><button type=\"button\" class=\"pointer-events-auto fixed right-4 z-20 grid h-12 w-12 place-items-center rounded-full bg-stone-900 text-white shadow-lg shadow-stone-900/20 hover:bg-stone-800 dark:bg-stone-700 dark:hover:bg-stone-600 sm:right-6\" style=\"bottom: 1.5rem;\" aria-label=\"Open mini apps\" aria-haspopup=\"dialog\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layout-grid lucide-icon h-5 w-5\" aria-hidden=\"true\"><!--[--><!----><rect width=\"7\" height=\"7\" x=\"3\" y=\"3\" rx=\"1\"><!----></rect><!----><!----><rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\"><!----></rect><!----><!----><rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\"><!----></rect><!----><!----><rect width=\"7\" height=\"7\" x=\"3\" y=\"14\" rx=\"1\"><!----></rect><!----><!--]--><!----></svg><!----> <!--[-1--><!--]--></button><!----> <!--[-1--><!--]--><!----><!--]--> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----> <!--[-1--><!--]--><!----><!--]--><!--]--> <!--[-1--><!--]--><!--]-->\n\t\t\t\n\t\t\t<script>\n\t\t\t\t{\n\t\t\t\t\t__sveltekit_<nonce> = {\n\t\t\t\t\t\tbase: new URL(\".\", location).pathname.slice(0, -1)\n\t\t\t\t\t};\n\n\t\t\t\t\tconst element = document.currentScript.parentElement;\n\n\t\t\t\t\tPromise.all([\n\t\t\t\t\t\timport(\"./_app/immutable/entry/start.<hashed>.$2\"),\n\t\t\t\t\t\timport(\"./_app/immutable/entry/app.<hashed>.$2\")\n\t\t\t\t\t]).then(([kit, app]) => {\n\t\t\t\t\t\tkit.start(app, element, {\n\t\t\t\t\t\t\tnode_ids: [0, 3],\n\t\t\t\t\t\t\tdata: [null,{type:\"data\",data:{notes:[],hasMore:false,nextCursor:null,tags:[],origin:\"<base>\",publicConfig:{siteTitle:\"fermentario\",description:\"Your sovereign life's dashboard\",notesEnabled:true,showCoverImages:true,updatedAt:0}},uses:{}}],\n\t\t\t\t\t\t\tform: null,\n\t\t\t\t\t\t\terror: null\n\t\t\t\t\t\t});\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t</script>\n\t\t</div>\n\t</body>\n</html>"
 	},
 	"page:/": {
 		"status": 200,
@@ -38,7 +38,7 @@
 			"todo"
 		]
 	},
-	"page:/admin/time-tracker": {
+	"page:/tools/time-tracker": {
 		"status": 200,
 		"bytes": true,
 		"hasNoteText": false,
@@ -147,6 +147,7 @@
 			"notes": [
 				{
 					"id": "11111111-1111-4111-8111-111111111102",
+					"title": "",
 					"content": "Fixed the broken chair in the hallway.",
 					"created_at": 1741089600000,
 					"updated_at": 1741089600000,
@@ -160,6 +161,7 @@
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111101",
+					"title": "",
 					"content": "Went kayaking on the river at dawn.",
 					"created_at": 1741089600000,
 					"updated_at": 1741089600000,
@@ -189,6 +191,7 @@
 			"notes": [
 				{
 					"id": "11111111-1111-4111-8111-111111111103",
+					"title": "",
 					"content": "Long standup about the migration deadline.",
 					"created_at": 1740916800000,
 					"updated_at": 1740916800000,
@@ -204,6 +207,7 @@
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111104",
+					"title": "",
 					"content": "Finally finished the kayak paddle repair.",
 					"created_at": 1740312000000,
 					"updated_at": 1740312000000,
@@ -234,6 +238,7 @@
 			"notes": [
 				{
 					"id": "11111111-1111-4111-8111-111111111101",
+					"title": "",
 					"content": "Went kayaking on the river at dawn.",
 					"created_at": 1741089600000,
 					"updated_at": 1741089600000,
@@ -249,6 +254,7 @@
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111104",
+					"title": "",
 					"content": "Finally finished the kayak paddle repair.",
 					"created_at": 1740312000000,
 					"updated_at": 1740312000000,
@@ -265,6 +271,7 @@
 				},
 				{
 					"id": "11111111-1111-4111-8111-111111111105",
+					"title": "",
 					"content": "Old note from last year about kayaking trips.",
 					"created_at": 1730626200000,
 					"updated_at": 1730626200000,
@@ -362,11 +369,19 @@
 			"ok": true
 		}
 	},
+	"GET /api/quick-note": {
+		"status": 200,
+		"body": {
+			"content": "",
+			"updatedAt": 0
+		}
+	},
 	"POST /api/notes": {
 		"status": 201,
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "",
 				"content": "Smoke test note about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -380,11 +395,53 @@
 			}
 		}
 	},
+	"PUT /api/quick-note": {
+		"status": 200,
+		"body": {
+			"content": "Smoke quick note with **bold** text",
+			"updatedAt": "<runtime>"
+		}
+	},
+	"GET /api/quick-note stored": {
+		"status": 200,
+		"body": {
+			"content": "Smoke quick note with **bold** text",
+			"updatedAt": "<runtime>"
+		}
+	},
+	"PUT /api/quick-note bad": {
+		"status": 400,
+		"body": {
+			"error": "content must be a string"
+		}
+	},
 	"PATCH /api/notes/[id]": {
 		"status": 200,
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "",
+				"content": "Smoke test note, edited, about kayaking",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"published": false,
+				"coverId": null,
+				"tags": [
+					"work"
+				],
+				"commentCount": 0,
+				"linkedNotes": []
+			}
+		}
+	},
+	"PATCH /api/notes/[id] title": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"title": "Smoke note title",
 				"content": "Smoke test note, edited, about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -405,6 +462,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "Smoke note title",
 				"content": "Smoke test note, edited, about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -426,6 +484,7 @@
 			"notes": [
 				{
 					"id": "<runtime>",
+					"title": "Smoke note title",
 					"content": "Smoke test note, edited, about kayaking",
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
@@ -452,6 +511,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "Smoke note title",
 				"content": "Smoke test note, edited, about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -468,7 +528,7 @@
 			"comments": [],
 			"publicConfig": {
 				"siteTitle": "fermentario",
-				"description": "Published notes.",
+				"description": "Your sovereign life's dashboard",
 				"notesEnabled": true,
 				"showCoverImages": true,
 				"updatedAt": 0
@@ -538,7 +598,7 @@
 		"body": {
 			"publicConfig": {
 				"siteTitle": "fermentario",
-				"description": "Published notes.",
+				"description": "Your sovereign life's dashboard",
 				"notesEnabled": true,
 				"showCoverImages": true,
 				"updatedAt": "<runtime>"
@@ -562,6 +622,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "Smoke note title",
 				"content": "Smoke test note, edited, about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -608,6 +669,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "Smoke note title",
 				"content": "Smoke test note, edited, about kayaking",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -672,6 +734,7 @@
 		"body": {
 			"note": {
 				"id": "11111111-1111-4111-8111-111111111102",
+				"title": "",
 				"content": "Fixed the broken chair in the hallway.",
 				"created_at": 1741089600000,
 				"updated_at": 1741089600000,
@@ -736,6 +799,7 @@
 				"commentCount": 0,
 				"subgroup": "",
 				"video": "dQw4w9WgXcQ",
+				"photoId": null,
 				"tags": [
 					"trip"
 				]
@@ -758,6 +822,7 @@
 				"commentCount": 0,
 				"subgroup": "",
 				"video": "9bZkp7q19f0",
+				"photoId": null,
 				"tags": [
 					"trip"
 				]
@@ -1233,6 +1298,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "",
 				"content": "Link target note about kayaking trips",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -1249,6 +1315,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "",
 				"content": "<runtime>",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -1265,6 +1332,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "",
 				"content": "<runtime>",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
@@ -1308,6 +1376,7 @@
 			"mentionedIn": [
 				{
 					"id": "<runtime>",
+					"title": "",
 					"content": "<runtime>",
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
@@ -3428,8 +3497,10 @@
 					"name": "B3",
 					"enabled": true,
 					"feeRate": 0.0003,
+					"spreadRate": 0,
 					"irrfRate": 0.00005,
 					"fixedFee": 0,
+					"feeNote": "",
 					"exemptLimit": 20000,
 					"position": 0,
 					"created_at": "<runtime>"
@@ -3439,8 +3510,10 @@
 					"name": "Ripio",
 					"enabled": false,
 					"feeRate": 0,
+					"spreadRate": 0,
 					"irrfRate": 0,
 					"fixedFee": 0,
+					"feeNote": "",
 					"exemptLimit": 0,
 					"position": 1,
 					"created_at": "<runtime>"
@@ -3456,8 +3529,10 @@
 				"name": "B3",
 				"enabled": true,
 				"feeRate": 0.0003,
+				"spreadRate": 0,
 				"irrfRate": 0.00005,
 				"fixedFee": 0,
+				"feeNote": "",
 				"exemptLimit": 20000,
 				"position": 0,
 				"created_at": "<runtime>"
@@ -3478,8 +3553,10 @@
 				"name": "Ripio",
 				"enabled": true,
 				"feeRate": 0,
+				"spreadRate": 0,
 				"irrfRate": 0,
 				"fixedFee": 0,
+				"feeNote": "",
 				"exemptLimit": 0,
 				"position": 1,
 				"created_at": "<runtime>"
@@ -3500,6 +3577,10 @@
 				"fees": 0,
 				"irrf": 0,
 				"net": 640,
+				"feeRate": 0,
+				"spreadRate": 0,
+				"irrfRate": 0,
+				"fixedFee": 0,
 				"date": 1794495600000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
@@ -3515,8 +3596,10 @@
 					"name": "Ripio",
 					"enabled": true,
 					"feeRate": 0,
+					"spreadRate": 0,
 					"irrfRate": 0,
 					"fixedFee": 0,
+					"feeNote": "",
 					"exemptLimit": 0,
 					"position": 1,
 					"created_at": "<runtime>"
@@ -3533,11 +3616,18 @@
 						"fees": 0,
 						"irrf": 0,
 						"net": 640,
+						"feeRate": 0,
+						"spreadRate": 0,
+						"irrfRate": 0,
+						"fixedFee": 0,
 						"date": 1794495600000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": null,
-						"profitPct": null
+						"profitPct": null,
+						"targetPct": 0.03,
+						"goalPrice": 65920,
+						"netAtGoal": 659.2
 					}
 				],
 				"positions": [
@@ -3558,6 +3648,12 @@
 						"targetPrice": 65920,
 						"netValue": null,
 						"sellFees": null,
+						"goalFees": {
+							"feeRatePct": 0,
+							"spreadRatePct": 0,
+							"irrfRatePct": 0,
+							"fixedFee": 0
+						},
 						"recommendation": "waiting"
 					}
 				],
@@ -3590,8 +3686,10 @@
 					"name": "Ripio",
 					"enabled": true,
 					"feeRate": 0,
+					"spreadRate": 0,
 					"irrfRate": 0,
 					"fixedFee": 0,
+					"feeNote": "",
 					"exemptLimit": 0,
 					"position": 1,
 					"created_at": "<runtime>"
@@ -3610,8 +3708,10 @@
 				"name": "Ripio",
 				"enabled": false,
 				"feeRate": 0,
+				"spreadRate": 0,
 				"irrfRate": 0,
 				"fixedFee": 0,
+				"feeNote": "",
 				"exemptLimit": 0,
 				"position": 1,
 				"created_at": "<runtime>"
@@ -3632,6 +3732,10 @@
 				"fees": 0.0231,
 				"irrf": 0,
 				"net": 77.0231,
+				"feeRate": 0.0003,
+				"spreadRate": 0,
+				"irrfRate": 0.00005,
+				"fixedFee": 0,
 				"date": 1793718000000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
@@ -3658,6 +3762,10 @@
 				"fees": 0.023999999999999997,
 				"irrf": 0.004,
 				"net": 79.972,
+				"feeRate": 0.0003,
+				"spreadRate": 0,
+				"irrfRate": 0.00005,
+				"fixedFee": 0,
 				"date": 1794495600000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
@@ -3673,8 +3781,10 @@
 					"name": "B3",
 					"enabled": true,
 					"feeRate": 0.0003,
+					"spreadRate": 0,
 					"irrfRate": 0.00005,
 					"fixedFee": 0,
+					"feeNote": "",
 					"exemptLimit": 20000,
 					"position": 0,
 					"created_at": "<runtime>"
@@ -3691,11 +3801,18 @@
 						"fees": 0.0231,
 						"irrf": 0,
 						"net": 77.0231,
+						"feeRate": 0.0003,
+						"spreadRate": 0,
+						"irrfRate": 0.00005,
+						"fixedFee": 0,
 						"date": 1793718000000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": null,
-						"profitPct": null
+						"profitPct": null,
+						"targetPct": 0.03,
+						"goalPrice": 39.68078477467113,
+						"netAtGoal": 79.333793
 					},
 					{
 						"id": "<runtime>",
@@ -3708,11 +3825,18 @@
 						"fees": 0.023999999999999997,
 						"irrf": 0.004,
 						"net": 79.972,
+						"feeRate": 0.0003,
+						"spreadRate": 0,
+						"irrfRate": 0.00005,
+						"fixedFee": 0,
 						"date": 1794495600000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": 2.9488999999999947,
-						"profitPct": 3.8285916822355825
+						"profitPct": 3.8285916822355825,
+						"targetPct": 0.03,
+						"goalPrice": null,
+						"netAtGoal": null
 					}
 				],
 				"positions": [],
@@ -3756,6 +3880,10 @@
 				"fees": 0.0231,
 				"irrf": 0,
 				"net": 77.0231,
+				"feeRate": 0.0003,
+				"spreadRate": 0,
+				"irrfRate": 0.00005,
+				"fixedFee": 0,
 				"date": 1793718000000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
@@ -3776,6 +3904,10 @@
 				"fees": 0.023999999999999997,
 				"irrf": 0.004,
 				"net": 79.972,
+				"feeRate": 0.0003,
+				"spreadRate": 0,
+				"irrfRate": 0.00005,
+				"fixedFee": 0,
 				"date": 1794495600000,
 				"month": "11/2026",
 				"created_at": "<runtime>"
@@ -3796,6 +3928,10 @@
 				"fees": 0.018,
 				"irrf": 0,
 				"net": 60.018,
+				"feeRate": 0.0003,
+				"spreadRate": 0,
+				"irrfRate": 0.00005,
+				"fixedFee": 0,
 				"date": "<runtime>",
 				"month": "11/2026",
 				"created_at": "<runtime>"
@@ -3811,8 +3947,10 @@
 					"name": "B3",
 					"enabled": true,
 					"feeRate": 0.0003,
+					"spreadRate": 0,
 					"irrfRate": 0.00005,
 					"fixedFee": 0,
+					"feeNote": "",
 					"exemptLimit": 20000,
 					"position": 0,
 					"created_at": "<runtime>"
@@ -3829,11 +3967,18 @@
 						"fees": 0.0231,
 						"irrf": 0,
 						"net": 77.0231,
+						"feeRate": 0.0003,
+						"spreadRate": 0,
+						"irrfRate": 0.00005,
+						"fixedFee": 0,
 						"date": 1793718000000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": null,
-						"profitPct": null
+						"profitPct": null,
+						"targetPct": 0.03,
+						"goalPrice": 39.68078477467113,
+						"netAtGoal": 79.333793
 					},
 					{
 						"id": "<runtime>",
@@ -3846,11 +3991,18 @@
 						"fees": 0.023999999999999997,
 						"irrf": 0.004,
 						"net": 79.972,
+						"feeRate": 0.0003,
+						"spreadRate": 0,
+						"irrfRate": 0.00005,
+						"fixedFee": 0,
 						"date": 1794495600000,
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": 2.9488999999999947,
-						"profitPct": 3.8285916822355825
+						"profitPct": 3.8285916822355825,
+						"targetPct": 0.03,
+						"goalPrice": null,
+						"netAtGoal": null
 					},
 					{
 						"id": "<runtime>",
@@ -3863,11 +4015,18 @@
 						"fees": 0.018,
 						"irrf": 0,
 						"net": 60.018,
+						"feeRate": 0.0003,
+						"spreadRate": 0,
+						"irrfRate": 0.00005,
+						"fixedFee": 0,
 						"date": "<runtime>",
 						"month": "11/2026",
 						"created_at": "<runtime>",
 						"profit": null,
-						"profitPct": null
+						"profitPct": null,
+						"targetPct": 0.03,
+						"goalPrice": 61.84018406442255,
+						"netAtGoal": 61.818540000000006
 					}
 				],
 				"positions": [
@@ -3888,6 +4047,12 @@
 						"targetPrice": 61.84018406442255,
 						"netValue": null,
 						"sellFees": null,
+						"goalFees": {
+							"feeRatePct": 0.03,
+							"spreadRatePct": 0,
+							"irrfRatePct": 0.005,
+							"fixedFee": 0
+						},
 						"recommendation": "waiting"
 					}
 				],
@@ -3914,7 +4079,26 @@
 	"GET /api/trading/strip": {
 		"status": 200,
 		"body": {
-			"positions": []
+			"positions": [],
+			"totals": {
+				"count": 0,
+				"missingQuotes": 0,
+				"invested": {
+					"USD": 0,
+					"BRL": null,
+					"UYU": null
+				},
+				"now": {
+					"USD": 0,
+					"BRL": null,
+					"UYU": null
+				},
+				"atGoal": {
+					"USD": 0,
+					"BRL": null,
+					"UYU": null
+				}
+			}
 		}
 	},
 	"GET /api/trading/quotes/history empty": {
@@ -4017,6 +4201,7 @@
 		"body": {
 			"note": {
 				"id": "11111111-1111-4111-8111-111111111102",
+				"title": "",
 				"content": "Fixed the broken chair in the hallway.",
 				"created_at": 1741089600000,
 				"updated_at": 1741089600000,
@@ -4074,6 +4259,7 @@
 					"commentCount": 1,
 					"subgroup": "",
 					"video": "9bZkp7q19f0",
+					"photoId": null,
 					"tags": [
 						"trip"
 					]
@@ -4477,6 +4663,7 @@
 		"body": {
 			"note": {
 				"id": "<runtime>",
+				"title": "",
 				"content": "<runtime>",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",

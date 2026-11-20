@@ -165,8 +165,9 @@ try {
 		? registry.prepare('SELECT * FROM journals WHERE id = ?').get(activeId)
 		: null;
 	registry.close();
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 34) {
-		console.error('The legacy import did not register an active v34 journal: ' + JSON.stringify(journal));
+	// Keep in step with LATEST_SCHEMA_VERSION in src/lib/platform/migrations.ts.
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 42) {
+		console.error('The legacy import did not register an active v42 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -250,7 +251,7 @@ must(
 );
 await page('page:/admin/notes', '/admin/notes');
 await page('page:/admin/todo', '/admin/todo');
-await page('page:/admin/time-tracker', '/admin/time-tracker');
+await page('page:/tools/time-tracker', '/tools/time-tracker');
 await page('page:/admin/stocks', '/admin/stocks');
 const bizRedirect = await api('GET /businesses redirect', '/businesses', { redirect: 'manual' });
 must(
@@ -305,6 +306,7 @@ await api('GET /api/asks', '/api/asks');
 await api('GET /api/summary', '/api/summary');
 await api('POST /api/chat empty', '/api/chat', json({ question: '' }));
 await api('POST /api/status setModel', '/api/status', json({ kind: 'chatModel', id: 'nope' }));
+await api('GET /api/quick-note', '/api/quick-note');
 
 // --- Write routes ----------------------------------------------------------
 const created = await api(
@@ -318,6 +320,30 @@ volatile.add(id);
 volatile.add(created.body.note.created_at);
 volatile.add(created.body.note.updated_at);
 
+// The quick note is one row and has no identity of its own: read, write,
+// read back, and reject a body that is not text.
+const quickNoteWrite = await api(
+	'PUT /api/quick-note',
+	'/api/quick-note',
+	json({ content: 'Smoke quick note with **bold** text' }, 'PUT')
+);
+must(
+	'PUT /api/quick-note',
+	quickNoteWrite,
+	(r) => r.status === 200 && r.body.content === 'Smoke quick note with **bold** text',
+	'200 with the stored text'
+);
+volatile.add(quickNoteWrite.body.updatedAt);
+const quickNoteRead = await api('GET /api/quick-note stored', '/api/quick-note');
+must(
+	'GET /api/quick-note stored',
+	quickNoteRead,
+	(r) => r.status === 200 && r.body.content === 'Smoke quick note with **bold** text',
+	'200 with the text that was just written'
+);
+const quickNoteBad = await api('PUT /api/quick-note bad', '/api/quick-note', json({ content: 7 }, 'PUT'));
+must('PUT /api/quick-note bad', quickNoteBad, (r) => r.status === 400, '400 for a non-string body');
+
 const edited = await api(
 	'PATCH /api/notes/[id]',
 	`/api/notes/${id}`,
@@ -325,6 +351,23 @@ const edited = await api(
 );
 must('PATCH /api/notes/[id]', edited, (r) => r.status === 200 && !!r.body.note, '200 with a note');
 volatile.add(edited.body.note.updated_at);
+
+// A title-only PATCH must not demand content or touch the note text.
+const titled = await api(
+	'PATCH /api/notes/[id] title',
+	`/api/notes/${id}`,
+	json({ title: 'Smoke note title' }, 'PATCH')
+);
+must(
+	'PATCH /api/notes/[id] title',
+	titled,
+	(r) =>
+		r.status === 200 &&
+		r.body.note?.title === 'Smoke note title' &&
+		r.body.note?.content === 'Smoke test note, edited, about kayaking',
+	'200 with the title and the unchanged content'
+);
+volatile.add(titled.body.note.updated_at);
 
 const published = await api(
 	'PATCH /api/notes/[id] published',
@@ -392,7 +435,7 @@ const publicConfigReset = await api(
 	'PATCH /api/config/public reset',
 	'/api/config/public',
 	json(
-		{ siteTitle: 'fermentario', description: 'Published notes.', notesEnabled: true, showCoverImages: true },
+		{ siteTitle: 'fermentario', description: "Your sovereign life's dashboard", notesEnabled: true, showCoverImages: true },
 		'PATCH'
 	)
 );
@@ -431,8 +474,10 @@ await api('GET /api/notes/[id] cover', `/api/notes/${id}`);
 // Server-rendered public pages carry the published text as HTML.
 const homeHtml = await (await fetch(`${base}/`)).text();
 must('GET / SSR feed', { body: homeHtml }, (r) => r.body.includes('kayaking'), 'homepage HTML contains the published note');
+must('GET / SSR title', { body: homeHtml }, (r) => r.body.includes('Smoke note title'), 'homepage shows the note title');
 const noteHtml = await (await fetch(`${base}/notes/${id}`)).text();
 must('GET /notes/[id] SSR', { body: noteHtml }, (r) => r.body.includes('kayaking'), 'note HTML contains its content');
+must('GET /notes/[id] SSR title', { body: noteHtml }, (r) => r.body.includes('Smoke note title'), 'note HTML contains its title');
 
 await api('DELETE /api/notes/[id]/tags/[tag]', `/api/notes/${id}/tags/work`);
 await api('DELETE /api/notes/[id]/tags/[missing]', `/api/notes/${id}/tags/nosuch`);

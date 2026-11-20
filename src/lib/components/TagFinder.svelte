@@ -4,16 +4,20 @@
 	// Self-contained `#tag` finder. Mount it inside a `relative` wrapper next
 	// to the textarea and pass the field element. It reads the field directly
 	// and writes picks back through a dispatched `input`, so the parent's
-	// controlled `value`/`oninput` flow is untouched. Only tokens in the
-	// trailing hashtag run open the menu, because only those become tags.
+	// controlled `value`/`oninput` flow is untouched. Any `#` after whitespace
+	// or at the start of the text opens the menu, because the save path stores
+	// tags anywhere.
 	//
 	// Keyboard: no row is selected when the menu opens, so plain Enter keeps
 	// the parent behavior (save in the bar, newline in editors). Arrows or a
 	// tap opt into selection; Escape closes.
 	type Props = {
 		textarea: HTMLTextAreaElement | null;
+		/** The menu floats above the field by default. A modal whose panel
+		 *  clips floating content renders it in flow below the field. */
+		inline?: boolean;
 	};
-	let { textarea }: Props = $props();
+	let { textarea, inline = false }: Props = $props();
 
 	let open = $state(false);
 	let query = $state('');
@@ -138,7 +142,7 @@
 
 {#if open}
 	<div
-		class="absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl"
+		class="z-30 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl {inline ? 'mt-2' : 'absolute right-0 bottom-full left-0 mb-2'}"
 		role="listbox"
 		aria-label="Tag suggestions"
 	>

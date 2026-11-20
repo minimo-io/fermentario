@@ -19,27 +19,47 @@ function ensureCtx(): AudioContext | null {
 	}
 }
 
-export function playPing(): void {
+function beeps(notes: [number, number][], length: number, peak: number): void {
 	const ac = ensureCtx();
 	if (!ac || ac.state !== 'running') return;
 	const t = ac.currentTime;
-	const beeps: [number, number][] = [
-		[880, 0],
-		[1320, 0.18]
-	];
-	for (const [freq, at] of beeps) {
+	for (const [freq, at] of notes) {
 		const osc = ac.createOscillator();
 		const gain = ac.createGain();
 		osc.type = 'sine';
 		osc.frequency.value = freq;
 		gain.gain.setValueAtTime(0.0001, t + at);
-		gain.gain.exponentialRampToValueAtTime(0.2, t + at + 0.02);
-		gain.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.16);
+		gain.gain.exponentialRampToValueAtTime(peak, t + at + 0.02);
+		gain.gain.exponentialRampToValueAtTime(0.0001, t + at + length);
 		osc.connect(gain);
 		gain.connect(ac.destination);
 		osc.start(t + at);
-		osc.stop(t + at + 0.18);
+		osc.stop(t + at + length + 0.02);
 	}
+}
+
+export function playPing(): void {
+	beeps(
+		[
+			[880, 0],
+			[1320, 0.18]
+		],
+		0.16,
+		0.2
+	);
+}
+
+/** Time-tracker interval alert — three rising notes, longer than the toast ping. */
+export function playChime(): void {
+	beeps(
+		[
+			[660, 0],
+			[880, 0.24],
+			[1100, 0.48]
+		],
+		0.22,
+		0.18
+	);
 }
 
 // Unlock on the first gesture so later background alerts can sound.

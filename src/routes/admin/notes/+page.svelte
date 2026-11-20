@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Weekly from '$lib/components/Weekly.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
-	import Copy from '@lucide/svelte/icons/copy';
+	import Check from '@lucide/svelte/icons/check';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
 	import Star from '@lucide/svelte/icons/star';
 	import { getContext } from 'svelte';
@@ -46,13 +46,21 @@
 
 <section>
 	<div class="mb-2 flex items-center justify-between gap-2 px-1">
-		<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{n.notes.length} notes loaded</span>
-		<button
-			type="button"
-			class="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-1 text-[11px] font-medium text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40"
-			disabled={n.notes.length === 0}
-			onclick={n.onCopyLoaded}
-		><Copy class="h-3.5 w-3.5" /> {n.copied ? 'Copied' : 'Copy all'}</button>
+		<span class="flex items-center gap-2">
+			<span class="text-[11px] tabular-nums text-stone-400 dark:text-stone-500">{n.notes.length} notes loaded</span>
+			<button
+				type="button"
+				class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors {n.publishedOnly
+					? 'border-emerald-600 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400'
+					: 'border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-stone-900 dark:text-emerald-300 dark:hover:bg-emerald-950/40'}"
+				aria-pressed={n.publishedOnly}
+				title={n.publishedOnly ? 'Showing published notes only — click to show all' : 'Show published notes only'}
+				onclick={n.onTogglePublished}
+			>
+				{#if n.publishedOnly}<Check class="h-3 w-3" />{/if}
+				Published
+			</button>
+		</span>
 	</div>
 	<Timeline
 		notes={n.notes}

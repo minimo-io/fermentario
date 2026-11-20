@@ -10,10 +10,12 @@
 	type Props = {
 		holdingsRail: Snippet;
 		tradingRail: Snippet;
+		/** Totals line for the shut Trading section. */
+		tradingSummary?: Snippet;
 		refreshing: boolean;
 		onRefresh: () => void;
 	};
-	let { holdingsRail, tradingRail, refreshing, onRefresh }: Props = $props();
+	let { holdingsRail, tradingRail, tradingSummary, refreshing, onRefresh }: Props = $props();
 
 	let debugOpen = $state(false);
 </script>
@@ -43,7 +45,7 @@
 		</CollapsibleSection>
 	</div>
 	<div class="mt-2 rounded-2xl border border-stone-200/70 dark:border-stone-800/70 bg-white/40 dark:bg-stone-900/40 p-2">
-		<CollapsibleSection label="Trading" storageKey="ferm:trading-collapsed">
+		<CollapsibleSection label="Trading" storageKey="ferm:trading-collapsed" summary={tradingSummary}>
 			{@render tradingRail()}
 		</CollapsibleSection>
 	</div>

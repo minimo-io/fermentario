@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { listPrinciples, createPrinciple, setPrincipleOrder, setPrincipleTags, setPrincipleVideo, listPrinciplesByTag } from '$lib/server/db';
-import { splitTrailingHashtags } from '$lib/hashtags';
+import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
 export async function GET({ url }) {
@@ -11,8 +11,8 @@ export async function GET({ url }) {
 
 export async function POST({ request }) {
 	const body = await request.json();
-	// Same tag system as notes: trailing hashtags become the principle's tags.
-	const { content, tags } = splitTrailingHashtags(String(body?.content ?? ''));
+	// Same tag system as notes: hashtags anywhere become the principle's tags.
+	const { content, tags } = splitHashtags(String(body?.content ?? ''));
 	if (!content.trim()) return json({ error: 'empty principle' }, { status: 400 });
 	// Validate the video before creating anything: a bad URL must not leave a
 	// principle behind while the client sees an error.

@@ -2,7 +2,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
-	import { splitTrailingHashtags, withTrailingHashtags } from '$lib/hashtags';
+	import { splitHashtags, withTrailingHashtags } from '$lib/hashtags';
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { youTubeWatchUrl } from '$lib/youtube';
@@ -15,15 +15,17 @@
 
 	type Props = {
 		note: Note;
+		title: string;
 		content: string;
 		video: string;
 		coverId: string | null;
+		onTitle: (value: string) => void;
 		onContent: (value: string) => void;
 		onVideo: (value: string) => void;
-		onSave: (content: string, video: string, createdAt: number, cover: string | null | undefined) => Promise<void>;
+		onSave: (content: string, video: string, createdAt: number, cover: string | null | undefined, title: string) => Promise<void>;
 		onCancel: () => void;
 	};
-	let { note, content, video, coverId, onContent, onVideo, onSave, onCancel }: Props = $props();
+	let { note, title, content, video, coverId, onTitle, onContent, onVideo, onSave, onCancel }: Props = $props();
 
 	let saving = $state(false);
 	let err = $state('');
@@ -41,8 +43,8 @@
 	const maxNoteDate = datetimeLocalValue(Date.now());
 
 	const originalDate = $derived(datetimeLocalValue(note.created_at));
-	const unchanged = $derived(content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : '') && noteDate === originalDate && coverData === undefined);
-	const empty = $derived(splitTrailingHashtags(content).content.trim().length === 0);
+	const unchanged = $derived(title.trim() === (note.title ?? '').trim() && content.trim() === withTrailingHashtags(note.content, note.tags).trim() && video.trim() === (note.video ? youTubeWatchUrl(note.video) : '') && noteDate === originalDate && coverData === undefined);
+	const empty = $derived(splitHashtags(content).content.trim().length === 0);
 
 	async function pickCover(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
@@ -70,7 +72,7 @@
 			const at = noteDate === originalDate
 				? note.created_at
 				: Math.min(datetimeLocalTimestamp(noteDate) ?? Date.now(), Date.now());
-			await onSave(content.trim(), video.trim(), at, coverData);
+			await onSave(content.trim(), video.trim(), at, coverData, title.trim());
 		} catch (e) {
 			err = (e as Error)?.message ?? 'Could not save the note.';
 		} finally {
@@ -87,6 +89,13 @@
 	tabindex="-1"
 	onclick={(e) => { if (e.target === e.currentTarget && !saving) onCancel(); }}
 	onkeydown={(e) => {
+		if (e.isComposing) return;
+		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+			if (e.defaultPrevented) return;
+			e.preventDefault();
+			void save();
+			return;
+		}
 		if (e.key !== 'Escape' || saving) return;
 		if (full) full = false;
 		else onCancel();
@@ -119,6 +128,14 @@
 					>&times;</button>
 				</div>
 			</div>
+			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-title">Title (optional)</label>
+			<input
+				id="edit-note-title"
+				class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
+				value={title}
+				oninput={(e) => onTitle(e.currentTarget.value)}
+				maxlength={120}
+			/>
 			<div class={full ? 'relative flex min-h-0 flex-1 flex-col' : 'relative'}>
 				<textarea
 					bind:this={editField}

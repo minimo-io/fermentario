@@ -15,8 +15,8 @@
 	};
 	let { item, groups, onSaved, onClose, onError }: Props = $props();
 
-	// The modal edits the full line: subgroup prefix and trailing hashtags
-	// included, so saving never silently drops either.
+	// The modal edits the full line: subgroup prefix and hashtags included,
+	// so saving never silently drops either.
 	// svelte-ignore state_referenced_locally
 	const base = withSubgroupPrefix(item.subgroup, item.content);
 	// svelte-ignore state_referenced_locally
@@ -88,7 +88,7 @@
 			oninput={(e) => { text = e.currentTarget.value; autosize(); }}
 			onkeydown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void save(); }}
 		></textarea>
-		<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Leading (subgroup) moves it inside the list; trailing #tags retag it.</p>
+		<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">Leading (subgroup) moves it inside the list; #tags retag it.</p>
 		<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-task-video">YouTube URL (optional)</label>
 		<input
 			id="edit-task-video"

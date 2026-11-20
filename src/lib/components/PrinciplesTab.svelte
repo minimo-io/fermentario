@@ -583,7 +583,7 @@
 					bind:this={draftField}
 					rows="3"
 					class="mt-3 max-h-[50dvh] min-h-24 w-full resize-none rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-					placeholder="State the principle… (trailing #tags work too)"
+					placeholder="State the principle… (#tags work anywhere)"
 					aria-label="Principle text"
 					value={draft}
 					oninput={(e) => (draft = e.currentTarget.value)}
@@ -591,7 +591,7 @@
 				></textarea>
 				<NoteFinder textarea={draftField} />
 			</div>
-			<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">A leading (group) files it under that group; trailing #tags retag it.</p>
+			<p class="mt-1.5 text-[11px] leading-snug text-stone-400 dark:text-stone-500">A leading (group) files it under that group; #tags retag it.</p>
 			<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="draft-video">YouTube URL (optional)</label>
 			<input
 				id="draft-video"

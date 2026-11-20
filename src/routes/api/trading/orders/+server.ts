@@ -23,7 +23,8 @@ export async function POST({ request }) {
 		side: row?.side,
 		qty: row?.qty,
 		unitPrice: row?.unitPrice,
-		date: row?.date
+		date: row?.date,
+		targetPct: row?.targetPct
 	});
 	if ('error' in saved) return json({ error: saved.error }, { status: 400 });
 	return json({ order: saved }, { status: 201 });
