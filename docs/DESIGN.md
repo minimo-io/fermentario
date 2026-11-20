@@ -13,7 +13,9 @@ sizing. Consult this before changing any of them.
   month, both toggleable. `/notes/[id]` is the public note view (drafts
   `404`); the private note editor lives at `/admin/notes/[id]`. Public
   presentation lives in DB `public_config` and is fetched by the server for
-  public routes; it is separate from browser-only admin preferences.
+  public routes. Private admin presentation (the reminder) lives in DB
+  `admin_config`; theme, entries language, column width and the summary
+  prompt stay browser-only preferences.
   `GET /api/public/config` is safe for anonymous visitors, while
   `PATCH /api/config/public` belongs to the admin API namespace.
   The URL is
@@ -37,6 +39,15 @@ sizing. Consult this before changing any of them.
   to `/`, and the slogan sits next to it from `md` up. A new public or tool
   page must render it inside its own container; the admin shell keeps its own
   header.
+- **Reminder** (every admin view, between the header and Market): one optional
+  message from Settings → General, stored in the journal
+  (`admin_config.motto`, max 500 characters, line breaks kept). Warm amber
+  card with a centered quote icon and `text-lg`/`sm:text-xl` text. Type `[[`
+  to pick a note or principle; the `[[id]]` token renders as the shared link
+  pill, with the label resolved live. It renders only when the text is not
+  empty and carries no dismiss or collapse control, because the point is to
+  keep it visible. It never appears on the public pages or in the bare EPUB
+  reader.
 - **Market rail scope**: holdings and trading sit under the header on the
   section views only (`/admin/notes`, `/admin/todo`, `/admin/library`,
   `/admin/principles`, `/admin/influences`, `/admin/stocks`,

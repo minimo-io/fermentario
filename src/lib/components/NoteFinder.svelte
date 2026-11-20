@@ -14,8 +14,11 @@
 	type Props = {
 		textarea: HTMLTextAreaElement | null;
 		excludeId?: string;
+		/** The composer sits at the bottom, so its list opens upward. Panels
+		 *  near the top of a dialog need it below the field instead. */
+		placement?: 'above' | 'below';
 	};
-	let { textarea, excludeId }: Props = $props();
+	let { textarea, excludeId, placement = 'above' }: Props = $props();
 
 	let open = $state(false);
 	let query = $state('');
@@ -151,7 +154,7 @@
 
 {#if open}
 	<div
-		class="absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl"
+		class="absolute right-0 left-0 z-30 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl {placement === 'below' ? 'top-full mt-2' : 'bottom-full mb-2'}"
 		role="listbox"
 		aria-label="Link a note"
 	>

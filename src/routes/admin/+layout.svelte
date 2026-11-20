@@ -29,9 +29,11 @@
 	import House from '@lucide/svelte/icons/house';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
+	import Quote from '@lucide/svelte/icons/quote';
 	import Search from '@lucide/svelte/icons/search';
 	import Tags from '@lucide/svelte/icons/tags';
 	import { search } from '$lib/search.svelte';
+	import { renderPlainLinks } from '$lib/note-links';
 	import SectionBar from '$lib/components/SectionBar.svelte';
 	import HoldingsCarousel from '$lib/components/HoldingsCarousel.svelte';
 	import MarketCard from '$lib/components/MarketCard.svelte';
@@ -39,7 +41,7 @@
 	import { tradingStrip } from '$lib/trading-strip.svelte';
 	import { fmtCurrency } from '$lib/currency';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import type { Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
+	import type { AdminConfig, Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
 	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
@@ -78,6 +80,17 @@ function saveConfig(p: Partial<LangConfig>) {
 	if (p.theme !== undefined) applyTheme(p.theme);
 	if (typeof localStorage !== 'undefined') localStorage.setItem('fermentario.config', JSON.stringify(config));
 }
+async function saveMotto(value: string): Promise<void> {
+	const res = await fetch('/api/config/admin', {
+		method: 'PATCH',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ motto: value })
+	});
+	const d = (await res.json().catch(() => null)) as { error?: string; adminConfig?: AdminConfig } | null;
+	if (!res.ok) throw new Error(d?.error ?? 'Failed to save the reminder.');
+	if (!d?.adminConfig) throw new Error('Failed to save the reminder.');
+	adminConfig = d.adminConfig;
+}
 function langTag(p: Lang): string {
 	return p === 'es' ? 'es-ES' : p === 'pt' ? 'pt-PT' : 'en-US';
 }
@@ -111,8 +124,11 @@ function langTag(p: Lang): string {
 		}
 	}
 	let featured = $state<Note[]>([]);
-	type Props = { children: Snippet };
-	let { children }: Props = $props();
+	type Props = { data: { adminConfig: AdminConfig }; children: Snippet };
+	let { data, children }: Props = $props();
+	// The reminder is journal data loaded by +layout.server.ts.
+	// svelte-ignore state_referenced_locally
+	let adminConfig = $state<AdminConfig>(data.adminConfig);
 
 	/** The EPUB reader owns the whole viewport: no shell, no composer, no
 	 *  header. The route stays under /admin; only the chrome opts out. */
@@ -1078,6 +1094,15 @@ function langTag(p: Lang): string {
 			</div>
 		</header>
 
+		{#if adminConfig.motto}
+			<section
+				class="mb-4 rounded-2xl border border-amber-200/70 bg-amber-50/70 px-4 py-5 dark:border-amber-900/60 dark:bg-amber-950/30"
+				aria-label="Reminder"
+			>
+				<p class="whitespace-pre-line break-words text-center text-lg font-medium leading-snug text-amber-950 dark:text-amber-100 sm:text-xl"><Quote class="mr-1.5 inline-block h-4 w-4 -translate-y-px text-amber-500" aria-hidden="true" />{@html renderPlainLinks(adminConfig.motto, adminConfig.links)}</p>
+			</section>
+		{/if}
+
 		{#if showMarket}
 		<section class="mb-4" aria-label="Market">
 			<MarketCard refreshing={marketRefreshing} onRefresh={() => void refreshMarket()}>
@@ -1179,6 +1204,8 @@ function langTag(p: Lang): string {
 			<SettingsModal
 				modelLang={config.modelLang}
 				entriesLang={config.entriesLang}
+				motto={adminConfig.motto}
+				onSaveMotto={saveMotto}
 				contentWidth={sanitizeContentWidth(config.contentWidth)}
 				sections={orderedSections}
 				theme={config.theme}

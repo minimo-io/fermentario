@@ -3,6 +3,7 @@ import type { TagCount } from '../tag-cloud.ts';
 import type { SqlDb, SqlValue } from './sqlite';
 import { splitHashtags } from '../hashtags.ts';
 import { SLOGAN } from '../brand.ts';
+import { sanitizeMotto } from '../motto.ts';
 
 /**
  * Every query the app makes, written once against the `SqlDb` interface.
@@ -181,6 +182,18 @@ export const PUBLIC_CONFIG_DEFAULT: PublicConfig = {
 	showCoverImages: true,
 	updatedAt: 0
 };
+
+/** Private admin presentation settings. The reminder is journal data, not a
+ *  browser preference: every device that opens the journal shows it.
+ *  `[[id]]` targets inside the motto resolve to `links` on read; the labels
+ *  are never stored, so an edit to the target never leaves a stale pill. */
+export interface AdminConfig {
+	motto: string;
+	updatedAt: number;
+	links: LinkRef[];
+}
+
+export const ADMIN_CONFIG_DEFAULT: AdminConfig = { motto: '', updatedAt: 0, links: [] };
 
 /** One Library entry: EPUB metadata plus the last reading position. The
  *  bytes never ride along — `getBookBytes` is the only reader. */
@@ -1079,6 +1092,44 @@ export function createJournal(db: SqlDb) {
 			next.updatedAt
 		);
 		return getPublicConfig();
+	}
+
+	function sanitizeAdminConfig(value: unknown): AdminConfig {
+		const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+		const updated = Number(input.updatedAt ?? input.updated_at);
+		return {
+			motto: sanitizeMotto(input.motto),
+			updatedAt: Number.isFinite(updated) ? Math.max(0, Math.trunc(updated)) : 0,
+			links: []
+		};
+	}
+
+	function getAdminConfig(): AdminConfig {
+		let config = ADMIN_CONFIG_DEFAULT;
+		try {
+			const row = db
+				.prepare('SELECT motto, updated_at FROM admin_config WHERE id = 1')
+				.get() as unknown as { motto: string; updated_at: number } | undefined;
+			if (row) config = sanitizeAdminConfig({ motto: row.motto, updatedAt: row.updated_at });
+		} catch {
+			// Migration 43 creates the row. Older databases fall back safely.
+			config = ADMIN_CONFIG_DEFAULT;
+		}
+		const ids = noteLinkIds(config.motto);
+		if (ids.length === 0) return config;
+		return {
+			...config,
+			links: resolveLinks(new Map([['motto', ids]])).get('motto') ?? []
+		};
+	}
+
+	function setAdminConfig(input: Partial<AdminConfig>): AdminConfig {
+		const next = sanitizeAdminConfig({ ...getAdminConfig(), ...input, updatedAt: Date.now() });
+		db.prepare(
+			`INSERT INTO admin_config (id, motto, updated_at) VALUES (1, ?, ?)
+			 ON CONFLICT (id) DO UPDATE SET motto = excluded.motto, updated_at = excluded.updated_at`
+		).run(next.motto, next.updatedAt);
+		return getAdminConfig();
 	}
 
 	// --- Quick note ---------------------------------------------------------
@@ -5834,6 +5885,8 @@ export function createJournal(db: SqlDb) {
 		getTimeTrackerStats,
 		getPublicConfig,
 		setPublicConfig,
+		getAdminConfig,
+		setAdminConfig,
 		getQuickNote,
 		setQuickNote,
 		listBooks,

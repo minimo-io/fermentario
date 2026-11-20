@@ -12,6 +12,7 @@ export type {
 	TimeStatsSegment,
 	QuoteFetchEntry,
 	PublicConfig,
+	AdminConfig,
 	TradingOrg,
 	TradingOrder,
 	TradingDiaryLine,

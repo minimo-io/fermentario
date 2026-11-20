@@ -24,12 +24,14 @@
 		model: string;
 		models: ChatModelOption[];
 		prompt: string;
+		motto: string;
 		tab: Tab;
 		onTab: (t: Tab) => void;
 		onClose: () => void;
 		onRerun: () => void;
 		onModelChange: (id: string) => void;
 		onPromptChange: (value: string) => void;
+		onSaveMotto: (value: string) => Promise<void>;
 		onSaveLanguages: (p: { entriesLang: Lang }) => void;
 		onModelLang: (lang: Lang) => void;
 		onWidth: (w: ContentWidth) => void;
@@ -39,9 +41,9 @@
 	};
 	let {
 		modelLang, entriesLang, contentWidth, theme, sections,
-		summaryLoading, week, model, models, prompt, tab,
+		summaryLoading, week, model, models, prompt, motto, tab,
 		onTab, onClose, onRerun, onModelChange, onModelLang, onPromptChange,
-		onSaveLanguages, onWidth, onSections, onTheme, onRestoreStart
+		onSaveMotto, onSaveLanguages, onWidth, onSections, onTheme, onRestoreStart
 	}: Props = $props();
 
 	const TABS: { id: Tab; label: string }[] = [
@@ -104,7 +106,7 @@
 		>
 			<div bind:this={bodyEl}>
 				{#if tab === 'general'}
-					<LanguagePanel {entriesLang} {contentWidth} {theme} {sections} onSave={onSaveLanguages} {onWidth} {onSections} {onTheme} />
+					<LanguagePanel {entriesLang} {contentWidth} {theme} {sections} {motto} {onSaveMotto} onSave={onSaveLanguages} {onWidth} {onSections} {onTheme} />
 				{:else if tab === 'models'}
 					<ModelsPanel {summaryLoading} {week} {model} {models} {modelLang} {prompt} {onRerun} {onModelChange} {onModelLang} {onPromptChange} />
 				{:else if tab === 'trading'}

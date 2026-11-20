@@ -972,6 +972,23 @@ const todoItemPhotos: Migration = {
 	}
 };
 
+/** Private admin presentation settings. The motivation card is admin-only
+ *  text: it stays out of `public_config`, which anonymous visitors can read. */
+const adminConfig: Migration = {
+	version: 43,
+	name: 'admin-config',
+	up(db) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS admin_config (
+				id         INTEGER PRIMARY KEY CHECK (id = 1),
+				motto      TEXT    NOT NULL DEFAULT '',
+				updated_at INTEGER NOT NULL DEFAULT 0
+			);
+			INSERT OR IGNORE INTO admin_config (id, motto, updated_at) VALUES (1, '', 0);
+		`);
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -1014,7 +1031,8 @@ export const MIGRATIONS: Migration[] = [
 	quickNote,
 	publicSlogan,
 	noteTitle,
-	todoItemPhotos
+	todoItemPhotos,
+	adminConfig
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

@@ -1,5 +1,31 @@
 # Lessons Learned
 
+## Session: Journal-backed admin reminder
+- The reminder is private presentation data, so it cannot go into
+  `public_config`: `/api/public/config` is anonymous. Schema 43 adds the
+  single-row `admin_config` table; `/api/config/admin` is the write namespace.
+- The value is server-loaded by `src/routes/admin/+layout.server.ts`, so the
+  card is in the first HTML paint and does not pop in after a client fetch.
+  The layout keeps it in state and updates it from the PATCH response.
+- The smoke script hard-codes the schema version and asserts page chrome.
+  Bump both together: the legacy-import check to 43, and a second
+  `/admin/notes` fetch after setting the motto, which proves the server load
+  reaches the shell.
+- Restore replaces the journal, so it must clear `admin_config` even when the
+  backup predates the table. Keeping the old message would leak state across
+  journals.
+- `sanitizeMotto` preserves newlines; the public config helper collapses
+  whitespace for titles and descriptions and must not be reused here.
+- The reminder reuses the note-link convention: `[[id]]` in the motto, the
+  shared `NoteFinder` for picking, and `renderPlainLinks` for the pill. The
+  resolved `links` array is derived on read, never stored, so a renamed note
+  never leaves a stale label. `NoteFinder` grew a `placement` prop because
+  its list opens upward for the composer and that clips at the top of a
+  settings dialog.
+- The smoke reminder carries a fixture note id, not the note it creates: the
+  masker replaces whole volatile values, so a fresh UUID inside the motto
+  string would land in the golden and fail the next run.
+
 ## Session: Composer save behavior + model refusal handling
 - The "bar changes / input field disappears" bug was `saveNote()` calling
   `onMode('')`. The note input only renders inside `{#if mode === 'note'}`,

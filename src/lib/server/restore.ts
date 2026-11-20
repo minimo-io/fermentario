@@ -417,6 +417,20 @@ export function copyUploadIntoTarget(
 					FROM backup.public_config WHERE id = 1`
 			);
 		}
+		if (has('admin_config')) {
+			statements.push(
+				'DELETE FROM admin_config',
+				`INSERT INTO admin_config (id, motto, updated_at)
+					SELECT 1, ${column('admin_config', 'motto', "''")},
+						${column('admin_config', 'updated_at', '0')}
+					FROM backup.admin_config WHERE id = 1`
+			);
+		} else {
+			// A restore replaces the journal, so an old backup without the
+			// reminder must not inherit the previous journal's message.
+			statements.push('DELETE FROM admin_config');
+		}
+		statements.push("INSERT OR IGNORE INTO admin_config (id, motto, updated_at) VALUES (1, '', 0)");
 		if (has('quick_note')) {
 			statements.push(
 				'DELETE FROM quick_note',

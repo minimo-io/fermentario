@@ -166,8 +166,8 @@ try {
 		: null;
 	registry.close();
 	// Keep in step with LATEST_SCHEMA_VERSION in src/lib/platform/migrations.ts.
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 42) {
-		console.error('The legacy import did not register an active v42 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 43) {
+		console.error('The legacy import did not register an active v43 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -446,6 +446,91 @@ must(
 	'200 with the default public config restored'
 );
 volatile.add(publicConfigReset.body.publicConfig.updatedAt);
+
+// Private admin config is separate from the public namespace. The reminder is
+// journal data: write it, read it back, prove the shell renders it, reject a
+// non-string, then clear it.
+const reminderNoteId = '11111111-1111-4111-8111-111111111101';
+const adminConfigDefault = await api('GET /api/config/admin', '/api/config/admin');
+must(
+	'GET /api/config/admin',
+	adminConfigDefault,
+	(r) =>
+		r.status === 200 &&
+		r.body.adminConfig?.motto === '' &&
+		r.body.adminConfig?.updatedAt === 0 &&
+		r.body.adminConfig?.links?.length === 0,
+	'200 with the empty default reminder'
+);
+const adminConfigPatch = await api(
+	'PATCH /api/config/admin',
+	'/api/config/admin',
+	json({ motto: `Smoke reminder line one\nline two [[${reminderNoteId}]]` }, 'PATCH')
+);
+must(
+	'PATCH /api/config/admin',
+	adminConfigPatch,
+	(r) =>
+		r.status === 200 &&
+		r.body.adminConfig?.motto === `Smoke reminder line one\nline two [[${reminderNoteId}]]` &&
+		r.body.adminConfig?.links?.length === 1 &&
+		r.body.adminConfig.links[0].id === reminderNoteId &&
+		r.body.adminConfig.links[0].kind === 'note' &&
+		r.body.adminConfig.links[0].label === 'Went kayaking on the river at dawn.',
+	'200 with the two-line reminder and its resolved note link'
+);
+volatile.add(adminConfigPatch.body.adminConfig.updatedAt);
+const adminConfigRead = await api('GET /api/config/admin stored', '/api/config/admin');
+must(
+	'GET /api/config/admin stored',
+	adminConfigRead,
+	(r) =>
+		r.status === 200 &&
+		r.body.adminConfig?.motto === `Smoke reminder line one\nline two [[${reminderNoteId}]]` &&
+		r.body.adminConfig?.links?.[0]?.id === reminderNoteId,
+	'200 with the stored reminder and its link'
+);
+const adminConfigPage = await fetch(`${base}/admin/notes`);
+const adminConfigHtml = await adminConfigPage.text();
+const reminderHtml = /aria-label="Reminder"[\s\S]*?<\/section>/.exec(adminConfigHtml)?.[0] ?? '';
+const reminderLinkHref = `href="/admin/notes/${reminderNoteId}"`;
+must(
+	'GET /admin/notes reminder',
+	{ status: adminConfigPage.status, body: adminConfigHtml },
+	(r) => r.status === 200 && r.body.includes('Smoke reminder line one'),
+	'the admin shell renders the reminder'
+);
+results.push([
+	'GET /admin/notes reminder',
+	{
+		status: adminConfigPage.status,
+		hasMotto: adminConfigHtml.includes('Smoke reminder line one'),
+		// The section is the card, not the notes list below it: this proves
+		// the server render resolved the `[[id]]` into a pill.
+		hasNotePill: reminderHtml.includes(reminderLinkHref)
+	}
+]);
+const adminConfigBad = await api(
+	'PATCH /api/config/admin bad',
+	'/api/config/admin',
+	json({ motto: 7 }, 'PATCH')
+);
+must('PATCH /api/config/admin bad', adminConfigBad, (r) => r.status === 400, '400 for a non-string reminder');
+const adminConfigReset = await api(
+	'PATCH /api/config/admin reset',
+	'/api/config/admin',
+	json({ motto: '  \n ' }, 'PATCH')
+);
+must(
+	'PATCH /api/config/admin reset',
+	adminConfigReset,
+	(r) =>
+		r.status === 200 &&
+		r.body.adminConfig?.motto === '' &&
+		r.body.adminConfig?.links?.length === 0,
+	'200 with the trimmed empty reminder'
+);
+volatile.add(adminConfigReset.body.adminConfig.updatedAt);
 
 // Covers ride with the note: upload, serve bytes, then reference by id.
 const TINY_COVER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -1967,6 +2052,20 @@ for (const e of quoteLog.body.entries ?? []) {
 }
 
 // --- Export / import round trip -------------------------------------------
+// The reminder is private journal data, so it must ride with the database
+// file and come back on the other side of a restore.
+const restoreMotto = await api(
+	'PATCH /api/config/admin before export',
+	'/api/config/admin',
+	json({ motto: 'Reminder that must survive a restore' }, 'PATCH')
+);
+must(
+	'PATCH /api/config/admin before export',
+	restoreMotto,
+	(r) => r.status === 200 && r.body.adminConfig?.motto === 'Reminder that must survive a restore',
+	'200 with the reminder to restore'
+);
+volatile.add(restoreMotto.body.adminConfig.updatedAt);
 const exported = await fetch(`${base}/api/export`);
 const bytes = Buffer.from(await exported.arrayBuffer());
 const exportedPath = join(work, 'exported.db');
@@ -2008,7 +2107,8 @@ try {
 		tradingOrgs: count('trading_orgs'),
 		tradingOrders: count('trading_orders'),
 		tradingQuoteHistory: count('trading_quote_history'),
-		b3Tickers: count('b3_tickers')
+		b3Tickers: count('b3_tickers'),
+		adminMotto: d.prepare('SELECT motto FROM admin_config WHERE id = 1').get()?.motto ?? null
 	};
 	d.close();
 } catch (e) {
@@ -2085,6 +2185,17 @@ must(
 		r.body.done?.stockGoal === 1 &&
 		r.body.done?.books === 1,
 	'200 with a count for every restored section'
+);
+
+const restoredMotto = await api(
+	'GET /api/config/admin after restore',
+	'/api/config/admin'
+);
+must(
+	'GET /api/config/admin after restore',
+	restoredMotto,
+	(r) => r.status === 200 && r.body.adminConfig?.motto === 'Reminder that must survive a restore',
+	'200 with the reminder copied from the backup'
 );
 
 // Read back every section through the API. The counts above prove the rows
