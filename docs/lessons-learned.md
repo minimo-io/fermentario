@@ -3409,3 +3409,13 @@
   `pendingStopAt`, and the interval (never cleared) resumes live counting.
 - Anything that shows a live duration must use `elapsedMs` or the same
   `pendingStopAt ?? now` pair, or it keeps counting through the freeze.
+
+## Session: Print pages need a script-src for their button
+- A printable page served with `default-src 'none'; style-src 'unsafe-inline'`
+  blocks the inline `onclick="window.print()"` on its Print button: inline
+  event handlers fall back to `default-src`, so the button does nothing. The
+  stock print page carried that CSP. A print route must add
+  `script-src 'unsafe-inline'`; the note print page does, and the stock route
+  now does too.
+- The shared print shell keeps the `.bar` in print and hides only its button,
+  so the title still prints. Hiding the whole bar loses the heading on paper.

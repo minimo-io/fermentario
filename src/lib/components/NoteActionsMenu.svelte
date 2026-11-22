@@ -6,6 +6,7 @@
 	import Star from '@lucide/svelte/icons/star';
 	import Globe from '@lucide/svelte/icons/globe';
 	import Volume2 from '@lucide/svelte/icons/volume-2';
+	import Printer from '@lucide/svelte/icons/printer';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Trash from '@lucide/svelte/icons/trash';
 	import type { Note } from '$lib/types';
@@ -97,6 +98,15 @@
 			>
 				<Copy class="h-4 w-4 text-stone-400 dark:text-stone-500" /> {copied ? 'Copied' : 'Copy to clipboard'}
 			</button>
+			<a
+				href={`/api/notes/${note.id}/print`}
+				target="_blank"
+				rel="noreferrer"
+				class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+				onclick={() => onClose()}
+			>
+				<Printer class="h-4 w-4 text-stone-400 dark:text-stone-500" /> Print / PDF
+			</a>
 			<button
 				type="button"
 				class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"

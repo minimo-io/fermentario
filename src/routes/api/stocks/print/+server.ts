@@ -18,13 +18,14 @@ export async function GET({ url }) {
 	const extras = listShoppingExtras();
 	const html =
 		scope === 'shopping'
-			? htmlShell(scope, 'Shopping list', () => shoppingBody(items, goals, extras))
-			: htmlShell(scope, 'Stock', () => printBody(items, goals));
+			? htmlShell('Shopping list', () => shoppingBody(items, goals, extras))
+			: htmlShell('Stock', () => printBody(items, goals));
 	return new Response(html, {
 		status: 200,
 		headers: {
 			'content-type': 'text/html; charset=utf-8',
-			'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+			'content-security-policy':
+				"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'",
 			'x-content-type-options': 'nosniff',
 			'cache-control': 'no-store'
 		}

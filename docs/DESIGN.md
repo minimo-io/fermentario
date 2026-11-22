@@ -727,6 +727,13 @@ off venue shows a Watch badge and one `Enable` button. The
   registry. The `StockCategoryModal` group dropdown lists existing names and
   gives each one an `×`; deleting a group clears it from every category using
   it after a confirmation, and the categories stay.
+- **Note print**: every note's ⋮ menu carries **Print / PDF**, in lists and on
+  the note's own page. It opens `/api/notes/<id>/print` in a new tab: plain
+  HTML with the title, date, cover, raw text (line breaks preserved), tags and
+  the YouTube link, plus a **Save as PDF** button that calls `window.print()`.
+  The browser dialog saves the PDF; there is no download and no server-side
+  PDF. The bar prints as the title and only its button hides. The shared shell
+  and `esc` live in `src/lib/print.ts`; the stock print page reuses them.
 - **Note card gestures**: the fold toggles only from a small chevron at
   the text's left edge (rotating `ChevronDown`, 20 px so it stays under
   the one-line cap, `aria-expanded`) — the note body itself is plain
