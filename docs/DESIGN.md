@@ -729,7 +729,8 @@ off venue shows a Watch badge and one `Enable` button. The
   it after a confirmation, and the categories stay.
 - **Note print**: every note's ⋮ menu carries **Print / PDF**, in lists and on
   the note's own page. It opens `/api/notes/<id>/print` in a new tab: plain
-  HTML with the title, date, cover, raw text (line breaks preserved), tags and
+  HTML with the title, date, cover, the same light markdown as the note body
+  (bold and italic, line breaks preserved), tags and
   the YouTube link, plus a **Save as PDF** button that calls `window.print()`.
   The browser dialog saves the PDF; there is no download and no server-side
   PDF. The bar prints as the title and only its button hides. The shared shell

@@ -1,4 +1,5 @@
 import { getNote } from '$lib/server/db';
+import { inlineMarkdown } from '$lib/markdown-inline';
 import { esc, htmlShell } from '$lib/print';
 import { youTubeWatchUrl } from '$lib/youtube';
 
@@ -34,7 +35,7 @@ export async function GET({ params }) {
 	const body = `<article>
 	<p class="meta">${esc(date)}${note.updated_at > note.created_at ? ' · edited' : ''}</p>
 	${cover}
-	<div class="content">${esc(note.content)}</div>
+	<div class="content">${inlineMarkdown(note.content)}</div>
 	${tags ? `<p class="tags">${esc(tags)}</p>` : ''}
 	${video}
 </article>`;
