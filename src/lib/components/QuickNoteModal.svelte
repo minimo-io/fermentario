@@ -4,22 +4,31 @@
 	import Minimize2 from '@lucide/svelte/icons/minimize-2';
 	import X from '@lucide/svelte/icons/x';
 	import CloudUpload from '@lucide/svelte/icons/cloud-upload';
+	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { quickNote } from '$lib/quick-note.svelte';
 	import { renderNoteContent } from '$lib/note-links';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 
+	const savedTime = $derived(
+		quickNote.updatedAt > 0
+			? new Date(quickNote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+			: ''
+	);
+
 	const statusText = $derived.by(() => {
 		if (quickNote.status === 'error') return quickNote.error || 'Could not save on this device.';
+		if (quickNote.fetchStatus === 'fetching') return 'Fetching server copy…';
+		if (quickNote.fetchStatus === 'error') return quickNote.fetchError || 'Fetch failed.';
+		if (quickNote.fetchStatus === 'empty') return 'No server copy yet.';
+		if (quickNote.fetchStatus === 'loaded')
+			return savedTime ? `Fetched from server ${savedTime}` : 'Fetched from server';
 		if (quickNote.backupStatus === 'saving') return 'Backing up…';
 		if (quickNote.backupStatus === 'saved') return 'Backed up';
 		if (quickNote.backupStatus === 'error') return quickNote.backupError || 'Backup failed.';
-		const time =
-			quickNote.updatedAt > 0
-				? new Date(quickNote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-				: '';
-		return time ? `Saved on this device ${time}` : 'Saved on this device';
+		return savedTime ? `Saved on this device ${savedTime}` : 'Saved on this device';
 	});
 
 	const backupTitle = $derived(
@@ -59,6 +68,16 @@
 	 *  the same event from reaching the window listener and firing twice. */
 	function onKeydown(e: KeyboardEvent): boolean {
 		if (!quickNote.open || e.isComposing) return false;
+		// The fetch confirmation owns the keyboard: Escape cancels the replace
+		// and must not close the quick note behind the warning.
+		if (quickNote.pendingRemote) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				quickNote.pendingRemote = null;
+				return true;
+			}
+			return false;
+		}
 		// The content is already written on every keystroke; Mod+Enter is the
 		// explicit save-and-close gesture.
 		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -106,21 +125,31 @@
 		transition:fade={{ duration: motionMs(BACKDROP_MS) }}
 	>
 		<div
-			class="flex w-full flex-col bg-white p-5 shadow-xl transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none dark:bg-stone-900 {quickNote.full
+			class="flex w-full min-w-0 flex-col bg-white p-5 shadow-xl transition-[height,max-width,border-radius] duration-200 ease-out motion-reduce:transition-none dark:bg-stone-900 {quickNote.full
 				? 'h-dvh max-w-full rounded-none'
 				: 'h-[min(80dvh,44rem)] max-w-2xl rounded-2xl'}"
 			transition:fly={{ y: PANEL_Y, duration: motionMs(PANEL_MS) }}
 		>
-			<div class="flex items-start justify-between gap-2">
-				<div class="min-w-0">
-					<h2 id="quick-note-title" class="text-sm font-semibold text-stone-900 dark:text-stone-100">Quick note</h2>
+			<div class="flex flex-wrap items-start justify-between gap-2 gap-y-1">
+				<div class="min-w-0 flex-1">
+					<h2 id="quick-note-title" class="truncate text-sm font-semibold text-stone-900 dark:text-stone-100">Quick note</h2>
 					<p
-						class="mt-0.5 truncate text-[11px] tabular-nums {quickNote.status === 'error' || quickNote.backupStatus === 'error'
+						class="mt-0.5 truncate text-[11px] tabular-nums {quickNote.status === 'error' || quickNote.backupStatus === 'error' || quickNote.fetchStatus === 'error'
 							? 'text-rose-600 dark:text-rose-400'
 							: 'text-stone-400 dark:text-stone-500'}"
 					>{statusText}</p>
 				</div>
-				<div class="-mr-1 -mt-1 flex shrink-0 items-center gap-0.5">
+				<div class="-mr-1 -mt-1 ml-auto flex shrink-0 items-center gap-0.5">
+					<button
+						type="button"
+						class="grid h-8 w-8 place-items-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 disabled:opacity-40 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+						aria-label="Fetch the server copy"
+						title="Fetch the server copy"
+						disabled={quickNote.fetchStatus === 'fetching' || quickNote.backupStatus === 'saving'}
+						onclick={() => void quickNote.fetchRemote()}
+					>
+						<CloudDownload class="h-4 w-4" />
+					</button>
 					<button
 						type="button"
 						class="mr-1 grid h-8 w-8 place-items-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 disabled:opacity-40 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-300"
@@ -180,7 +209,7 @@
 				></textarea>
 			{:else}
 				<div
-					class="mt-3 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl border border-stone-200 p-3 text-base leading-relaxed text-stone-800 dark:border-stone-800 dark:text-stone-200"
+					class="mt-3 min-h-0 min-w-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-stone-200 p-3 text-base leading-relaxed text-stone-800 dark:border-stone-800 dark:text-stone-200"
 				>
 					{#if quickNote.content.trim()}
 						{@html renderNoteContent(quickNote.content)}
@@ -191,4 +220,15 @@
 			{/if}
 		</div>
 	</div>
+	{#if quickNote.pendingRemote}
+		{@const remote = quickNote.pendingRemote}
+		<ConfirmDialog
+			title="Replace this quick note?"
+			message="The server copy replaces the note on this device. The local text is lost."
+			confirmLabel="Replace"
+			confirmTone="danger"
+			onConfirm={() => quickNote.applyRemote(remote)}
+			onCancel={() => (quickNote.pendingRemote = null)}
+		/>
+	{/if}
 {/if}

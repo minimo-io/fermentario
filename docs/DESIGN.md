@@ -1000,10 +1000,18 @@ decide, and late content (status chips, test results) gets clipped.
   the search palette, the homepage `Tools` section, or `Cmd/Ctrl+Shift+K`. It is
   a big `max-w-2xl` modal with the same full-screen toggle as `EditNoteDialog`
   (`h-dvh max-w-full rounded-none`, `Escape` collapses first). It has no Save
-  button and no server read: every keystroke writes this browser's local
-  storage, so the header says `Saved on this device 14:32` or the error. The
-  cloud button is the only server path; admin is unprotected today, so it is
-  enabled, and the login will enable it per session.
+  button. Every keystroke writes this browser's local storage, so the header says
+  `Saved on this device 14:32` or the error. The two cloud buttons are the only
+  server paths: **upload** (`PUT`, backs the local text up) and **fetch**
+  (`GET`, pulls the server copy on demand). There is still no automatic read on
+  open, close or typing. Fetch adopts the copy silently only when the local note
+  is empty; a different non-empty local note opens `ConfirmDialog` ("Replace
+  this quick note?", danger tone) and changes nothing until the user confirms.
+  Typing after a fetch returns the header to the local status. Admin is
+  unprotected today, so both buttons are enabled, and the login will enable
+  them per session. The header wraps its icon cluster under the title on narrow
+  screens, and the body breaks long tokens (`break-words`) instead of widening
+  the panel.
   `Edit` and `View` are a segmented toggle; View renders the same markdown as
   notes (bold, italic, bare URLs, `[[id]]` pills), not headings or lists. A
   note with text opens in View; an empty one opens in Edit. In View, `E`

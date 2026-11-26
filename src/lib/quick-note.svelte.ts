@@ -40,6 +40,13 @@ class QuickNoteStore {
 	backupStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
 	backupError = $state('');
 
+	/** Explicit pull from the server. It never runs on open, close or typing:
+	 *  the local note stays the source of truth until the user asks for the
+	 *  server copy, and a non-empty local note needs a confirmation first. */
+	fetchStatus = $state<'idle' | 'fetching' | 'loaded' | 'empty' | 'error'>('idle');
+	fetchError = $state('');
+	pendingRemote = $state<{ content: string; updatedAt: number } | null>(null);
+
 	#loaded = false;
 
 	/** Read the local copy once. There is no server read: the server copy is a
@@ -79,11 +86,16 @@ class QuickNoteStore {
 	/** Called on every keystroke. The write is synchronous, so a reload after
 	 *  any keystroke sees the text. */
 	setContent(value: string) {
+		this.fetchStatus = 'idle';
+		this.pendingRemote = null;
+		this.#writeLocal(value, Date.now());
+	}
+
+	#writeLocal(value: string, updatedAt: number) {
 		this.content = value;
+		this.updatedAt = updatedAt;
 		try {
-			const updatedAt = Date.now();
 			localStorage.setItem(STORAGE_KEY, JSON.stringify({ content: value, updatedAt }));
-			this.updatedAt = updatedAt;
 			this.status = 'local';
 			this.error = '';
 		} catch {
@@ -111,6 +123,51 @@ class QuickNoteStore {
 			this.backupStatus = 'error';
 			this.backupError = (e as Error)?.message ?? 'Could not back up the note.';
 		}
+	}
+
+	/** Pull the server copy on demand. An empty local note adopts it directly;
+	 *  a different non-empty local note waits for `applyRemote` after the
+	 *  confirmation, so a fetch never deletes local text on its own. */
+	async fetchRemote() {
+		if (this.fetchStatus === 'fetching' || this.backupStatus === 'saving') return;
+		this.fetchStatus = 'fetching';
+		this.fetchError = '';
+		this.pendingRemote = null;
+		try {
+			const res = await fetch('/api/quick-note');
+			if (!res.ok) throw new Error('Could not fetch the server copy.');
+			const data = (await res.json()) as { content?: unknown; updatedAt?: unknown };
+			const remote = {
+				content: typeof data?.content === 'string' ? data.content : '',
+				updatedAt: Number(data?.updatedAt) || 0
+			};
+			if (!remote.content.trim()) {
+				this.fetchStatus = 'empty';
+				return;
+			}
+			if (!this.content.trim()) {
+				this.applyRemote(remote);
+				return;
+			}
+			if (remote.content === this.content) {
+				this.fetchStatus = 'loaded';
+				return;
+			}
+			this.pendingRemote = remote;
+			this.fetchStatus = 'idle';
+		} catch (e) {
+			this.fetchStatus = 'error';
+			this.fetchError = (e as Error)?.message ?? 'Could not fetch the server copy.';
+		}
+	}
+
+	/** Replace the local note with the server copy. Only called by the fetch
+	 *  confirmation, or when the local note is empty. */
+	applyRemote(remote: { content: string; updatedAt: number }) {
+		this.#writeLocal(remote.content, remote.updatedAt || Date.now());
+		this.pendingRemote = null;
+		this.fetchStatus = 'loaded';
+		this.fetchError = '';
 	}
 }
 

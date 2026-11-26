@@ -3419,3 +3419,16 @@
   now does too.
 - The shared print shell keeps the `.bar` in print and hides only its button,
   so the title still prints. Hiding the whole bar loses the heading on paper.
+
+## Session: A backup with no read is not sync
+- The quick note backed up to `quick_note` with `PUT /api/quick-note` but never
+  called `GET`, so a second device (phone over tailnet) opened an empty local
+  scratchpad while the text sat on the server. A one-way backup looks like sync
+  in the UI and is not: every backup path needs a read path.
+- The read is an explicit **Fetch** button, never a side effect of open, close
+  or typing. It adopts the server copy only when the local note is empty; a
+  different non-empty local note opens `ConfirmDialog` first, because a silent
+  pull would delete text this device never uploaded.
+- While the confirmation is open, the quick note's window keydown must not
+  treat `Escape` as "close the modal": cancel the replace instead, or the
+  warning disappears with the note behind it.

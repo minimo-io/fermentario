@@ -182,8 +182,8 @@ BM25 results and the vector blobs byte for byte.
 ## Quick note
 
 - Mini app `quick-note` (`kind: 'modal'`): no page, it opens `QuickNoteModal` from the root layout. Shortcut `Cmd/Ctrl+Shift+K` toggles it; the shortcut ignores text fields and the EPUB reader, like the other section shortcuts.
-- Storage is local only. Every keystroke writes `localStorage['fermentario.quickNote']` (`{ content, updatedAt }`), synchronously, so a reload never loses text. The client never reads or writes the server copy on open, close or typing.
-- Server copy is an explicit backup: `PUT /api/quick-note` body `{ content: string }` returns `{ content, updatedAt }` (400 for a non-string body, 100 000 char cap). The cloud button is enabled today because admin is unprotected (`quickNote.backupEnabled`); the login will set it per session. `GET /api/quick-note` exists for a future restore and is not called by the app.
+- Storage is local first. Every keystroke writes `localStorage['fermentario.quickNote']` (`{ content, updatedAt }`), synchronously, so a reload never loses text. The client never reads or writes the server copy on open, close or typing; both server paths are explicit buttons.
+- Server copy: **upload** calls `PUT /api/quick-note` body `{ content: string }` (400 for a non-string body, 100 000 char cap) and returns `{ content, updatedAt }`. **Fetch** calls `GET /api/quick-note` on demand: an empty local note adopts the copy, a different non-empty one opens `ConfirmDialog` and only **Replace** calls `applyRemote`, so a fetch never deletes local text by itself. Both buttons are enabled today because admin is unprotected (`quickNote.backupEnabled`); the login will set them per session.
 - Journal table: `quick_note` (migration 39, `quick-note`), one row `id = 1`. It is not a `notes` row: no tags, no publishing, no timeline entry, no search entry. A restore copies it when the backup has the table.
 
 ## Shortcuts
