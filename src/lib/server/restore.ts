@@ -19,7 +19,7 @@ export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 // Every export contains these tables. Newer tables are optional so a backup
 // written before To-Do lists, principles or tag colors still restores.
-export const REQUIRED_TABLES = ['notes', 'note_tags', 'weekly_recaps', 'ask_history'] as const;
+export const REQUIRED_TABLES = ['notes', 'note_tags'] as const;
 
 const TEMP_SUFFIXES = ['', '-shm', '-wal', '-journal'];
 
@@ -35,8 +35,6 @@ export interface RestoreUpload {
 export interface RestoreCounts {
 	notes: number;
 	tags: number;
-	recaps: number;
-	asks: number;
 	todoGroups: number;
 	todoItems: number;
 	principles: number;
@@ -171,14 +169,12 @@ export function copyUploadIntoTarget(
 
 		send({ phase: 'replacing' });
 		// Children cascade from their parents (foreign_keys = ON): notes owns
-		// tags/vectors/comments, todo_items owns task comments and tags,
+		// tags/comments, todo_items owns task comments and tags,
 		// principles owns tags and comments. notes_fts is virtual with no
 		// foreign key, so it is emptied explicitly.
 		const statements: string[] = [
 			'DELETE FROM notes',
 			'DELETE FROM notes_fts',
-			'DELETE FROM weekly_recaps',
-			'DELETE FROM ask_history',
 			'DELETE FROM shopping_extras',
 			'DELETE FROM book_notes',
 			'DELETE FROM books',
@@ -210,22 +206,13 @@ export function copyUploadIntoTarget(
 				SELECT id, content, created_at, updated_at,
 					${column('notes', 'featured', '0')}, ${column('notes', 'video', "''")}, ${column('notes', 'published', '0')}
 				FROM backup.notes`,
-			'INSERT INTO note_tags (note_id, tag) SELECT note_id, tag FROM backup.note_tags',
-			`INSERT INTO weekly_recaps (week_key, content, created_at, updated_at)
-				SELECT week_key, content, created_at, updated_at FROM backup.weekly_recaps`,
-			`INSERT INTO ask_history (id, question, answer, sources, created_at)
-				SELECT id, question, answer, sources, created_at FROM backup.ask_history`
+			'INSERT INTO note_tags (note_id, tag) SELECT note_id, tag FROM backup.note_tags'
 		);
 		if (has('note_photos')) {
 			statements.push(
 				'DELETE FROM note_photos',
 				`INSERT INTO note_photos (id, note_id, photo, mime, created_at)
 					SELECT id, note_id, photo, mime, created_at FROM backup.note_photos`
-			);
-		}
-		if (has('note_vectors')) {
-			statements.push(
-				'INSERT INTO note_vectors (note_id, vector) SELECT note_id, vector FROM backup.note_vectors'
 			);
 		}
 		if (has('note_comments')) {
@@ -431,12 +418,6 @@ export function copyUploadIntoTarget(
 			statements.push('DELETE FROM admin_config');
 		}
 		statements.push("INSERT OR IGNORE INTO admin_config (id, motto, updated_at) VALUES (1, '', 0)");
-		if (has('quick_note')) {
-			statements.push(
-				'DELETE FROM quick_note',
-				'INSERT INTO quick_note (id, content, updated_at) SELECT 1, content, updated_at FROM backup.quick_note WHERE id = 1'
-			);
-		}
 		if (has('trading_orgs')) {
 			statements.push(
 				'INSERT INTO trading_orgs (id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at) SELECT id, name, enabled, fee_rate, irrf_rate, fixed_fee, exempt_limit, position, created_at FROM backup.trading_orgs',
@@ -570,8 +551,6 @@ export function copyUploadIntoTarget(
 	return {
 		notes: count(target, 'notes'),
 		tags: count(target, 'note_tags'),
-		recaps: count(target, 'weekly_recaps'),
-		asks: count(target, 'ask_history'),
 		todoGroups: count(target, 'todo_groups'),
 		todoItems: count(target, 'todo_items'),
 		principles: count(target, 'principles'),

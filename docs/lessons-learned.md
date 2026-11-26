@@ -1,5 +1,39 @@
 # Lessons Learned
 
+## Session: Search command aliases and global dialogs
+- Store global dialogs outside route-specific headers. Commands must open the
+  same shared Help modal that the homepage button opens, including on admin
+  routes where `PublicHeader` is not mounted.
+- Keep command aliases in the command registry and display them in Help. The
+  exact-code search and `:` command search must both resolve aliases.
+
+## Session: Note link picker placement
+- A textarea can fill a modal or viewport, so absolute positioning against its
+  parent does not place a suggestion list near a useful edge and can clip it.
+  Position the list against the textarea's viewport rectangle, flip to the
+  side with more room, cap its height, and update it on scroll and resize.
+
+## Session: Retire a journal-backed feature
+- Never remove an applied migration from `MIGRATIONS`; keep its schema version
+  in the sequence, then add a later migration to drop the retired table.
+- Restore must ignore a table dropped by the current schema, even when an old
+  backup still contains it. Clear retired browser-storage keys separately.
+
+## Session: Remove AI features but keep note read-aloud
+- Remove AI database methods from the shared journal layer as well as server
+  routes. Leaving those methods behind keeps hidden references to retired
+  tables in fresh schemas.
+- Keep `/api/status` only if it still has a user; a model-status route is not a
+  general health check. Use an existing journal API for diagnostics instead.
+- Update smoke fixtures, onboarding schema expectations, and the golden output
+  when a feature is removed. Test restore against a fresh journal schema.
+- For startup probes, poll the journal-status endpoint and wait for a response;
+  do not require a 2xx response because broken journals correctly return 503.
+
+## Session: Global toast placement
+- Keep global action-result toasts at the viewport bottom and above modal
+  overlays. Include the device safe-area inset so they stay visible on phones.
+
 ## Session: Journal-backed admin reminder
 - The reminder is private presentation data, so it cannot go into
   `public_config`: `/api/public/config` is anonymous. Schema 43 adds the
@@ -3432,3 +3466,11 @@
 - While the confirmation is open, the quick note's window keydown must not
   treat `Escape` as "close the modal": cancel the replace instead, or the
   warning disappears with the note behind it.
+# Session: Full-screen note capture
+- Keep one note-creation surface for commands, shortcuts and mini apps. Persist
+  its text and optional date in session storage so closing the editor does not
+  erase a draft.
+- The mini-app FAB dot is a shared status surface: timer chiming takes
+  priority, then an unsaved note draft, then a running timer.
+- When removing a fixed bottom bar, clear `--composer-h` on unmount. Otherwise
+  the next route can keep stale bottom padding.

@@ -1,54 +1,41 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
-	import type { ChatModelOption } from '$lib/chat-models';
 	import type { ContentWidth } from '$lib/display';
 	import type { Theme } from '$lib/theme';
 	import LanguagePanel from '$lib/components/LanguagePanel.svelte';
-	import ModelsPanel from '$lib/components/ModelsPanel.svelte';
 	import RipioPanel from '$lib/components/RipioPanel.svelte';
 	import NostrPanel from '$lib/components/NostrPanel.svelte';
 	import DatabasePanel from '$lib/components/DatabasePanel.svelte';
 
 	type Lang = 'en' | 'es' | 'pt';
-	type Tab = 'general' | 'models' | 'trading' | 'nostr' | 'database';
+	type Tab = 'general' | 'trading' | 'nostr' | 'database';
 
 	type Props = {
-		modelLang: Lang;
 		entriesLang: Lang;
 		contentWidth: ContentWidth;
 		theme: Theme;
 		sections: { id: string; label: string }[];
-		summaryLoading: boolean;
-		week: string | null;
-		model: string;
-		models: ChatModelOption[];
-		prompt: string;
 		motto: string;
 		tab: Tab;
 		onTab: (t: Tab) => void;
 		onClose: () => void;
-		onRerun: () => void;
-		onModelChange: (id: string) => void;
-		onPromptChange: (value: string) => void;
 		onSaveMotto: (value: string) => Promise<void>;
 		onSaveLanguages: (p: { entriesLang: Lang }) => void;
-		onModelLang: (lang: Lang) => void;
 		onWidth: (w: ContentWidth) => void;
 		onSections: (ids: string[]) => void;
 		onTheme: (t: Theme) => void;
 		onRestoreStart: (file: File) => void;
 	};
 	let {
-		modelLang, entriesLang, contentWidth, theme, sections,
-		summaryLoading, week, model, models, prompt, motto, tab,
-		onTab, onClose, onRerun, onModelChange, onModelLang, onPromptChange,
+		entriesLang, contentWidth, theme, sections,
+		motto, tab,
+		onTab, onClose,
 		onSaveMotto, onSaveLanguages, onWidth, onSections, onTheme, onRestoreStart
 	}: Props = $props();
 
 	const TABS: { id: Tab; label: string }[] = [
 		{ id: 'general', label: 'General' },
-		{ id: 'models', label: 'Models' },
 		{ id: 'trading', label: 'Trading' },
 		{ id: 'nostr', label: 'Nostr' },
 		{ id: 'database', label: 'Database' }
@@ -107,8 +94,6 @@
 			<div bind:this={bodyEl}>
 				{#if tab === 'general'}
 					<LanguagePanel {entriesLang} {contentWidth} {theme} {sections} {motto} {onSaveMotto} onSave={onSaveLanguages} {onWidth} {onSections} {onTheme} />
-				{:else if tab === 'models'}
-					<ModelsPanel {summaryLoading} {week} {model} {models} {modelLang} {prompt} {onRerun} {onModelChange} {onModelLang} {onPromptChange} />
 				{:else if tab === 'trading'}
 					<RipioPanel />
 				{:else if tab === 'nostr'}

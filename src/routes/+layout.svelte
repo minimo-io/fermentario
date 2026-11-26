@@ -7,11 +7,12 @@
 	import GlobalSearch from '$lib/components/GlobalSearch.svelte';
 	import MiniAppsFab from '$lib/components/MiniAppsFab.svelte';
 	import MiniAppsModal from '$lib/components/MiniAppsModal.svelte';
-	import QuickNoteModal from '$lib/components/QuickNoteModal.svelte';
 	import NewNoteModal from '$lib/components/NewNoteModal.svelte';
-	import { quickNote } from '$lib/quick-note.svelte';
+	import HelpModal from '$lib/components/HelpModal.svelte';
+	import { help } from '$lib/help.svelte';
 	import { SLOGAN } from '$lib/brand';
 	import { timeTracker } from '$lib/time-tracker.svelte';
+	import { newNote } from '$lib/new-note.svelte';
 	import { applyStoredTheme, watchSystemTheme } from '$lib/theme';
 	let { children } = $props();
 
@@ -87,18 +88,18 @@
 		}
 	}
 
-	/** Quick note is a mini app, so its shortcut follows the same rule as the
-	 *  button, and it stays out of text fields like every other section shortcut. */
+	/** Global shortcuts stay out of text fields and open dialogs. */
 	function onGlobalKeydown(e: KeyboardEvent) {
 		onEscapeKey(e);
 		if (hideMiniApps || e.isComposing) return;
-		if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
-		if (e.key.toLowerCase() !== 'k') return;
-		const t = e.target as HTMLElement | null;
-		if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
-		e.preventDefault();
-		if (quickNote.open) quickNote.close();
-		else void quickNote.openModal();
+		if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
+			const t = e.target as HTMLElement | null;
+			if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+			if (document.querySelector('[role="dialog"]')) return;
+			e.preventDefault();
+			newNote.openModal();
+			return;
+		}
 	}
 
 	// app.html applies the theme before first paint. Re-applying on mount keeps
@@ -106,6 +107,13 @@
 	// preference while the user keeps the `system` choice.
 	onMount(() => {
 		applyStoredTheme();
+		newNote.loadDraft();
+		try {
+			localStorage.removeItem('fermentario.quickNote');
+			localStorage.removeItem('fermentario.quickNote.full');
+		} catch {
+			// Storage may be blocked; the retired scratchpad is no longer read.
+		}
 		// The button shows the running dot on every page, so the tracker state
 		// must exist here and not only in the pages that mount its bar.
 		if (!timeTracker.loaded) void timeTracker.load();
@@ -135,8 +143,10 @@
 <svelte:window onkeydown={onGlobalKeydown} />
 
 {@render children()}
-<QuickNoteModal />
 <NewNoteModal />
+{#if help.open}
+	<HelpModal onClose={() => help.closeModal()} />
+{/if}
 {#if !hideMiniApps}
 	<MiniAppsFab />
 	<MiniAppsModal />

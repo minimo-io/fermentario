@@ -179,19 +179,12 @@ BM25 results and the vector blobs byte for byte.
 - Tags/projects: hashtags anywhere in the start or edit comment are parsed with `splitHashtags`. A tag starts the line or follows whitespace and ends at whitespace, so URL fragments and `# Heading` stay prose. The comment is stored without the tags and tags are stored in `time_entry_tags` (migration 34). Migration 38 still uses the frozen `splitTimeEntryHashtags` to backfill leading-run tags for older entries. Stats attribute each entry's duration to its first tag (primary project); untagged time is a neutral segment.
 - Journal tables: `time_entries` (migration 33, `time-tracker`), `time_entry_tags` (migration 34, `time-entry-tags`). One running timer at a time (`ended_at IS NULL`).
 
-## Quick note
-
-- Mini app `quick-note` (`kind: 'modal'`): no page, it opens `QuickNoteModal` from the root layout. Shortcut `Cmd/Ctrl+Shift+K` toggles it; the shortcut ignores text fields and the EPUB reader, like the other section shortcuts.
-- Storage is local first. Every keystroke writes `localStorage['fermentario.quickNote']` (`{ content, updatedAt }`), synchronously, so a reload never loses text. The client never reads or writes the server copy on open, close or typing; both server paths are explicit buttons.
-- Server copy: **upload** calls `PUT /api/quick-note` body `{ content: string }` (400 for a non-string body, 100 000 char cap) and returns `{ content, updatedAt }`. **Fetch** calls `GET /api/quick-note` on demand: an empty local note adopts the copy, a different non-empty one opens `ConfirmDialog` and only **Replace** calls `applyRemote`, so a fetch never deletes local text by itself. Both buttons are enabled today because admin is unprotected (`quickNote.backupEnabled`); the login will set them per session.
-- Journal table: `quick_note` (migration 39, `quick-note`), one row `id = 1`. It is not a `notes` row: no tags, no publishing, no timeline entry, no search entry. A restore copies it when the backup has the table.
-
 ## Shortcuts
 
-- `src/lib/shortcuts.ts` is the only shortcut registry. `HelpModal` renders it
-  from the public header; `MiniAppDef.shortcut` carries the mini app keys.
-- Current: `Mod+K` search, `Mod+Shift+K` quick note, `1–5` admin section,
-  `Mod+Shift+L` composer, `Mod+Shift+A` add item, `Mod+Enter` save, `Esc` close,
+- `src/lib/shortcuts.ts` is the only shortcut registry. `HelpModal` renders it;
+  `MiniAppDef.shortcut` carries the mini app keys.
+- Current: `Mod+K` search, `1–5` admin section, `Mod+Shift+L` new note,
+  `Mod+Shift+A` add item, `Mod+Enter` save, `Esc` close,
   `Enter` start timer, `↑/↓` and `Enter` in search.
 - Slogan and meta description: `SLOGAN` in `src/lib/brand.ts`
   (`Your sovereign life's dashboard`); migration 40 replaces the old

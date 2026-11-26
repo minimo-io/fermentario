@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
-	import Play from '@lucide/svelte/icons/play';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
 	import { SLOGAN } from '$lib/brand';
 	import { SHORTCUTS, shortcutKeys } from '$lib/shortcuts';
@@ -81,19 +80,10 @@
 
 		{#if tab === 'shortcuts'}
 			<div role="tabpanel" aria-label="Shortcuts">
-				<!-- The final video will replace this placeholder. -->
-				<div class="grid aspect-video place-items-center rounded-xl border border-dashed border-stone-300 bg-stone-50 text-center dark:border-stone-700 dark:bg-stone-800/50">
-					<div class="px-4">
-						<Play class="mx-auto h-6 w-6 text-stone-400 dark:text-stone-500" />
-						<p class="mt-1.5 text-xs text-stone-500 dark:text-stone-400">How it works · video coming soon</p>
-					</div>
-				</div>
-
-				<h3 class="mt-5 text-[11px] font-semibold uppercase tracking-wide text-stone-400 dark:text-stone-500">Shortcuts</h3>
 				<div class="mt-1 space-y-3">
 					{#each SHORTCUTS as group (group.group)}
 						<div>
-							<p class="text-xs font-medium text-stone-600 dark:text-stone-300">{group.group}</p>
+							<p class="text-xs font-medium text-stone-800 dark:text-stone-100">{group.group}</p>
 							<ul class="mt-1 space-y-1">
 								{#each group.items as item (item.label)}
 									<li class="flex items-baseline justify-between gap-3 text-sm text-stone-700 dark:text-stone-200">
@@ -130,7 +120,7 @@
 							</span>
 							<span
 								class="shrink-0 rounded-md border border-stone-200 bg-stone-50 px-1.5 py-0.5 font-mono text-[10px] text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
-							>{command.code}</span>
+							>:{command.code}{#if command.aliases?.length} · {command.aliases.map((alias) => `:${alias}`).join(', ')}{/if}</span>
 						</li>
 					{/each}
 				</ul>

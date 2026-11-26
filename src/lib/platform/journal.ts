@@ -25,26 +25,6 @@ export const SCHEMA = `
 		published  INTEGER NOT NULL DEFAULT 0
 	);
 
-	CREATE TABLE IF NOT EXISTS note_vectors (
-		note_id TEXT PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
-		vector  BLOB NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS weekly_recaps (
-		week_key   TEXT PRIMARY KEY,
-		content    TEXT NOT NULL,
-		created_at INTEGER NOT NULL,
-		updated_at INTEGER NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS ask_history (
-		id         TEXT PRIMARY KEY,
-		question   TEXT NOT NULL,
-		answer     TEXT NOT NULL,
-		sources    TEXT NOT NULL DEFAULT '[]',
-		created_at INTEGER NOT NULL
-	);
-
 	CREATE TABLE IF NOT EXISTS note_tags (
 		note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
 		tag     TEXT NOT NULL,
@@ -299,16 +279,6 @@ export interface TimeTrackerStats {
 	buckets: TimeStatsBucket[];
 	tags: string[];
 }
-
-export interface AskRow {
-	id: string;
-	question: string;
-	answer: string;
-	sources: string;
-	created_at: number;
-}
-
-export type Ask = ReturnType<typeof rowToAsk>;
 
 export interface TodoGroup {
 	id: string;
@@ -677,14 +647,6 @@ const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0, links: LinkRef
 	tags,
 	commentCount: comments,
 	linkedNotes: links
-});
-
-const rowToAsk = (r: AskRow) => ({
-	id: r.id,
-	question: r.question,
-	answer: r.answer,
-	sources: JSON.parse(r.sources || '[]'),
-	created_at: r.created_at
 });
 
 /** One-line preview around the first match. The palette highlights `query`. */
@@ -1130,36 +1092,6 @@ export function createJournal(db: SqlDb) {
 			 ON CONFLICT (id) DO UPDATE SET motto = excluded.motto, updated_at = excluded.updated_at`
 		).run(next.motto, next.updatedAt);
 		return getAdminConfig();
-	}
-
-	// --- Quick note ---------------------------------------------------------
-
-	/** The quick note is a scratchpad, not a journal entry: one row, no tags, no
-	 *  publishing, and no shape other than text. */
-	type QuickNote = { content: string; updatedAt: number };
-	const QUICK_NOTE_MAX = 100_000;
-
-	function getQuickNote(): QuickNote {
-		try {
-			const row = db
-				.prepare('SELECT content, updated_at FROM quick_note WHERE id = 1')
-				.get() as unknown as { content: string; updated_at: number } | undefined;
-			if (!row) return { content: '', updatedAt: 0 };
-			return { content: row.content, updatedAt: row.updated_at };
-		} catch {
-			// Migration 39 creates the row. Older databases fall back safely.
-			return { content: '', updatedAt: 0 };
-		}
-	}
-
-	function setQuickNote(content: string): QuickNote {
-		const next = String(content ?? '').slice(0, QUICK_NOTE_MAX);
-		const updatedAt = Date.now();
-		db.prepare(
-			`INSERT INTO quick_note (id, content, updated_at) VALUES (1, ?, ?)
-			 ON CONFLICT (id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`
-		).run(next, updatedAt);
-		return { content: next, updatedAt };
 	}
 
 	// --- Library ------------------------------------------------------------
@@ -1733,27 +1665,6 @@ export function createJournal(db: SqlDb) {
 		return (db
 			.prepare('SELECT COUNT(*) AS c FROM note_tags WHERE tag = ?')
 			.get(tag.trim().toLowerCase()) as { c: number }).c;
-	}
-
-	/** Notes without an embedding, newest first. The indexing pass uses this
-	 *  instead of loading the whole table and every vector. */
-	function notesMissingVectors(limit = 25): string[] {
-		const rows = db
-			.prepare(
-				`SELECT n.id FROM notes n
-				 LEFT JOIN note_vectors v ON v.note_id = n.id
-				 WHERE v.note_id IS NULL
-				 ORDER BY n.created_at DESC LIMIT ?`
-			)
-			.all(limit) as unknown as { id: string }[];
-		return rows.map((r) => r.id);
-	}
-
-	function notesBetween(from: number, to: number): Note[] {
-		const rows = db
-			.prepare('SELECT * FROM notes WHERE created_at >= ? AND created_at <= ? ORDER BY created_at ASC')
-			.all(from, to) as unknown as NoteRow[];
-		return withTags(rows);
 	}
 
 	/** Replace a note's tags. Passing an empty array clears them. */
@@ -5312,53 +5223,6 @@ export function createJournal(db: SqlDb) {
 		return true;
 	}
 
-	function setVector(noteId: string, vector: Float32Array): void {
-		const buf = new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength);
-		db.prepare(
-			`INSERT INTO note_vectors (note_id, vector) VALUES (?, ?)
-			 ON CONFLICT(note_id) DO UPDATE SET vector = excluded.vector`
-		).run(noteId, buf);
-	}
-
-	function allVectors(): { noteId: string; vector: Float32Array }[] {
-		const rows = db
-			.prepare('SELECT note_id, vector FROM note_vectors')
-			.all() as unknown as { note_id: string; vector: unknown }[];
-		return rows.map((r) => {
-			const bytes = toBytes(r.vector);
-			// Copy into a fresh buffer: the engine's memory is not guaranteed to
-			// survive the next statement, and the view may not be 4-byte aligned.
-			const copy = bytes.slice();
-			return { noteId: r.note_id, vector: new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4) };
-		});
-	}
-
-	/** Sanitize free-form text into a safe FTS5 phrase OR-query: keep only
-	 * word tokens of 3+ letters and quote each so punctuation cannot become
-	 * query syntax (FTS5 throws on `?`, `"`, `*`, `:`, …). Returns '' if
-	 * nothing usable remains. */
-	function ftsSafe(query: string): string {
-		const terms = query
-			.split(/[^a-z0-9]+/i)
-			.map((t) => t.replace(/"/g, '""'))
-			.filter((t) => t.length > 2)
-			.map((t) => `"${t}"`);
-		return terms.length ? terms.join(' OR ') : '';
-	}
-
-	function ftsCandidateIds(content: string, limit = 200): { noteId: string; bm25: number }[] {
-		const match = ftsSafe(content);
-		if (!match) return [];
-		const rows = db
-			.prepare(
-				`SELECT note_id, bm25(notes_fts) AS score
-				 FROM notes_fts WHERE notes_fts MATCH ? ORDER BY score LIMIT ?`
-			)
-			.all(match, limit) as unknown as { note_id: string; score: number }[];
-		const min = rows.length ? Math.min(...rows.map((r) => r.score)) : 0;
-		return rows.map((r) => ({ noteId: r.note_id, bm25: min - r.score }));
-	}
-
 	/** Case-insensitive substring search for the global palette.
 	 *
 	 *  Notes have FTS, but tasks and principles do not. One `LIKE` model for
@@ -5500,47 +5364,6 @@ export function createJournal(db: SqlDb) {
 
 	function countNotes(): number {
 		return (db.prepare('SELECT COUNT(*) AS c FROM notes').get() as { c: number }).c;
-	}
-
-	function latestTimestamp(): number {
-		const r = db.prepare('SELECT MAX(created_at) AS m FROM notes').get() as { m: number | null };
-		return r.m ?? 0;
-	}
-
-	function getWeeklyRecap(weekKey: string): { content: string } | null {
-		const r = db.prepare('SELECT content FROM weekly_recaps WHERE week_key = ?').get(weekKey) as
-			| { content: string }
-			| undefined;
-		return r ?? null;
-	}
-
-	function saveWeeklyRecap(weekKey: string, content: string): void {
-		const now = Date.now();
-		db.prepare(
-			`INSERT INTO weekly_recaps (week_key, content, created_at, updated_at)
-			 VALUES (?, ?, ?, ?)
-			 ON CONFLICT(week_key) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`
-		).run(weekKey, content, now, now);
-	}
-
-	function insertAsk(question: string, answer: string, sourcesJson: string): string {
-		const id = crypto.randomUUID();
-		db.prepare(
-			`INSERT INTO ask_history (id, question, answer, sources, created_at)
-			 VALUES (?, ?, ?, ?, ?)`
-		).run(id, question, answer, sourcesJson, Date.now());
-		return id;
-	}
-
-	function listAsks(): Ask[] {
-		const rows = db
-			.prepare('SELECT id, question, answer, sources, created_at FROM ask_history ORDER BY created_at DESC, id DESC')
-			.all() as unknown as AskRow[];
-		return rows.map(rowToAsk);
-	}
-
-	function deleteAsk(id: string): boolean {
-		return db.prepare('DELETE FROM ask_history WHERE id = ?').run(id).changes > 0;
 	}
 
 	// --- Time tracker ----------------------------------------------------
@@ -5853,8 +5676,6 @@ export function createJournal(db: SqlDb) {
 		listNotesPage,
 		listNotesLinkingTo,
 		countNotesByTag,
-		notesMissingVectors,
-		notesBetween,
 		setNoteTags,
 		removeNoteTag,
 		setNoteFeatured,
@@ -5864,17 +5685,8 @@ export function createJournal(db: SqlDb) {
 		getNotePhoto,
 		setNoteVideo,
 		setNoteTitle,
-		setVector,
-		allVectors,
-		ftsCandidateIds,
 		searchJournal,
 		countNotes,
-		latestTimestamp,
-		getWeeklyRecap,
-		saveWeeklyRecap,
-		insertAsk,
-		listAsks,
-		deleteAsk,
 		getRunningTimeEntry,
 		listTimeEntries,
 		listTimeEntriesByTag,
@@ -5887,8 +5699,6 @@ export function createJournal(db: SqlDb) {
 		setPublicConfig,
 		getAdminConfig,
 		setAdminConfig,
-		getQuickNote,
-		setQuickNote,
 		listBooks,
 		getBook,
 		getBookBytes,

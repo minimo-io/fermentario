@@ -22,8 +22,6 @@ export const getNote = bind('getNote');
 export const listNotesPage = bind('listNotesPage');
 export const listNotesLinkingTo = bind('listNotesLinkingTo');
 export const countNotesByTag = bind('countNotesByTag');
-export const notesMissingVectors = bind('notesMissingVectors');
-export const notesBetween = bind('notesBetween');
 export const setNoteTags = bind('setNoteTags');
 export const removeNoteTag = bind('removeNoteTag');
 export const setNoteFeatured = bind('setNoteFeatured');
@@ -33,17 +31,8 @@ export const removeNoteCover = bind('removeNoteCover');
 export const getNotePhoto = bind('getNotePhoto');
 export const setNoteVideo = bind('setNoteVideo');
 export const setNoteTitle = bind('setNoteTitle');
-export const setVector = bind('setVector');
-export const allVectors = bind('allVectors');
-export const ftsCandidateIds = bind('ftsCandidateIds');
 export const searchJournal = bind('searchJournal');
 export const countNotes = bind('countNotes');
-export const latestTimestamp = bind('latestTimestamp');
-export const getWeeklyRecap = bind('getWeeklyRecap');
-export const saveWeeklyRecap = bind('saveWeeklyRecap');
-export const insertAsk = bind('insertAsk');
-export const listAsks = bind('listAsks');
-export const deleteAsk = bind('deleteAsk');
 export const getRunningTimeEntry = bind('getRunningTimeEntry');
 export const listTimeEntries = bind('listTimeEntries');
 export const listTimeEntriesByTag = bind('listTimeEntriesByTag');
@@ -56,8 +45,6 @@ export const getPublicConfig = bind('getPublicConfig');
 export const setPublicConfig = bind('setPublicConfig');
 export const getAdminConfig = bind('getAdminConfig');
 export const setAdminConfig = bind('setAdminConfig');
-export const getQuickNote = bind('getQuickNote');
-export const setQuickNote = bind('setQuickNote');
 export const listBooks = bind('listBooks');
 export const getBook = bind('getBook');
 export const getBookBytes = bind('getBookBytes');
@@ -182,8 +169,6 @@ export type {
 	NoteRow,
 	NoteCursor,
 	NotePage,
-	AskRow,
-	Ask,
 	TodoGroup,
 	TodoItem,
 	TodoProgressItem,

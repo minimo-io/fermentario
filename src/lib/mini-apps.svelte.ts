@@ -1,8 +1,8 @@
 import type { Component } from 'svelte';
 import { goto } from '$app/navigation';
 import Timer from '@lucide/svelte/icons/timer';
-import NotebookPen from '@lucide/svelte/icons/notebook-pen';
-import { quickNote } from '$lib/quick-note.svelte';
+import SquarePen from '@lucide/svelte/icons/square-pen';
+import { newNote } from '$lib/new-note.svelte';
 
 export interface MiniAppDef {
 	id: string;
@@ -43,12 +43,12 @@ function writeUsage(value: Record<string, Usage>) {
 
 export const MINI_APPS: MiniAppDef[] = [
 	{
-		id: 'quick-note',
-		label: 'Quick note',
-		description: 'Scratchpad, saved on this device.',
+		id: 'new-note',
+		label: 'New note',
+		description: 'Write in the journal from any page.',
 		kind: 'modal',
-		shortcut: ['Mod', 'Shift', 'K'],
-		icon: NotebookPen
+		shortcut: ['Mod', 'Shift', 'L'],
+		icon: SquarePen
 	},
 	{
 		id: 'time-tracker',
@@ -92,7 +92,10 @@ class MiniAppsStore {
 
 	orderedApps(): MiniAppDef[] {
 		const usage = this.usage;
-		return [...MINI_APPS].sort((a, b) => {
+		return [...MINI_APPS]
+			.sort((a, b) => {
+			if (a.id === 'new-note') return -1;
+			if (b.id === 'new-note') return 1;
 			const au = usage[a.id];
 			const bu = usage[b.id];
 			const ac = au?.count ?? 0;
@@ -123,7 +126,10 @@ export function openMiniApp(app: MiniAppDef) {
 	miniApps.recordUse(app.id);
 	miniApps.closeModal();
 	if (app.kind === 'modal') {
-		if (app.id === 'quick-note') void quickNote.openModal();
+		if (app.id === 'new-note') {
+			newNote.openModal();
+			return;
+		}
 		return;
 	}
 	if (app.href) void goto(app.href);

@@ -6,13 +6,8 @@
 	import { setContext } from 'svelte';
 	import { APP_KEY, type AppContext } from '$lib/app-context';
 	import type { Note } from '$lib/types';
-	import type { AskEntry, AskSource } from '$lib/types';
-	import Composer from '$lib/components/Composer.svelte';
 	import Settings from '@lucide/svelte/icons/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from '$lib/chat-models';
-	import { isAppleDevice } from '$lib/platform';
-	import { splitHashtags } from '$lib/hashtags';
 	import { NotePager } from '$lib/note-pager.svelte';
 	import { loading } from '$lib/loading.svelte';
 	import { nostrAccount } from '$lib/nostr.svelte';
@@ -23,12 +18,10 @@
 	import { showToast } from '$lib/toast.svelte';
 	import { invalidateTagChoices } from '$lib/tag-suggest';
 	import { tagColors } from '$lib/tag-colors.svelte';
-	import { clearDraft, loadDraft, saveDraft } from '$lib/draft';
 	import RestoreOverlay from '$lib/components/RestoreOverlay.svelte';
 	import Grid3x3 from '@lucide/svelte/icons/grid-3x3';
 	import House from '@lucide/svelte/icons/house';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Quote from '@lucide/svelte/icons/quote';
 	import Search from '@lucide/svelte/icons/search';
 	import Tags from '@lucide/svelte/icons/tags';
@@ -42,13 +35,13 @@
 	import { fmtCurrency } from '$lib/currency';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { AdminConfig, Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
-	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId, type View } from '$lib/sections';
+	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId } from '$lib/sections';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
 
 	// The market rail belongs to the section views. Heatmaps, tags, a single
-	// note or task, Ask and Diagnostics open without investment numbers.
+	// note or task and Diagnostics open without investment numbers.
 	const MARKET_SECTIONS = new Set([
 		'/admin/notes',
 		'/admin/todo',
@@ -65,15 +58,11 @@
 	let heatmapLoading = $derived(navigating.to?.url.pathname === '/admin/heatmap');
 	let tagsLoading = $derived(navigating.to?.url.pathname === '/admin/tags');
 
-	let summaryLoading = $state(false);
-	let week = $state<string | null>(null);
-	let dismissed = $state(true);
-	let saving = $state(false);
 let showSettings = $state(false);
-let settingsTab = $state<'general' | 'models' | 'trading' | 'nostr' | 'database'>('general');
+let settingsTab = $state<'general' | 'trading' | 'nostr' | 'database'>('general');
 type Lang = 'en' | 'es' | 'pt';
-type LangConfig = { modelLang: Lang; entriesLang: Lang; chatModel: string; summaryPrompt: string; sections: string[]; contentWidth: string; theme: Theme };
-const DEFAULT_CONFIG: LangConfig = { modelLang: 'en', entriesLang: 'en', chatModel: DEFAULT_CHAT_MODEL_ID, summaryPrompt: '', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH, theme: DEFAULT_THEME };
+type LangConfig = { entriesLang: Lang; sections: string[]; contentWidth: string; theme: Theme };
+const DEFAULT_CONFIG: LangConfig = { entriesLang: 'en', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH, theme: DEFAULT_THEME };
 let config = $state<LangConfig>(DEFAULT_CONFIG);
 function saveConfig(p: Partial<LangConfig>) {
 	config = { ...config, ...p };
@@ -91,25 +80,6 @@ async function saveMotto(value: string): Promise<void> {
 	if (!d?.adminConfig) throw new Error('Failed to save the reminder.');
 	adminConfig = d.adminConfig;
 }
-function langTag(p: Lang): string {
-	return p === 'es' ? 'es-ES' : p === 'pt' ? 'pt-PT' : 'en-US';
-}
-	let reading = $state(false);
-	let utterance: SpeechSynthesisUtterance | null = null;
-	let summaryTimer: ReturnType<typeof setTimeout>;
-	let summaryEpoch = 0;
-
-	const NO_STATE = new Set(['', 'dismissed']);
-	let weekLoading = $state(false);
-	let weekErr = '';
-	let question = $state('');
-	let answering = $state(false);
-	let answerStopped = $state(false);
-	let askAbort: AbortController | null = null;
-	let answer = $state('');
-	let answerSources = $state<AskSource[]>([]);
-	let lastQuestion = $state('');
-	let asks = $state<AskEntry[]>([]);
 	const pager = new NotePager();
 	pager.featured = 'exclude';
 	let notes = $derived(pager.notes);
@@ -134,20 +104,15 @@ function langTag(p: Lang): string {
 	 *  header. The route stays under /admin; only the chrome opts out. */
 	const bareReader = $derived(page.url.pathname.startsWith('/admin/book/'));
 
-	let lastSection = $state<SectionId>('notes');
 	/** The URL is the section: no view state, no sessionStorage to restore.
 	 *  A route that is not a section (for example /admin/diagnostics) must
 	 *  return null instead of falling back to Notes: a false
 	 *  fallback selects the Notes pill and shows its composer on another page. */
-	const section = $derived.by((): View | null => {
+	const section = $derived.by((): SectionId | null => {
 		const parts = page.url.pathname.split('/');
 		const seg = (parts[1] === 'admin' ? (parts[2] ?? '') : (parts[1] ?? '')).toLowerCase();
-		if (seg === 'ask') return 'ask';
 		const ids = SECTIONS.map((s) => s.id);
 		return (ids as string[]).includes(seg) ? (seg as SectionId) : null;
-	});
-	$effect(() => {
-		if (section !== 'ask' && section !== null) lastSection = section;
 	});
 	const orderedSections = $derived(
 		sanitizeSectionOrder(config.sections)
@@ -157,22 +122,11 @@ function langTag(p: Lang): string {
 	const fixedSections = $derived(
 		FIXED_SECTIONS.map((id) => SECTIONS.find((s) => s.id === id)).filter((s) => s !== undefined)
 	);
-	/** The composer only knows notes vs ask. Every other section uses note mode. */
-	const composerView = $derived(section === 'ask' ? 'ask' : 'notes');
 	const contentClass = $derived(contentWidthClass(config.contentWidth));
 	function selectSection(id: SectionId) {
 		void goto(`/admin/${id}`);
 	}
-	function toggleAsk() {
-		if (section === 'ask') void goto(`/admin/${lastSection}`);
-		else {
-			if (section) lastSection = section;
-			void goto('/admin/ask');
-		}
-	}
-	let apple = $state(false);
 	onMount(() => {
-		apple = isAppleDevice();
 		// The global New note command can fire from any page. When the notes
 		// timeline is mounted, put the saved row in place without a reload.
 		const onNoteCreated = (e: Event) => {
@@ -188,8 +142,8 @@ function langTag(p: Lang): string {
 	// Section shortcuts are a two-key sequence: `G` then `1…5`, with an
 	// 800 ms pending window. Modifier chords are out: Ctrl/⌘ + digits belong
 	// to the browser tab bar and collide with macOS screen capture, so a
-	// sequence is the safe option here. Ctrl/⌘ + Shift + L still focuses the
-	// composer. The hints live in the config Sections list, not on the pills.
+	// sequence is the safe option here. New-note shortcuts are handled in the
+	// root layout.
 	let pendingSectionKey = $state(false);
 	let pendingSectionTimer: ReturnType<typeof setTimeout> | undefined;
 	function handleViewShortcut(e: KeyboardEvent) {
@@ -208,23 +162,11 @@ function langTag(p: Lang): string {
 			}
 			return;
 		}
-		if (e.metaKey || e.ctrlKey) {
-			if (!e.shiftKey || e.altKey) return;
-			if (showSettings) return;
-			if (e.key === 'l' || e.key === 'L') focusComposer();
-			return;
-		}
+		if (e.metaKey || e.ctrlKey) return;
 		if (!e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'G')) {
 			pendingSectionKey = true;
 			pendingSectionTimer = setTimeout(() => (pendingSectionKey = false), 800);
 		}
-	}
-
-	function focusComposer() {
-		const el = document.getElementById('composer-field');
-		if (!(el instanceof HTMLTextAreaElement)) return;
-		el.focus();
-		el.setSelectionRange(el.value.length, el.value.length);
 	}
 
 	let restoreName = $state('');
@@ -235,8 +177,6 @@ function langTag(p: Lang): string {
 	type RestoreCounts = {
 		notes: number;
 		tags: number;
-		recaps: number;
-		asks: number;
 		todoGroups: number;
 		todoItems: number;
 		principles: number;
@@ -295,13 +235,6 @@ function langTag(p: Lang): string {
 		restoreName = file.name;
 		restoreError = '';
 		restorePhase = 'uploading';
-		// The recap belongs to the journal that is being replaced. Drop it and
-		// ignore any summary response that started before the import.
-		summaryEpoch += 1;
-		clearTimeout(summaryTimer);
-		summaryLoading = false;
-		week = null;
-		dismissed = true;
 		const started = Date.now();
 		restoreElapsed = 0;
 		restoreTimer = setInterval(() => (restoreElapsed = Math.floor((Date.now() - started) / 1000)), 1000);
@@ -339,15 +272,10 @@ function langTag(p: Lang): string {
 				}
 			}
 			await pager.open();
-			await loadAsks();
 			await tagColors.reload();
 			invalidateTagChoices();
-			// The import already copied weekly_recaps and cleared the server
-			// memo. Refresh silently: forcing here regenerated the recap and
-			// re-opened the hidden weekly card.
-			refreshSummaryAnswer(false, null, false);
 			showToast(
-				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.holdings ?? 0} holdings, ${counts?.goals ?? 0} goals, ${counts?.stocks ?? 0} stock items, ${counts?.books ?? 0} books, ${counts?.recaps ?? 0} recaps, ${counts?.asks ?? 0} questions.`,
+				`Journal restored — ${counts?.notes ?? 0} notes, ${counts?.todoItems ?? 0} tasks, ${counts?.principles ?? 0} principles, ${counts?.holdings ?? 0} holdings, ${counts?.goals ?? 0} goals, ${counts?.stocks ?? 0} stock items, ${counts?.books ?? 0} books.`,
 				'success'
 			);
 			setTimeout(closeRestore, 2500);
@@ -358,9 +286,6 @@ function langTag(p: Lang): string {
 			restoreTimer = undefined;
 		}
 	}
-	let text = $state('');
-	let listening = $state(false);
-
 	$effect(() => {
 		loadNotes();
 		void loadFeatured();
@@ -369,15 +294,9 @@ function langTag(p: Lang): string {
 		// The strip owns its own 60-second reload and goal alerts, so the
 		// collapsed Trading section still shows its totals.
 		tradingStrip.start();
-		refreshSummaryAnswer(true, null, false);
-		void loadAsks();
 		void nostrAccount.load();
 		void timeTracker.load();
 		miniApps.loadUsage();
-		// Restore the unsaved composer text after SPA navigation or a reload.
-		const draft = loadDraft();
-		text = draft.note;
-		question = draft.ask;
 	});
 
 	// The backup runs on page load when an account exists, and the moment one is
@@ -417,13 +336,10 @@ function langTag(p: Lang): string {
 	if (!raw) return;
 	try {
 		const p = JSON.parse(raw) as Partial<LangConfig>;
-		if ((p.modelLang === 'en' || p.modelLang === 'es' || p.modelLang === 'pt') && (p.entriesLang === 'en' || p.entriesLang === 'es' || p.entriesLang === 'pt')) {
+		if (p.entriesLang === 'en' || p.entriesLang === 'es' || p.entriesLang === 'pt') {
 			const theme = sanitizeTheme(p.theme);
 			config = {
-				modelLang: p.modelLang as Lang,
 				entriesLang: p.entriesLang as Lang,
-				chatModel: typeof p.chatModel === 'string' && CHAT_MODELS.some((m) => m.id === p.chatModel) ? p.chatModel : DEFAULT_CHAT_MODEL_ID,
-				summaryPrompt: typeof p.summaryPrompt === 'string' ? p.summaryPrompt : '',
 					sections: sanitizeSectionOrder(p.sections),
 					contentWidth: sanitizeContentWidth(p.contentWidth),
 					theme
@@ -498,13 +414,6 @@ function langTag(p: Lang): string {
 	function handleCover(n: Note, coverId: string | null) {
 		pager.patch({ ...n, coverId });
 		featured = featured.map((f) => (f.id === n.id ? { ...f, coverId } : f));
-	}
-
-	async function loadAsks() {
-		try {
-			const d = await (await loading.track(fetch('/api/asks'))).json();
-			asks = Array.isArray(d.asks) ? d.asks : [];
-		} catch {}
 	}
 
 	let holdings = $state<HoldingsSummary | null>(null);
@@ -718,102 +627,12 @@ function langTag(p: Lang): string {
 		}
 	}
 
-	function refreshSummaryAnswer(force: boolean, keepAnswer: string | null, withLoading: boolean) {clearTimeout(summaryTimer);
-		const epoch = summaryEpoch;
-		if (withLoading) summaryLoading = true;
-		summaryTimer = setTimeout(async () => {
-			const started = performance.now();
-			const custom = config.summaryPrompt.trim();
-			try {
-				const d = await (await fetch('/api/summary?' + (force ? 'rf=1&' : '') + 'lang=' + config.modelLang + '&model=' + config.chatModel + (custom ? '&prompt=' + encodeURIComponent(custom) : ''), { headers: {} })).json();
-				if (epoch !== summaryEpoch) return;
-				const rest = withLoading ? Math.max(0, 900 - (performance.now() - started)) : 0;
-				if (rest > 0) await new Promise((r) => setTimeout(r, rest));
-				if (epoch !== summaryEpoch) return;
-				week = d.exists ? d.week : null;
-				if (withLoading && d.exists) dismissed = false;
-			} catch {
-				// fall through to finally
-			} finally {
-				if (epoch === summaryEpoch) {
-					summaryLoading = false;
-					weekLoading = false;
-				}
-			}
-		}, force ? 0 : 500);
-	}
-
-	function readWeekly() {
-		if (!week || reading || reading) return;
-		reading = true;
-		utterance = new SpeechSynthesisUtterance(week);
-		utterance.rate = 0.95;
-		utterance.lang = langTag(config.modelLang);
-		utterance.onend = () => (reading = false);
-		window.speechSynthesis.speak(utterance);
-	}
-	function dismissWeekly() {
-		dismissed = true;
-		reading = false;
-		window.speechSynthesis.cancel();
-	}
-
-	function handleNote(cd: string, createdAt?: number) {
-		if (!cd.trim() || NO_STATE.has(cd)) return;
-		if (!page.url.pathname.startsWith('/admin/notes')) void goto('/admin/notes');
-		saving = true;
-		const { content, tags } = splitHashtags(cd);
-		if (!content) {
-			saving = false;
-			showToast('A note needs text besides its hashtags.');
-			return;
-		}
-		const now = Date.now();
-		const stamp = createdAt && Number.isFinite(createdAt) ? Math.min(createdAt, now) : now;
-		const last = pager.notes[pager.notes.length - 1];
-		// A backdated note outside the loaded cursor range is stored, but it
-		// must not jump into a gap the pager has not fetched yet.
-		const fitsLoadedPage = !last || !pager.hasMore || stamp >= last.created_at;
-		const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		if (fitsLoadedPage) {
-			pager.insertSorted({ id: tempId, content, created_at: stamp, updated_at: stamp, tags, pending: true });
-		}
-		fetch('/api/notes', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ content: cd, created_at: stamp })
-		})
-			.then(async (r) => {
-				const d = await r.json();
-				if (!r.ok) throw new Error(d?.error ?? 'Failed to save note.');
-				const saved: Note = d.note;
-				// The card is still listed under the temp id, so it must be
-				// swapped, not patched by the server id.
-				pager.replace(tempId, saved);
-				if (!fitsLoadedPage) showToast('Note saved. Scroll down to find it.', 'success');
-				else showToast('Note saved.', 'success');
-				clearDraft();
-				invalidateTagChoices();
-				refreshSummaryAnswer(false, null, false);
-				setTimeout(() => {
-					if (!notes.some((n) => n.pending)) void pager.sync().catch(() => {});
-				}, 4000);
-			})
-			.catch((e) => {
-				pager.remove(tempId);
-				text = cd;
-				showToast((e as Error)?.message ?? 'Failed to save note.');
-			})
-			.finally(() => (saving = false));
-	}
-
 	function handleDelete(id: string) {
 		loading.track(fetch(`/api/notes/${id}`, { method: 'DELETE' }))
 			.then((r) => r.json())
 			.then(() => {
 				pager.remove(id);
 				featured = featured.filter((f) => f.id !== id);
-				refreshSummaryAnswer(false, null, false);
 			})
 			.catch((e) => showToast((e as Error)?.message ?? 'Failed to delete note.'));
 	}
@@ -860,129 +679,10 @@ function langTag(p: Lang): string {
 			.map((f) => (f.id === note.id ? note : f))
 			.sort((a, b) => b.created_at - a.created_at);
 		invalidateTagChoices();
-		refreshSummaryAnswer(false, null, false);
-	}
-
-	async function handleAsk(q: string) {
-		if (!q.trim()) return;
-		if (page.url.pathname !== '/admin/ask') void goto('/admin/ask');
-		answering = true;
-		answerStopped = false;
-		lastQuestion = q;
-		answer = '';
-		answerSources = [];
-		const controller = new AbortController();
-		askAbort = controller;
-		try {
-			const res = await fetch('/api/chat', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ question: q, history: [] }),
-				signal: controller.signal
-			});
-			if (!res.ok || !res.body) throw new Error(`Ask failed (HTTP ${res.status})`);
-			const reader = res.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = '';
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				buffer += decoder.decode(value, { stream: true });
-				const events = buffer.split('\n\n');
-				buffer = events.pop() ?? '';
-				for (const e of events) {
-					for (const line of e.split('\n')) {
-						if (!line.startsWith('data: ')) continue;
-					const data = JSON.parse(line.slice(6)) as { t?: string; error?: string; done?: boolean; full?: string; entryId?: string; sources?: AskSource[] };
-					if (data.t) answer += data.t;
-					else if (data.error) throw new Error(String(data.error));
-					else if (data.done) {
-						if (data.sources) answerSources = data.sources;
-						const finalText = (data.full ?? answer).trim();
-						if (data.entryId && finalText) {
-							// Newest first, like the notes timeline.
-							asks = [{
-								id: data.entryId,
-								question: q,
-								answer: finalText,
-								sources: data.sources ?? [],
-								created_at: Date.now()
-							} as AskEntry, ...asks];
-							// The saved card is now the single source of truth. Leaving
-							// `answer` set would render the same Q&A twice: once from
-							// `asks` and once from the live block.
-							answer = '';
-							answerSources = [];
-							lastQuestion = '';
-							clearDraft();
-						} else {
-							// Nothing was persisted, so keep the live card visible.
-							answer = finalText;
-						}
-					}
-					}
-				}
-			}
-		} catch (e) {
-			if (answerStopped) return;
-			console.error('Ask failed:', e);
-			answer = 'Something went wrong asking the archive.';
-		} finally {
-			answering = false;
-			askAbort = null;
-		}
-	}
-
-	function stopAsk() {
-		if (!askAbort) return;
-		answerStopped = true;
-		answering = false;
-		askAbort.abort();
-		askAbort = null;
-	}
-
-	async function handleDeleteAsk(id: string) {
-		asks = asks.filter((a) => a.id !== id);
-		try {
-			await fetch(`/api/asks/${encodeURIComponent(id)}`, { method: 'DELETE' });
-		} catch {}
-	}
-
-	function onListenIm(on: boolean) {
-		listening = on;
-	}
-
-	function handleAskWeeklyRead() {
-		if (week && !reading) readWeekly();
-		else dismissWeekly();
-	}
-
-	// ensure fallback placeholder fns round out props
-	function onQuestionIm(q2: string) {
-		question = q2;
-		saveDraft({ note: text, ask: q2 });
-	}
-	function onTextIm(t2: string) {
-		text = t2;
-		saveDraft({ note: t2, ask: question });
 	}
 
 	setContext(APP_KEY, {
 		notes: {
-			get week() {
-				return week;
-			},
-			get dismissed() {
-				return dismissed;
-			},
-			get summaryLoading() {
-				return summaryLoading;
-			},
-			get reading() {
-				return reading;
-			},
-			onReadWeekly: handleAskWeeklyRead,
-			onDismissWeekly: dismissWeekly,
 			get featured() {
 				return featured;
 			},
@@ -1006,27 +706,6 @@ function langTag(p: Lang): string {
 			onPublishNote: handlePublish,
 			onCoverNote: handleCover,
 			onRemoveTag: removeTag
-		},
-		ask: {
-			get asks() {
-				return asks;
-			},
-			get lastQuestion() {
-				return lastQuestion;
-			},
-			get answer() {
-				return answer;
-			},
-			get answerSources() {
-				return answerSources;
-			},
-			get answering() {
-				return answering;
-			},
-			get answerStopped() {
-				return answerStopped;
-			},
-			onDeleteAsk: handleDeleteAsk
 		},
 		display: {
 			get lang() {
@@ -1055,7 +734,7 @@ function langTag(p: Lang): string {
 	{@render children()}
 {:else}
 	<div
-		class="mx-auto min-w-0 overflow-x-hidden {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(var(--composer-h,4.5rem)+2.5rem)] sm:px-6"
+		class="mx-auto min-w-0 overflow-x-hidden {contentClass} px-2 pt-[max(1rem,env(safe-area-inset-top))] pb-24 sm:px-6"
 	>
 		<TimeTrackerBar widthClass={contentClass} />
 		<header class="mb-5">
@@ -1063,12 +742,6 @@ function langTag(p: Lang): string {
 				<a href="/admin/heatmap" aria-disabled={heatmapLoading} aria-busy={heatmapLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {heatmapLoading ? 'pointer-events-none opacity-40' : ''}">{#if heatmapLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Grid3x3 class="h-3.5 w-3.5" />{/if} Heatmaps</a>
 				<a href="/admin/tags" aria-disabled={tagsLoading} aria-busy={tagsLoading} class="inline-flex items-center gap-1 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-1 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 {tagsLoading ? 'pointer-events-none opacity-40' : ''}">{#if tagsLoading}<LoaderCircle class="h-3.5 w-3.5 animate-spin" />{:else}<Tags class="h-3.5 w-3.5" />{/if} Tags</a>
 				<span class="ml-auto inline-flex items-center gap-2">
-					<button
-						type="button"
-						class="inline-flex items-center gap-1 rounded-full bg-stone-900 dark:bg-stone-700 px-3 py-1 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600"
-						aria-label={section === 'ask' ? 'Close Ask' : 'Ask the archive'}
-						onclick={toggleAsk}
-					>{#if section === 'ask'}<span aria-hidden="true">×</span> Close{:else}<MessageCircle class="h-3.5 w-3.5" /> Ask{/if}</button>
 					<a
 						href="/"
 						class="grid h-7 w-7 place-items-center rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
@@ -1142,7 +815,7 @@ function langTag(p: Lang): string {
 			<SectionBar
 				sections={orderedSections}
 				fixed={fixedSections}
-				active={section === 'ask' ? lastSection : section}
+				active={section}
 				onSelect={selectSection}
 				onReorder={(ids) => saveConfig({ sections: ids })}
 			/>
@@ -1183,52 +856,18 @@ function langTag(p: Lang): string {
 			/>
 		{/if}
 
-		{#if section === 'notes' || section === 'ask'}
-		<Composer
-			onNote={handleNote}
-			onAsk={handleAsk}
-			onStop={stopAsk}
-			view={composerView}
-			{listening} onListen={onListenIm}
-			{question} onQuestion={onQuestionIm}
-			{answering}
-			{text} onText={onTextIm}
-			{saving}
-			lang={config.entriesLang}
-			{apple}
-			widthClass={contentClass}
-		/>
-		{/if}
-
 		{#if showSettings}
 			<SettingsModal
-				modelLang={config.modelLang}
 				entriesLang={config.entriesLang}
 				motto={adminConfig.motto}
 				onSaveMotto={saveMotto}
 				contentWidth={sanitizeContentWidth(config.contentWidth)}
 				sections={orderedSections}
 				theme={config.theme}
-				{summaryLoading}
-				{week}
 				tab={settingsTab}
 				onTab={(t) => (settingsTab = t)}
 				onClose={() => (showSettings = false)}
-				onRerun={() => { void refreshSummaryAnswer(true, null, true); }}
-				model={config.chatModel}
-				models={CHAT_MODELS}
-				prompt={config.summaryPrompt}
-				onPromptChange={(value) => saveConfig({ summaryPrompt: value })}
-				onModelChange={(id) => {
-					saveConfig({ chatModel: id });
-					void fetch('/api/status', {
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ kind: 'chatModel', id })
-					});
-				}}
 				onSaveLanguages={(p) => saveConfig(p)}
-				onModelLang={(v) => saveConfig({ modelLang: v })}
 				onWidth={(w) => saveConfig({ contentWidth: w })}
 				onSections={(ids) => saveConfig({ sections: ids })}
 				onTheme={(t) => saveConfig({ theme: t })}

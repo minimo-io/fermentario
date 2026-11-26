@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { linkQueryAt, insertNoteLink } from '$lib/note-links';
 	import type { SearchHit } from '$lib/search';
 
@@ -14,8 +15,8 @@
 	type Props = {
 		textarea: HTMLTextAreaElement | null;
 		excludeId?: string;
-		/** The composer sits at the bottom, so its list opens upward. Panels
-		 *  near the top of a dialog need it below the field instead. */
+		/** Preferred side of the field. The finder flips when that side has
+		 *  less room in the viewport. */
 		placement?: 'above' | 'below';
 	};
 	let { textarea, excludeId, placement = 'above' }: Props = $props();
@@ -25,6 +26,8 @@
 	let results = $state<{ id: string; text: string; kind: string }[]>([]);
 	let sel = $state(0);
 	let searching = $state(false);
+	let popup = $state<HTMLDivElement | null>(null);
+	let popupStyle = $state('');
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let seq = 0;
 
@@ -34,7 +37,49 @@
 		results = [];
 		sel = 0;
 		searching = false;
+		popupStyle = '';
 	}
+
+	function positionPopup() {
+		const field = textarea;
+		const menu = popup;
+		if (!field || !menu || !open) return;
+
+		const rect = field.getBoundingClientRect();
+		const edge = 8;
+		const gap = 8;
+		const above = Math.max(0, rect.top - edge - gap);
+		const below = Math.max(0, window.innerHeight - rect.bottom - edge - gap);
+		const preferBelow = placement === 'below';
+		const useBelow = preferBelow
+			? below >= Math.min(menu.scrollHeight, 160) || below >= above
+			: above < Math.min(menu.scrollHeight, 160) && below > above;
+		const available = useBelow ? below : above;
+		const width = Math.min(rect.width, window.innerWidth - edge * 2);
+		const left = Math.max(edge, Math.min(rect.left, window.innerWidth - width - edge));
+		const height = Math.min(menu.scrollHeight, available, 280);
+		const top = useBelow ? rect.bottom + gap : Math.max(edge, rect.top - gap - height);
+
+		popupStyle = `position:fixed;left:${left}px;top:${top}px;width:${width}px;max-height:${height}px`;
+	}
+
+	$effect(() => {
+		if (!open || !textarea) return;
+		void results;
+		void searching;
+		void tick().then(positionPopup);
+
+		const updatePosition = () => positionPopup();
+		window.addEventListener('resize', updatePosition);
+		window.addEventListener('scroll', updatePosition, true);
+		const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition);
+		if (popup) observer?.observe(popup);
+		return () => {
+			window.removeEventListener('resize', updatePosition);
+			window.removeEventListener('scroll', updatePosition, true);
+			observer?.disconnect();
+		};
+	});
 
 	function recheck() {
 		const el = textarea;
@@ -154,7 +199,9 @@
 
 {#if open}
 	<div
-		class="absolute right-0 left-0 z-30 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl {placement === 'below' ? 'top-full mt-2' : 'bottom-full mb-2'}"
+		bind:this={popup}
+		style={popupStyle}
+		class="z-50 overflow-y-auto rounded-xl border border-stone-200 bg-white shadow-xl dark:border-stone-800 dark:bg-stone-900"
 		role="listbox"
 		aria-label="Link a note"
 	>

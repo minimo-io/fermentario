@@ -60,7 +60,6 @@ async function start(dataDir) {
 			BODY_SIZE_LIMIT: '110M',
 			TZ: 'UTC',
 			FERMENTARIO_DATA_DIR: dataDir,
-			FERMENTARIO_MODEL_CACHE: join(dataDir, 'models'),
 			NODE_OPTIONS: `--import ${join(ROOT, 'scripts/offline-guard.mjs')}`
 		}
 	});
@@ -71,8 +70,8 @@ async function start(dataDir) {
 	const deadline = Date.now() + 30_000;
 	for (;;) {
 		try {
-			const res = await fetch(`${base}/api/status`);
-			if (res.ok) break;
+			await fetch(`${base}/api/journal`);
+			break;
 		} catch {
 			// Not listening yet.
 		}
@@ -123,16 +122,16 @@ async function sceneEmpty() {
 		const blockedBody = await blocked.json();
 		assert(blockedBody.code === 'NO_JOURNAL', 'blocked API should report NO_JOURNAL');
 
-		const status = await fetch(`${server.base}/api/status`);
+		const status = await fetch(`${server.base}/api/journal`);
 		const statusBody = await status.json();
-		assert(status.status === 200, `GET /api/status returned ${status.status}`);
-		assert(statusBody.notes === 0, 'status should report zero notes without a journal');
+		assert(status.status === 200, `GET /api/journal returned ${status.status}`);
+		assert(statusBody.state === 'none', 'journal endpoint should report no active journal');
 
 		const create = await fetch(`${server.base}/api/journal`, { method: 'POST' });
 		const created = await create.json();
 		assert(create.status === 201, `POST /api/journal returned ${create.status}`);
 		assert(created.state === 'active', 'create should activate the new journal');
-		assert(created.journal?.schemaVersion === 1, 'new journal should be at schema version 1');
+		assert(created.journal?.schemaVersion === 45, 'new journal should use the latest schema version');
 
 		const journalPath = join(dataDir, 'journals', created.journal.id, 'journal.db');
 		assert(existsSync(journalPath), 'new journal file should exist');
@@ -157,8 +156,6 @@ async function sceneEmpty() {
 		for (const table of [
 			'notes',
 			'note_tags',
-			'weekly_recaps',
-			'ask_history',
 			'todo_groups',
 			'todo_items',
 			'principles',

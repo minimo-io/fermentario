@@ -265,7 +265,6 @@
 				<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Featured</h2>
 				<Timeline
 					notes={pinned}
-					summaryLoading={false}
 					onDelete={remove}
 					onEdit={edit}
 					onFeature={feature}
@@ -290,7 +289,6 @@
 					<h2 class="mb-1 text-xs font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500">Notes</h2>
 					<Timeline
 						notes={pager.notes}
-						summaryLoading={false}
 						onDelete={remove}
 						onEdit={edit}
 						onFeature={feature}
@@ -384,4 +382,3 @@
 {#if colorOpen}
 	<TagColorModal tag={data.tag} onClose={() => (colorOpen = false)} />
 {/if}
-

@@ -18,7 +18,10 @@
 			document.documentElement.style.setProperty('--composer-h', `${bar?.offsetHeight ?? 0}px`);
 		});
 		observer.observe(bar);
-		return () => observer.disconnect();
+		return () => {
+			observer.disconnect();
+			document.documentElement.style.removeProperty('--composer-h');
+		};
 	});
 </script>
 

@@ -79,8 +79,8 @@
 	const codeMatches = $derived(commandMode || tagMode ? [] : commandCodeMatches(trimmedQuery));
 	const codeCount = $derived(codeMatches.length);
 
-	// Mini apps are scoped results too: typing "quick" must find Quick note, not
-	// only show every app before the first keystroke.
+	// Mini apps are scoped results too: typing their name finds them without
+	// showing every app before the first keystroke.
 	const appMatches = $derived.by(() => {
 		if (commandMode || tagMode) return [];
 		const q = trimmedQuery.toLowerCase();

@@ -1,7 +1,6 @@
 import { getDb } from '$lib/server/db';
 import { getActiveJournalInfo } from '$lib/server/journal-store';
 import { emitJournalChange } from '$lib/server/journal-events';
-import { resetSummaryCache } from '$lib/server/summary-cache';
 import {
 	closeUpload,
 	copyUploadIntoTarget,
@@ -29,11 +28,9 @@ export async function POST({ request }) {
 				upload = await readAndValidateUpload(request, send);
 				const counts = copyUploadIntoTarget(getDb(), upload, send);
 				// The file is the same journal, but every row changed. Clear the
-				// per-journal caches and stop any in-flight indexing from writing
-				// vectors or tags for the old rows.
+				// per-journal caches.
 				emitJournalChange(getActiveJournalInfo()?.id ?? null);
 				send({ phase: 'finishing' });
-				resetSummaryCache();
 				send({ done: true, counts });
 			} catch (err) {
 				try {

@@ -181,25 +181,6 @@ export interface HoldingsSummary {
 	displayTotals: { USD: number; BRL: number | null; UYU: number | null };
 }
 
-export interface ChatCtx {
-	role: 'user' | 'assistant';
-	content: string;
-}
-
-export interface AskSource {
-	id: string;
-	at: number;
-	content: string;
-}
-
-export interface AskEntry {
-	id: string;
-	question: string;
-	answer: string;
-	sources: AskSource[];
-	created_at: number;
-}
-
 export interface TodoGroup {
 	id: string;
 	name: string;

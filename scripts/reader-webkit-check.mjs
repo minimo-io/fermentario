@@ -35,9 +35,7 @@ if (!existsSync(EPUB)) fail(`No EPUB at ${EPUB} (pass a path as argument).`);
 
 const work = mkdtempSync(join(tmpdir(), 'ferm-webkit-check-'));
 const dataDir = join(work, 'data');
-const modelCache = join(work, 'models');
 mkdirSync(dataDir, { recursive: true });
-mkdirSync(modelCache, { recursive: true });
 cpSync(FIXTURE, join(dataDir, 'fermentario.db'));
 
 function freePort() {
@@ -65,7 +63,6 @@ const child = spawn(process.execPath, ['build/index.js'], {
 		BODY_SIZE_LIMIT: '110M',
 		TZ: 'UTC',
 		FERMENTARIO_DATA_DIR: dataDir,
-		FERMENTARIO_MODEL_CACHE: modelCache,
 		FERMENTARIO_TEST_OFFLINE: '1',
 		NODE_OPTIONS: `--import ${join(ROOT, 'scripts/offline-guard.mjs')}`
 	}
@@ -83,7 +80,7 @@ process.on('exit', stop);
 const deadline = Date.now() + 30_000;
 for (;;) {
 	try {
-		await fetch(`${base}/api/status`);
+		await fetch(`${base}/api/notes?limit=1`);
 		break;
 	} catch {
 		if (Date.now() > deadline) fail(`server never came up:\n${serverLog}`);

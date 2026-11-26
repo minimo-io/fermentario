@@ -14,8 +14,6 @@
  *    pulling 22 MB of weights.
  *  - `TZ=UTC` fixes the heatmap day keys, which are computed with
  *    `localtime` and would otherwise differ per machine.
- *  - The model cache points at an empty temp directory, so nothing loads a
- *    488 MB model into memory.
  *
  *   node scripts/web-smoke.mjs            compare against the golden
  *   node scripts/web-smoke.mjs --update   rewrite the golden
@@ -45,9 +43,7 @@ if (!existsSync(FIXTURE)) {
 
 const work = mkdtempSync(join(tmpdir(), 'ferm-smoke-'));
 const dataDir = join(work, 'data');
-const modelCache = join(work, 'models');
 mkdirSync(dataDir, { recursive: true });
-mkdirSync(modelCache, { recursive: true });
 cpSync(FIXTURE, join(dataDir, 'fermentario.db'));
 
 /** Values created during the run: replaced by placeholders in the output so
@@ -64,8 +60,7 @@ const rememberActions = (r) => {
 const mask = (value) => {
 	if (typeof value === 'string') {
 		if (volatile.has(value)) return '<runtime>';
-		// The temp directory leaks into /api/status as the model cache path,
-		// and the random test port leaks into absolute URLs (canonical,
+		// The random test port leaks into absolute URLs (canonical,
 		// og:url, embedded server data). Both are runtime details. The
 		// homepage record is raw SSR HTML, so the build's content-hashed
 		// asset names and the SvelteKit nonce leak there too — all four are
@@ -115,7 +110,6 @@ const child = spawn(process.execPath, ['--unhandled-rejections=warn', join(ROOT,
 		BODY_SIZE_LIMIT: '110M',
 		TZ: 'UTC',
 		FERMENTARIO_DATA_DIR: dataDir,
-		FERMENTARIO_MODEL_CACHE: modelCache,
 		// The relay is on this same server. Discovery and publish talk to it
 		// instead of the public relays, so the test never touches the network.
 		FERMENTARIO_NOSTR_RELAYS: `ws://127.0.0.1:${port}/relay`,
@@ -138,7 +132,7 @@ process.on('exit', stop);
 const deadline = Date.now() + 30_000;
 for (;;) {
 	try {
-		await fetch(`${base}/api/status`);
+		await fetch(`${base}/api/notes?limit=1`);
 		break;
 	} catch {
 		if (Date.now() > deadline) {
@@ -166,8 +160,8 @@ try {
 		: null;
 	registry.close();
 	// Keep in step with LATEST_SCHEMA_VERSION in src/lib/platform/migrations.ts.
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 43) {
-		console.error('The legacy import did not register an active v43 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 45) {
+		console.error('The legacy import did not register an active v45 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -277,20 +271,6 @@ await page('page:/admin/tags/missing', '/admin/tags/does-not-exist');
 await page('page:/admin/diagnostics', '/admin/diagnostics');
 
 // --- Read routes -----------------------------------------------------------
-const status = await api('GET /api/status', '/api/status');
-// Only the keys of the progress objects are kept: the values race with the
-// background model passes, the contract does not. Rewritten in place on the
-// raw record, before the final mask.
-{
-	const i = results.findIndex(([n]) => n === 'GET /api/status');
-	results[i][1].body = {
-		...results[i][1].body,
-		progress: {
-			embedder: Object.keys(results[i][1].body.progress?.embedder ?? {}).sort(),
-			chat: Object.keys(results[i][1].body.progress?.chat ?? {}).sort()
-		}
-	};
-}
 
 const page1 = await api('GET /api/notes?limit=2', '/api/notes?limit=2');
 const c = page1.body.nextCursor;
@@ -301,12 +281,6 @@ await api(
 await api('GET /api/notes?tag=garden', '/api/notes?tag=garden');
 await api('GET /api/notes?tag=missing', '/api/notes?tag=nosuchtag');
 await api('GET /api/stats/heatmap', '/api/stats/heatmap');
-await api('GET /api/asks', '/api/asks');
-// The fixture notes are from 2025, so this week is empty and no model loads.
-await api('GET /api/summary', '/api/summary');
-await api('POST /api/chat empty', '/api/chat', json({ question: '' }));
-await api('POST /api/status setModel', '/api/status', json({ kind: 'chatModel', id: 'nope' }));
-await api('GET /api/quick-note', '/api/quick-note');
 
 // --- Write routes ----------------------------------------------------------
 const created = await api(
@@ -319,30 +293,6 @@ const id = created.body.note.id;
 volatile.add(id);
 volatile.add(created.body.note.created_at);
 volatile.add(created.body.note.updated_at);
-
-// The quick note is one row and has no identity of its own: read, write,
-// read back, and reject a body that is not text.
-const quickNoteWrite = await api(
-	'PUT /api/quick-note',
-	'/api/quick-note',
-	json({ content: 'Smoke quick note with **bold** text' }, 'PUT')
-);
-must(
-	'PUT /api/quick-note',
-	quickNoteWrite,
-	(r) => r.status === 200 && r.body.content === 'Smoke quick note with **bold** text',
-	'200 with the stored text'
-);
-volatile.add(quickNoteWrite.body.updatedAt);
-const quickNoteRead = await api('GET /api/quick-note stored', '/api/quick-note');
-must(
-	'GET /api/quick-note stored',
-	quickNoteRead,
-	(r) => r.status === 200 && r.body.content === 'Smoke quick note with **bold** text',
-	'200 with the text that was just written'
-);
-const quickNoteBad = await api('PUT /api/quick-note bad', '/api/quick-note', json({ content: 7 }, 'PUT'));
-must('PUT /api/quick-note bad', quickNoteBad, (r) => r.status === 400, '400 for a non-string body');
 
 const edited = await api(
 	'PATCH /api/notes/[id]',
@@ -574,14 +524,6 @@ await api('GET /api/notes/[missing]', '/api/notes/does-not-exist');
 await api('DELETE /api/notes/[id]', `/api/notes/${id}`, { method: 'DELETE' });
 await api('DELETE /api/notes/[id] again', `/api/notes/${id}`, { method: 'DELETE' });
 
-const asks = await api('GET /api/asks before delete', '/api/asks');
-const askId = asks.body.asks[0]?.id;
-if (!askId) {
-	console.error('\nGET /api/asks: expected the fixture to have one ask row');
-	stop();
-	process.exit(1);
-}
-await api('DELETE /api/asks/[id]', `/api/asks/${askId}`, { method: 'DELETE' });
 
 // --- Data that must survive the export/import round trip -------------------
 // The fixture has notes only. Create one row in every other section so a
@@ -2080,7 +2022,6 @@ try {
 	exportCheck = {
 		quickCheck: d.pragma('quick_check', { simple: true }),
 		notes: count('notes'),
-		vectors: count('note_vectors'),
 		fts: count('notes_fts'),
 		featured: d.prepare('SELECT COUNT(*) AS c FROM notes WHERE featured = 1').get().c,
 		videos: d.prepare("SELECT COUNT(*) AS c FROM notes WHERE video != ''").get().c,

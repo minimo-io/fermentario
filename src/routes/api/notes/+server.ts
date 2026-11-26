@@ -7,7 +7,6 @@ import {
 	setNoteTags,
 	setNoteVideo
 } from '$lib/server/db';
-import { ensureIndexed, indexNote } from '$lib/server/rag';
 import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -37,9 +36,6 @@ export async function GET({ url }) {
 		return json({ ...page, count: countNotesByTag(tag), tag });
 	}
 
-	// Indexing must not delay the list: it runs in the background and lands in
-	// the next response.
-	void ensureIndexed().catch(() => {});
 	const page = listNotesPage({ limit, before, beforeId, featured, published });
 	return json({ ...page, count: countNotes(), tag: null });
 }
@@ -62,7 +58,6 @@ export async function POST({ request }) {
 		setNoteVideo(note.id, id);
 		note.video = id;
 	}
-	void indexNote(note.id, content).catch(() => {});
 	if (tags.length > 0) {
 		// Tags come only from hashtags the user typed in the note.
 		setNoteTags(note.id, tags);

@@ -21,8 +21,7 @@ export interface Section {
 
 export type SectionId = 'notes' | 'todo' | 'library' | 'principles' | 'influences' | 'businesses' | 'stocks' | 'nostr';
 
-/** Ask is a view, not a section. */
-export type View = SectionId | 'ask';
+export type View = SectionId;
 
 export const SECTIONS: Section[] = [
 	{ id: 'notes', label: 'Notes', icon: NotebookPen },

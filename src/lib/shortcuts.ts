@@ -17,28 +17,13 @@ export type ShortcutGroup = { group: string; items: Shortcut[] };
 export const SHORTCUTS: ShortcutGroup[] = [
 	{
 		group: 'Everywhere',
-		items: [
-			{ keys: ['Mod', 'K'], label: 'Open search' },
-			{ keys: ['Mod', 'Shift', 'K'], label: 'Quick note' },
-			{ keys: ['Esc'], label: 'Close the open dialog or palette, or leave full screen' }
-		]
-	},
-	{
-		group: 'Quick note',
-		items: [{ keys: ['E'], label: 'Edit the note from view mode', where: 'Quick note view' }]
-	},
-	{
-		group: 'Search',
-		items: [
-			{ keys: ['↑', '↓'], label: 'Move between results', where: 'Search' },
-			{ keys: ['Enter'], label: 'Open the selected result', where: 'Search' }
-		]
+		items: [{ keys: ['Mod', 'K'], label: 'Open search' }]
 	},
 	{
 		group: 'Admin',
 		items: [
 			{ keys: ['1', '–', '5'], label: 'Switch section, one digit per section', where: 'Admin' },
-			{ keys: ['Mod', 'Shift', 'L'], label: 'Focus the composer', where: 'Notes' },
+			{ keys: ['Mod', 'Shift', 'L'], label: 'Open the note editor' },
 			{ keys: ['Mod', 'Shift', 'A'], label: 'Add an item', where: 'To-do, Principles, Stocks' },
 			{ keys: ['Mod', 'Enter'], label: 'Save the note, comment or item you are editing', where: 'Editors' }
 		]

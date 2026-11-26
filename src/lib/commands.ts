@@ -9,7 +9,12 @@ import { goto } from '$app/navigation';
 import House from '@lucide/svelte/icons/house';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import NotebookText from '@lucide/svelte/icons/notebook-text';
+import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+import CircleHelp from '@lucide/svelte/icons/circle-help';
+import LayoutGrid from '@lucide/svelte/icons/layout-grid';
 import { newNote } from '$lib/new-note.svelte';
+import { help } from '$lib/help.svelte';
+import { miniApps } from '$lib/mini-apps.svelte';
 
 export interface CommandDef {
 	/** Lowercase, unique, at least two characters. This is the execution key. */
@@ -18,11 +23,30 @@ export interface CommandDef {
 	description: string;
 	/** Extra words that should find the command. */
 	keywords?: string[];
+	/** Alternative codes that run the same command. */
+	aliases?: string[];
 	icon: Component;
 	run: () => void | Promise<void>;
 }
 
 export const COMMANDS: CommandDef[] = [
+	{
+		code: 'help',
+		label: 'Help',
+		description: 'Open help, shortcuts and commands.',
+		keywords: ['shortcuts', 'commands', 'guide'],
+		icon: CircleHelp,
+		run: () => help.openModal()
+	},
+	{
+		code: 'miniapps',
+		aliases: ['ma'],
+		label: 'Mini apps',
+		description: 'Open the mini apps picker.',
+		keywords: ['apps', 'tools', 'timer'],
+		icon: LayoutGrid,
+		run: () => miniApps.openModal()
+	},
 	{
 		code: 'note',
 		label: 'New note',
@@ -40,10 +64,18 @@ export const COMMANDS: CommandDef[] = [
 		run: () => goto('/')
 	},
 	{
+		code: 'dash',
+		label: 'Dashboard',
+		description: 'Open the admin dashboard.',
+		keywords: ['admin', 'dashboard', 'notes'],
+		icon: LayoutDashboard,
+		run: () => goto('/admin')
+	},
+	{
 		code: 'notes',
 		label: 'Notes',
 		description: 'Open the notes timeline.',
-		keywords: ['journal', 'timeline', 'dashboard'],
+		keywords: ['journal', 'timeline'],
 		icon: NotebookText,
 		run: () => goto('/admin/notes')
 	}
@@ -52,19 +84,24 @@ export const COMMANDS: CommandDef[] = [
 const CODE = /^[a-z][a-z0-9-]+$/;
 const seen = new Set<string>();
 for (const command of COMMANDS) {
-	if (!CODE.test(command.code)) {
-		throw new Error(`Command code "${command.code}" must be lowercase, at least 2 characters.`);
+	for (const code of [command.code, ...(command.aliases ?? [])]) {
+		if (!CODE.test(code)) {
+			throw new Error(`Command code "${code}" must be lowercase, at least 2 characters.`);
+		}
+		if (seen.has(code)) {
+			throw new Error(`Duplicate command code "${code}".`);
+		}
+		seen.add(code);
 	}
-	if (seen.has(command.code)) {
-		throw new Error(`Duplicate command code "${command.code}".`);
-	}
-	seen.add(command.code);
 }
 
 function score(command: CommandDef, query: string): number | null {
 	const code = command.code.toLowerCase();
 	if (code === query) return 0;
 	if (code.startsWith(query)) return 1;
+	const aliases = command.aliases ?? [];
+	if (aliases.some((alias) => alias === query)) return 0;
+	if (aliases.some((alias) => alias.startsWith(query))) return 1;
 	const label = command.label.toLowerCase();
 	if (label === query) return 2;
 	if (label.startsWith(query)) return 3;
@@ -89,5 +126,5 @@ export function filterCommands(query: string): CommandDef[] {
 export function commandCodeMatches(query: string): CommandDef[] {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
-	return COMMANDS.filter((command) => command.code === q);
+	return COMMANDS.filter((command) => command.code === q || command.aliases?.includes(q));
 }

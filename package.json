@@ -1,7 +1,7 @@
 {
 	"name": "fermentario",
 	"private": true,
-	"version": "0.27.0",
+	"version": "0.28.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
@@ -36,15 +36,10 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
-		"@huggingface/transformers": "^4.3.0",
 		"@lucide/svelte": "^1.47.0",
 		"better-sqlite3": "^13.0.3",
 		"epubjs": "^0.3.93",
 		"nostr-tools": "^2.26.0",
 		"ws": "^8.23.0"
-	},
-	"allowScripts": {
-		"onnxruntime-node@1.30.0": true,
-		"protobufjs@7.6.6": true
 	}
 }

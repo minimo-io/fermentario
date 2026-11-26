@@ -989,6 +989,28 @@ const adminConfig: Migration = {
 	}
 };
 
+/** Remove the retired Quick note scratchpad and its saved text. */
+const removeQuickNote: Migration = {
+	version: 44,
+	name: 'remove-quick-note',
+	up(db) {
+		db.exec('DROP TABLE IF EXISTS quick_note');
+	}
+};
+
+/** Remove AI embeddings, recap cache and saved Ask history. */
+const removeAiData: Migration = {
+	version: 45,
+	name: 'remove-ai-data',
+	up(db) {
+		db.exec(`
+			DROP TABLE IF EXISTS note_vectors;
+			DROP TABLE IF EXISTS weekly_recaps;
+			DROP TABLE IF EXISTS ask_history;
+		`);
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -1032,7 +1054,9 @@ export const MIGRATIONS: Migration[] = [
 	publicSlogan,
 	noteTitle,
 	todoItemPhotos,
-	adminConfig
+	adminConfig,
+	removeQuickNote,
+	removeAiData
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

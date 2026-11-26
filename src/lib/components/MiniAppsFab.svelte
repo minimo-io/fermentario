@@ -2,6 +2,7 @@
 	import LayoutGrid from '@lucide/svelte/icons/layout-grid';
 	import { miniApps } from '$lib/mini-apps.svelte';
 	import { timeTracker } from '$lib/time-tracker.svelte';
+	import { newNote } from '$lib/new-note.svelte';
 
 </script>
 
@@ -14,12 +15,12 @@
 	onclick={() => miniApps.openModal()}
 >
 	<LayoutGrid class="h-5 w-5" />
-	{#if timeTracker.running}
+	{#if timeTracker.chiming || newNote.hasDraft || timeTracker.running}
 		<span
 			class="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full ring-2 ring-white dark:ring-stone-950 {timeTracker.chiming
 				? 'bg-amber-400'
-				: 'bg-emerald-500'}"
-			aria-label={timeTracker.chiming ? 'The timer is chiming' : 'A mini app is running'}
+				: newNote.hasDraft ? 'bg-lime-400' : 'bg-emerald-500'}"
+			aria-label={timeTracker.chiming ? 'The timer is chiming' : newNote.hasDraft ? 'A note draft is waiting' : 'A mini app is running'}
 		></span>
 		{#if timeTracker.chiming}
 			<span class="absolute -right-0.5 -top-0.5 h-3 w-3 animate-ping rounded-full bg-amber-400/70 motion-reduce:animate-none"></span>

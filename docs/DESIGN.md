@@ -65,28 +65,15 @@ sizing. Consult this before changing any of them.
   The heatmap is the one view that needs more room than
   672px for its 53-column grid, so its grid scrolls horizontally inside the
   container rather than widening the page.
-- **Composer** (fixed bottom bar): `mx-auto max-w-2xl px-6 pb-8`. Same width as
-  the page, so the bar and the content align with no gap. The bar is light
-  grey (`bg-stone-100/95`) in light mode, not white, so the floating surface
-  separates from the page; `FixedBottomBar` uses the same surface. Dark mode
-  keeps `stone-900/95`. Focusing the bar
-  shows a visual-only scrim behind it (`fixed inset-0 z-10`, same glass as
-  the loading state: `white/25` plus `backdrop-blur-md`, `stone-950/25` in
-  dark). It fades with the shared backdrop timing, stays while any bar
-  control has focus, hides in fullscreen editor mode, and never blocks taps.
-  Publishing a note or asking a question releases the bar, so the scrim fades
-  and the result is visible; do not leave an empty focused bar blurring the
-  page.
-  The full-screen note
-  editor carries an optional date/time pill; an empty value uses the current
-  time. The chosen time becomes the note's `created_at` and the card enters the
-  timeline in date order, not always at the top. The edit forms (timeline
-  dialog and single-note page) expose the same date/time field; a changed date
-  reorders the card, and a date below the loaded page removes it from view with
-  a scroll-down toast.
-- **Bottom clearance**: the page reserves `pb-[calc(var(--composer-h,4.5rem)+2.5rem)]`
-  so the last note is never hidden behind the bar. The bar publishes its height
-  as `--composer-h` via a `ResizeObserver`.
+- **New note editor**: the command, shortcut and mini-app button open the same
+  full-screen editor. Its optional date/time becomes the note's `created_at`.
+  Text and date persist in session storage until save. An unsaved draft puts a
+  lime dot on the mini-app button.
+- **Fixed bottom bars**: To-Do, Principles, Stocks and Nostr use the shared
+  `FixedBottomBar`. It publishes its height as `--composer-h` and clears that
+  value when it unmounts.
+- **Bottom clearance**: pages reserve space for fixed section bars. Routes
+  without a bar use normal page padding.
 - **Holdings** (every view, between the header and the section bar): a
   touch-friendly horizontal
   carousel (`overflow-x-auto no-scrollbar snap-x`, no visible bar) of square
@@ -995,32 +982,9 @@ decide, and late content (status chips, test results) gets clipped.
   with each app's one-line description. Apps are ordered by usage; the last
   opened app shows a `Latest used` pill and a running app shows a `Running`
   badge. Usage is stored in local storage. An app with a `shortcut` shows its
-  `Kbd` chip in the modal and in the search palette; `Mod` renders as ⌘ or Ctrl. **Quick note** is the one app with
-  `kind: 'modal'`: it opens `QuickNoteModal` instead of a page, from the picker,
-  the search palette, the homepage `Tools` section, or `Cmd/Ctrl+Shift+K`. It is
-  a big `max-w-2xl` modal with the same full-screen toggle as `EditNoteDialog`
-  (`h-dvh max-w-full rounded-none`, `Escape` collapses first). It has no Save
-  button. Every keystroke writes this browser's local storage, so the header says
-  `Saved on this device 14:32` or the error. The two cloud buttons are the only
-  server paths: **upload** (`PUT`, backs the local text up) and **fetch**
-  (`GET`, pulls the server copy on demand). There is still no automatic read on
-  open, close or typing. Fetch adopts the copy silently only when the local note
-  is empty; a different non-empty local note opens `ConfirmDialog` ("Replace
-  this quick note?", danger tone) and changes nothing until the user confirms.
-  Typing after a fetch returns the header to the local status. Admin is
-  unprotected today, so both buttons are enabled, and the login will enable
-  them per session. The header wraps its icon cluster under the title on narrow
-  screens, and the body breaks long tokens (`break-words`) instead of widening
-  the panel.
-  `Edit` and `View` are a segmented toggle; View renders the same markdown as
-  notes (bold, italic, bare URLs, `[[id]]` pills), not headings or lists. A
-  note with text opens in View; an empty one opens in Edit. In View, `E`
-  switches to Edit (no modifier, no key repeat, no focused text field, and no
-  other dialog on screen). The
-  server holds one backup row in `quick_note`, separate from `notes`, so the
-  text never reaches the timeline, tags or publishing. The full-screen choice is remembered in
-  `localStorage['fermentario.quickNote.full']`, so it reopens the size it was
-  left. **Time tracker**
+  `Kbd` chip in the modal and in the search palette; `Mod` renders as ⌘ or Ctrl.
+  **New note** is the shared full-screen note editor. The old scratchpad mini
+  app has been removed. **Time tracker**
   (`/tools/time-tracker`) starts one timer
   with an optional comment and stops it later. The start card is a single row:
   title, comment field, `Start`, `Cancel`; no reveal step, and the title text

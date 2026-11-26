@@ -1,5 +1,4 @@
 <script lang="ts">
-	import Weekly from '$lib/components/Weekly.svelte';
 	import Timeline from '$lib/components/Timeline.svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import CollapsibleSection from '$lib/components/CollapsibleSection.svelte';
@@ -14,12 +13,6 @@
 	const d = ctx.display;
 </script>
 
-{#if n.week && !n.dismissed}
-	<section class="mt-5 mb-5">
-		<Weekly summaryLoading={n.summaryLoading} week={n.week} reading={n.reading} onRead={n.onReadWeekly} onDismiss={n.onDismissWeekly} />
-	</section>
-{/if}
-
 {#if n.featured.length > 0}
 	<section class="mt-5 mb-5" aria-label="Featured notes">
 		<CollapsibleSection label="Featured" storageKey="ferm:featured-collapsed">
@@ -28,7 +21,6 @@
 			{/snippet}
 			<Timeline
 				notes={n.featured}
-				summaryLoading={n.summaryLoading}
 				onDelete={n.onDeleteNote}
 				onEdit={n.onEditNote}
 				onFeature={n.onFeatureNote}
@@ -64,7 +56,6 @@
 	</div>
 	<Timeline
 		notes={n.notes}
-		summaryLoading={n.summaryLoading}
 		onDelete={n.onDeleteNote}
 		onEdit={n.onEditNote}
 		onFeature={n.onFeatureNote}

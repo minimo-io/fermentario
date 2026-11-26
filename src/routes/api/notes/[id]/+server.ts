@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { deleteNote, getNote, setNoteTags, setNoteFeatured, setNotePublished, setNoteVideo, setNoteTitle, updateNote } from '$lib/server/db';
-import { indexNote } from '$lib/server/rag';
 import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -23,8 +22,7 @@ export async function PATCH({ params, request }) {
 		if (!Number.isFinite(n) || n <= 0) return json({ error: 'invalid date' }, { status: 400 });
 		createdAt = Math.min(n, Date.now());
 	}
-	// Flags and the title touch only their own columns: no text, FTS, vector,
-	// or tag work.
+	// Flags and the title touch only their own columns.
 	if (typeof body?.content !== 'string' && (typeof body?.featured === 'boolean' || typeof body?.published === 'boolean' || typeof body?.video === 'string' || typeof body?.title === 'string')) {
 		let note = getNote(params.id);
 		if (!note) return json({ error: 'not found' }, { status: 404 });
@@ -73,12 +71,9 @@ export async function PATCH({ params, request }) {
 		}
 	}
 
-	// The old vector and tags describe the previous text. Refresh both; after
-	// the clear, the tags are exactly the hashtags in the new text. Neither
-	// step can fail the save.
+	// After the clear, the tags are exactly the hashtags in the new text.
 	setNoteTags(note.id, []);
 	note.tags = [];
-	void indexNote(note.id, content).catch(() => {});
 	if (tags.length > 0) {
 		setNoteTags(note.id, tags);
 		note.tags = tags;

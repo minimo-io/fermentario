@@ -24,7 +24,6 @@
 
 	type Props = {
 		notes: Note[];
-		summaryLoading: boolean;
 		onDelete: (id: string) => void;
 		onEdit: (id: string, content: string, video?: string, createdAt?: number, title?: string) => Promise<void>;
 		onFeature: (note: Note) => void;
@@ -38,7 +37,6 @@
 	};
 	let {
 		notes,
-		summaryLoading,
 		onDelete,
 		onEdit,
 		onFeature,
@@ -186,9 +184,6 @@
 	});
 </script>
 
-{#if summaryLoading}
-	<div class="mb-2 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">Building your weekly recap…</div>
-{/if}
 
 {#snippet commentPill(n: Note)}
 	<button

@@ -8,6 +8,7 @@
 	import { isAppleDevice } from '$lib/platform';
 	import Kbd from '$lib/components/Kbd.svelte';
 	import { timeTracker } from '$lib/time-tracker.svelte';
+	import { newNote } from '$lib/new-note.svelte';
 
 	function close() {
 		miniApps.closeModal();
@@ -76,6 +77,9 @@
 							<span class="min-w-0 flex-1">
 								<span class="flex items-center gap-2">
 									<span class="text-sm font-medium text-stone-900 dark:text-stone-100">{app.label}</span>
+									{#if app.id === 'new-note' && newNote.hasDraft}
+										<span class="rounded-full bg-lime-100 px-2 py-0.5 text-[10px] font-medium text-lime-800 dark:bg-lime-950/50 dark:text-lime-300">Draft</span>
+									{/if}
 									{#if latest === app.id}
 										<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">Latest used</span>
 									{/if}

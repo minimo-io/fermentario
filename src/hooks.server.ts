@@ -4,7 +4,7 @@ import { getJournalStatus } from '$lib/server/journal-store';
 /**
  * Gate every page and data API on an active journal.
  *
- * `/welcome`, `/journal-error`, `/diagnostics`, `/api/status` and the journal
+ * `/welcome`, `/journal-error`, `/diagnostics` and the journal
  * onboarding endpoints are allowed without a journal. Everything else either
  * redirects to onboarding or returns a machine-readable 409. The check is in
  * one place so a new route cannot accidentally open a database that does not
@@ -26,7 +26,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	if (status.state === 'error') {
 		if (
-			path === '/api/status' ||
 			path === '/api/journal' ||
 			path === '/api/journal/restore' ||
 			path === '/relay'
@@ -49,7 +48,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 		path === '/welcome' ||
 		path === '/diagnostics' ||
 		path === '/relay' ||
-		path === '/api/status' ||
 		path === '/api/journal' ||
 		path === '/api/journal/restore'
 	) {

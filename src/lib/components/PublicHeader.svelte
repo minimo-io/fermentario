@@ -3,7 +3,7 @@
 	import House from '@lucide/svelte/icons/house';
 	import Search from '@lucide/svelte/icons/search';
 	import CircleHelp from '@lucide/svelte/icons/circle-help';
-	import HelpModal from '$lib/components/HelpModal.svelte';
+	import { help } from '$lib/help.svelte';
 	import { search } from '$lib/search.svelte';
 	import { SLOGAN } from '$lib/brand';
 
@@ -14,7 +14,6 @@
 	let { siteTitle }: Props = $props();
 
 	const onHome = $derived(page.url.pathname === '/');
-	let helpOpen = $state(false);
 </script>
 
 <header class="mb-5 flex items-center justify-between gap-2">
@@ -45,7 +44,7 @@
 			class="grid h-7 w-7 place-items-center rounded-full border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-800"
 			aria-label="Help and shortcuts"
 			title="Help and shortcuts"
-			onclick={() => (helpOpen = true)}
+			onclick={() => help.openModal()}
 		><CircleHelp class="h-3.5 w-3.5" /></button>
 		<a
 			href="/admin/notes"
@@ -53,7 +52,3 @@
 		>Dashboard</a>
 	</span>
 </header>
-
-{#if helpOpen}
-	<HelpModal onClose={() => (helpOpen = false)} />
-{/if}

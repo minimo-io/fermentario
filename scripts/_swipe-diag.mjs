@@ -6,13 +6,13 @@ import { join, resolve } from 'node:path';
 import { webkit } from 'playwright-core';
 const ROOT = '/Users/minimo/Development/minimo/fermentario';
 const work = mkdtempSync(join(tmpdir(), 'swd-'));
-const dataDir = join(work, 'data'); const modelCache = join(work, 'models');
-mkdirSync(dataDir, { recursive: true }); mkdirSync(modelCache, { recursive: true });
+const dataDir = join(work, 'data');
+mkdirSync(dataDir, { recursive: true });
 cpSync(join(ROOT,'tests/fixtures/journal.db'), join(dataDir, 'fermentario.db'));
 const port = await new Promise((res, rej) => { const s = createServer(); s.on('error', rej); s.listen(0,'127.0.0.1',()=>{const {port}=s.address(); s.close(()=>res(port));}); });
 const base = `http://127.0.0.1:${port}`;
-const child = spawn(process.execPath, ['build/index.js'], { cwd: ROOT, env: { ...process.env, PORT: String(port), HOST:'127.0.0.1', ORIGIN: base, TZ:'UTC', FERMENTARIO_DATA_DIR: dataDir, FERMENTARIO_MODEL_CACHE: modelCache, FERMENTARIO_TEST_OFFLINE:'1', NODE_OPTIONS:`--import ${join(ROOT,'scripts/offline-guard.mjs')}` }, stdio:'pipe' });
-for (;;) { try { await fetch(`${base}/api/status`); break; } catch { await new Promise(r=>setTimeout(r,150)); } }
+const child = spawn(process.execPath, ['build/index.js'], { cwd: ROOT, env: { ...process.env, PORT: String(port), HOST:'127.0.0.1', ORIGIN: base, TZ:'UTC', FERMENTARIO_DATA_DIR: dataDir, FERMENTARIO_TEST_OFFLINE:'1', NODE_OPTIONS:`--import ${join(ROOT,'scripts/offline-guard.mjs')}` }, stdio:'pipe' });
+for (;;) { try { await fetch(`${base}/api/notes?limit=1`); break; } catch { await new Promise(r=>setTimeout(r,150)); } }
 const bytes = readFileSync('/tmp/pg84.epub');
 const form = new FormData(); form.append('file', new Blob([bytes],{type:'application/epub+zip'}),'c.epub'); form.append('title','Diag'); form.append('author','D');
 const { book } = await (await fetch(`${base}/api/books`, { method:'POST', headers:{origin:base}, body:form })).json();
