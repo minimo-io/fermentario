@@ -1,5 +1,5 @@
 import { getNote } from '$lib/server/db';
-import { inlineMarkdown } from '$lib/markdown-inline';
+import { renderNoteContent } from '$lib/note-links';
 import { esc, htmlShell } from '$lib/print';
 import { youTubeWatchUrl } from '$lib/youtube';
 
@@ -35,7 +35,7 @@ export async function GET({ params }) {
 	const body = `<article>
 	<p class="meta">${esc(date)}${note.updated_at > note.created_at ? ' · edited' : ''}</p>
 	${cover}
-	<div class="content">${inlineMarkdown(note.content)}</div>
+	<div class="content markdown-body ${note.monospace ? 'monospace' : ''}">${renderNoteContent(note.content, note.linkedNotes)}</div>
 	${tags ? `<p class="tags">${esc(tags)}</p>` : ''}
 	${video}
 </article>`;
@@ -46,6 +46,19 @@ export async function GET({ params }) {
   .meta { color: #666; font-size: 13px; margin: 0 0 16px; }
   .cover { display: block; max-height: 80mm; margin: 0 0 16px; border-radius: 6px; object-fit: cover; }
   .content { font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .content.monospace { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-weight: 700; line-height: 1.25; margin: 0.85em 0 0.3em; }
+  .content h1 { font-size: 1.45em; } .content h2 { font-size: 1.3em; } .content h3 { font-size: 1.15em; }
+  .content ul { list-style: disc; padding-left: 1.5em; } .content ol { list-style: decimal; padding-left: 1.5em; }
+  .content blockquote { border-left: 3px solid #a8a29e; margin-left: 0; padding-left: 0.8em; color: #666; }
+  .content pre, .content code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .content pre { overflow-x: auto; background: #f5f5f4; border-radius: 6px; padding: 12px; }
+  .content code { background: #f5f5f4; border-radius: 3px; padding: 1px 3px; }
+  .content pre code { background: none; padding: 0; }
+  .content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; white-space: normal; }
+  .content th, .content td { border: 1px solid #d6d3d1; padding: 4px 8px; text-align: left; }
+  .content img { max-width: 100%; height: auto; }
+  .content .wiki-link { border-radius: 999px; background: #e7e5e4; padding: 1px 8px; font-size: .86em; font-weight: 600; }
   .tags { margin: 16px 0 0; color: #555; font-size: 13px; }
   a { color: #111; }
 `

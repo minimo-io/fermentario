@@ -1,4 +1,6 @@
-import { inlineMarkdown } from '$lib/markdown-inline';
+import MarkdownIt from 'markdown-it';
+import type { StateInline } from 'markdown-it';
+import taskLists from 'markdown-it-task-lists';
 import { linkifyUrls } from '$lib/linkify-url';
 import { noteLinkIds, noteLabel } from '$lib/platform/journal';
 import type { LinkRef } from '$lib/platform/journal';
@@ -7,9 +9,58 @@ export { noteLinkIds, noteLabel };
 export type { LinkRef };
 
 const RENDER_RE = /\[\[([0-9a-fA-F-]{36})\]\]/g;
+const NOTE_LINK_RE = /^\[\[([0-9a-fA-F-]{36})\]\]/;
+
+type MarkdownEnvironment = {
+	links: Record<string, LinkRef>;
+	publicUi: boolean;
+};
+
+const markdown = new MarkdownIt({
+	html: false,
+	linkify: true,
+	typographer: false
+}).use(taskLists, { enabled: false });
+
+markdown.validateLink = (url: string) => {
+	const value = url.trim().toLowerCase();
+	if (value.startsWith('//')) return false;
+	const scheme = /^([a-z][a-z\d+.-]*):/.exec(value)?.[1];
+	return !scheme || scheme === 'http' || scheme === 'https' || scheme === 'mailto';
+};
+
+// Keep note/principle references inside the Markdown parser's inline-token
+// pipeline. A post-render regex would incorrectly turn `[[id]]` inside code
+// spans and fenced code into links.
+markdown.inline.ruler.before('link', 'note_link', (state: StateInline, silent: boolean) => {
+	const match = NOTE_LINK_RE.exec(state.src.slice(state.pos));
+	if (!match) return false;
+	if (!silent) {
+		const token = state.push('note_link', '', 0);
+		token.meta = { id: match[1] };
+	}
+	state.pos += match[0].length;
+	return true;
+});
+
+markdown.renderer.rules.note_link = (tokens, index, _options, env) => {
+	const token = tokens[index]!;
+	const id = String(token.meta?.id ?? '');
+	const context = env as MarkdownEnvironment;
+	const target = context.links[id];
+	if (!target) {
+		return `<span class="missing-note-link" title="Linked entry not found">⧉ ${esc(id.slice(0, 8))}…</span>`;
+	}
+	const href = linkHref(id, target.kind, { publicUi: context.publicUi });
+	return `<a href="${escAttr(href)}" class="wiki-link">${esc(target.label)}</a>`;
+};
 
 function esc(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escAttr(s: string): string {
+	return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /** Where a linked entry opens. Public surfaces must stay public, so a note
@@ -48,7 +99,9 @@ export function renderNoteLinks(
 	});
 }
 
-/** Full pipeline for note body text: markdown, then bare URLs, then link pills. */
+/** CommonMark/GFM renderer. Raw HTML is disabled and links use a strict
+ *  protocol allowlist, so the parser output is safe without a Node-only
+ *  sanitizer in this shared browser/server module. */
 export function renderNoteContent(
 	source: string,
 	links?: LinkRef[],
@@ -56,7 +109,7 @@ export function renderNoteContent(
 ): string {
 	const map: Record<string, LinkRef> = {};
 	for (const l of links ?? []) map[l.id] = l;
-	return renderNoteLinks(linkifyUrls(inlineMarkdown(source)), map, opts);
+	return markdown.render(source, { links: map, publicUi: opts.publicUi ?? false });
 }
 
 /** Links-only pipeline for surfaces that stay markdown-free (principles):

@@ -35,7 +35,8 @@
 	import { fmtCurrency } from '$lib/currency';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { AdminConfig, Holding, HoldingAction, HoldingsSummary, HoldingCategory } from '$lib/types';
-	import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId } from '$lib/sections';
+import { SECTIONS, FIXED_SECTIONS, DEFAULT_SECTION_ORDER, sanitizeSectionOrder, type SectionId } from '$lib/sections';
+import { speakText, type SpeechLang } from '$lib/speech';
 	import { DEFAULT_CONTENT_WIDTH, contentWidthClass, sanitizeContentWidth } from '$lib/display';
 	import { DEFAULT_THEME, applyTheme, sanitizeTheme, type Theme } from '$lib/theme';
 	import type { RestorePhase } from '$lib/components/RestoreOverlay.svelte';
@@ -59,10 +60,10 @@
 	let tagsLoading = $derived(navigating.to?.url.pathname === '/admin/tags');
 
 let showSettings = $state(false);
-let settingsTab = $state<'general' | 'trading' | 'nostr' | 'database'>('general');
+let settingsTab = $state<'general' | 'voice' | 'trading' | 'nostr' | 'database'>('general');
 type Lang = 'en' | 'es' | 'pt';
-type LangConfig = { entriesLang: Lang; sections: string[]; contentWidth: string; theme: Theme };
-const DEFAULT_CONFIG: LangConfig = { entriesLang: 'en', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH, theme: DEFAULT_THEME };
+type LangConfig = { entriesLang: Lang; voiceURI: string; sections: string[]; contentWidth: string; theme: Theme };
+const DEFAULT_CONFIG: LangConfig = { entriesLang: 'en', voiceURI: '', sections: DEFAULT_SECTION_ORDER, contentWidth: DEFAULT_CONTENT_WIDTH, theme: DEFAULT_THEME };
 let config = $state<LangConfig>(DEFAULT_CONFIG);
 function saveConfig(p: Partial<LangConfig>) {
 	config = { ...config, ...p };
@@ -100,9 +101,12 @@ async function saveMotto(value: string): Promise<void> {
 	// svelte-ignore state_referenced_locally
 	let adminConfig = $state<AdminConfig>(data.adminConfig);
 
-	/** The EPUB reader owns the whole viewport: no shell, no composer, no
-	 *  header. The route stays under /admin; only the chrome opts out. */
-	const bareReader = $derived(page.url.pathname.startsWith('/admin/book/'));
+	/** Detail pages keep their own back control and content, but do not need
+	 *  the admin shell above them. EPUB readers also use the full viewport. */
+	const barePage = $derived(
+		page.url.pathname.startsWith('/admin/book/') ||
+			/^\/admin\/(?:notes|todo|principles)\/[^/]+\/?$/.test(page.url.pathname)
+	);
 
 	/** The URL is the section: no view state, no sessionStorage to restore.
 	 *  A route that is not a section (for example /admin/diagnostics) must
@@ -340,6 +344,7 @@ async function saveMotto(value: string): Promise<void> {
 			const theme = sanitizeTheme(p.theme);
 			config = {
 				entriesLang: p.entriesLang as Lang,
+				voiceURI: typeof p.voiceURI === 'string' ? p.voiceURI : '',
 					sections: sanitizeSectionOrder(p.sections),
 					contentWidth: sanitizeContentWidth(p.contentWidth),
 					theme
@@ -681,6 +686,19 @@ async function saveMotto(value: string): Promise<void> {
 		invalidateTagChoices();
 	}
 
+	async function handleToggleMonospace(n: Note) {
+		const res = await loading.track(fetch(`/api/notes/${n.id}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ monospace: !n.monospace })
+		}));
+		const d = await res.json();
+		if (!res.ok) throw new Error(d?.error ?? 'Could not save note settings.');
+		const saved = d.note as Note;
+		pager.patch(saved);
+		featured = featured.map((item) => item.id === saved.id ? saved : item);
+	}
+
 	setContext(APP_KEY, {
 		notes: {
 			get featured() {
@@ -702,6 +720,7 @@ async function saveMotto(value: string): Promise<void> {
 			onLoadMore: () => pager.loadMore(),
 			onDeleteNote: handleDelete,
 			onEditNote: handleEdit,
+			onToggleMonospace: handleToggleMonospace,
 			onFeatureNote: handleFeature,
 			onPublishNote: handlePublish,
 			onCoverNote: handleCover,
@@ -730,7 +749,7 @@ async function saveMotto(value: string): Promise<void> {
 </svelte:head>
 
 <main class="min-h-dvh">
-{#if bareReader}
+{#if barePage}
 	{@render children()}
 {:else}
 	<div
@@ -859,6 +878,7 @@ async function saveMotto(value: string): Promise<void> {
 		{#if showSettings}
 			<SettingsModal
 				entriesLang={config.entriesLang}
+				voiceURI={config.voiceURI}
 				motto={adminConfig.motto}
 				onSaveMotto={saveMotto}
 				contentWidth={sanitizeContentWidth(config.contentWidth)}
@@ -868,6 +888,7 @@ async function saveMotto(value: string): Promise<void> {
 				onTab={(t) => (settingsTab = t)}
 				onClose={() => (showSettings = false)}
 				onSaveLanguages={(p) => saveConfig(p)}
+				onVoice={(voiceURI) => saveConfig({ voiceURI })}
 				onWidth={(w) => saveConfig({ contentWidth: w })}
 				onSections={(ids) => saveConfig({ sections: ids })}
 				onTheme={(t) => saveConfig({ theme: t })}

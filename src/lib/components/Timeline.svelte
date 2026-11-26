@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Star from '@lucide/svelte/icons/star';
@@ -15,12 +16,14 @@
 	import { withTrailingHashtags } from '$lib/hashtags';
 	import NoteBody from '$lib/components/NoteBody.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import EditNoteDialog from '$lib/components/EditNoteDialog.svelte';
+	import NoteEditorModal from '$lib/components/NoteEditorModal.svelte';
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import { youTubeWatchUrl } from '$lib/youtube';
 	import { loading } from '$lib/loading.svelte';
+	import { showToast } from '$lib/toast.svelte';
+	import { preferredSpeechVoiceURI, speakText, speechStartedMessage, type SpeechLang } from '$lib/speech';
 
 	type Props = {
 		notes: Note[];
@@ -28,6 +31,7 @@
 		onEdit: (id: string, content: string, video?: string, createdAt?: number, title?: string) => Promise<void>;
 		onFeature: (note: Note) => void;
 		onPublish: (note: Note) => void;
+		onToggleMonospace: (note: Note) => Promise<void>;
 		onCover: (note: Note, coverId: string | null) => void;
 		onLoadMore?: () => void;
 		hasMore?: boolean;
@@ -41,6 +45,7 @@
 		onEdit,
 		onFeature,
 		onPublish,
+		onToggleMonospace,
 		onCover,
 		onLoadMore,
 		hasMore,
@@ -50,6 +55,7 @@
 	}: Props = $props();
 
 	let speakingId = $state<string | null>(null);
+	let speechGeneration = 0;
 	let menuNote = $state<Note | null>(null);
 	let confirmNote = $state<Note | null>(null);
 	let editNote = $state<Note | null>(null);
@@ -112,20 +118,40 @@
 		onCover(n, d.id as string);
 	}
 
+	let stopSpeech: (() => void) | null = null;
+	onDestroy(() => {
+		speechGeneration += 1;
+		stopSpeech?.();
+	});
 	function speakNote(id: string, content: string) {
+		speechGeneration += 1;
+		const generation = speechGeneration;
 		if (speakingId === id) {
-			window.speechSynthesis.cancel();
+			stopSpeech?.();
+			stopSpeech = null;
 			speakingId = null;
 			return;
 		}
-		window.speechSynthesis.cancel();
-		const u = new SpeechSynthesisUtterance(content);
-		u.rate = 0.98;
-
-		u.lang = lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US';
-		u.onend = () => (speakingId = null);
-		u.onerror = () => (speakingId = null);
-		window.speechSynthesis.speak(u);
+		stopSpeech?.();
+		const speechLang: SpeechLang = lang === 'es' || lang === 'pt' ? lang : 'en';
+		const result = speakText(content, speechLang, preferredSpeechVoiceURI(), () => {
+			if (speechGeneration === generation) showToast(speechStartedMessage(speechLang), 'success');
+		}, () => {
+			if (speechGeneration !== generation) return;
+			speakingId = null;
+			stopSpeech = null;
+		}, (message) => {
+			if (speechGeneration !== generation) return;
+			speakingId = null;
+			stopSpeech = null;
+			showToast(message);
+		});
+		if (typeof result === 'string') {
+			speakingId = null;
+			showToast(result);
+			return;
+		}
+		stopSpeech = result;
 		speakingId = id;
 	}
 
@@ -279,12 +305,13 @@
 		onDelete={(n) => { menuNote = null; confirmNote = n; }}
 		onFeature={(n) => { menuNote = null; onFeature(n); }}
 		onPublish={(n) => { menuNote = null; onPublish(n); }}
+		onToggleMonospace={onToggleMonospace}
 		onClose={() => (menuNote = null)}
 	/>
 {/if}
 {#if editNote}
 	{@const editing = editNote}
-	<EditNoteDialog
+	<NoteEditorModal
 		note={editing}
 		title={editTitle}
 		content={editContent}

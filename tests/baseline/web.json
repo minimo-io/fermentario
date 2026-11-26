@@ -126,6 +126,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [],
 					"commentCount": 0,
@@ -140,6 +141,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [
 						"garden"
@@ -170,6 +172,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [
 						"work"
@@ -186,6 +189,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [
 						"garden",
@@ -217,6 +221,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [
 						"garden"
@@ -233,6 +238,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [
 						"garden",
@@ -250,6 +256,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [
 						"garden"
@@ -314,6 +321,7 @@
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": [
 					"garden"
@@ -327,12 +335,13 @@
 			"note": {
 				"id": "<runtime>",
 				"title": "",
-				"content": "Smoke test note, edited, about kayaking",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": [
 					"work"
@@ -348,12 +357,40 @@
 			"note": {
 				"id": "<runtime>",
 				"title": "Smoke note title",
-				"content": "Smoke test note, edited, about kayaking",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
+				"coverId": null,
+				"tags": [
+					"work"
+				],
+				"commentCount": 0,
+				"linkedNotes": []
+			}
+		}
+	},
+	"GET /api/notes/[id]/print": {
+		"status": 200,
+		"contentType": "text/html; charset=utf-8",
+		"hasClickableUrl": true
+	},
+	"PATCH /api/notes/[id] monospace": {
+		"status": 200,
+		"body": {
+			"note": {
+				"id": "<runtime>",
+				"title": "Smoke note title",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
+				"created_at": "<runtime>",
+				"updated_at": "<runtime>",
+				"featured": false,
+				"video": "",
+				"published": false,
+				"monospace": true,
 				"coverId": null,
 				"tags": [
 					"work"
@@ -369,12 +406,13 @@
 			"note": {
 				"id": "<runtime>",
 				"title": "Smoke note title",
-				"content": "Smoke test note, edited, about kayaking",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
 				"published": true,
+				"monospace": true,
 				"coverId": null,
 				"tags": [
 					"work"
@@ -391,12 +429,13 @@
 				{
 					"id": "<runtime>",
 					"title": "Smoke note title",
-					"content": "Smoke test note, edited, about kayaking",
+					"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 					"created_at": "<runtime>",
 					"updated_at": "<runtime>",
 					"featured": false,
 					"video": "",
 					"published": true,
+					"monospace": true,
 					"coverId": null,
 					"tags": [
 						"work"
@@ -418,12 +457,13 @@
 			"note": {
 				"id": "<runtime>",
 				"title": "Smoke note title",
-				"content": "Smoke test note, edited, about kayaking",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
 				"published": true,
+				"monospace": true,
 				"coverId": null,
 				"tags": [
 					"work"
@@ -457,9 +497,12 @@
 		"hasTagName": false,
 		"hasPageWidth": true,
 		"hasComposer": false,
-		"selectedSections": [
-			"notes"
-		]
+		"selectedSections": [],
+		"hasBackControl": true,
+		"hasGlobalHeader": false,
+		"hasReminder": false,
+		"hasMarket": false,
+		"hasSectionTabs": false
 	},
 	"PATCH /api/config/public": {
 		"status": 200,
@@ -592,12 +635,13 @@
 			"note": {
 				"id": "<runtime>",
 				"title": "Smoke note title",
-				"content": "Smoke test note, edited, about kayaking",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
 				"published": true,
+				"monospace": true,
 				"coverId": "<runtime>",
 				"tags": [
 					"work"
@@ -639,12 +683,13 @@
 			"note": {
 				"id": "<runtime>",
 				"title": "Smoke note title",
-				"content": "Smoke test note, edited, about kayaking",
+				"content": "Smoke test note, edited, about kayaking https://example.com/docs",
 				"created_at": "<runtime>",
 				"updated_at": "<runtime>",
 				"featured": false,
 				"video": "",
 				"published": true,
+				"monospace": true,
 				"coverId": "<runtime>",
 				"tags": [
 					"work"
@@ -684,6 +729,7 @@
 				"featured": true,
 				"video": "dQw4w9WgXcQ",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": [],
 				"commentCount": 0,
@@ -749,6 +795,20 @@
 			}
 		}
 	},
+	"page:/admin/todo/[id]": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": [],
+		"hasBackControl": true,
+		"hasGlobalHeader": false,
+		"hasReminder": false,
+		"hasMarket": false,
+		"hasSectionTabs": false
+	},
 	"PATCH /api/todo/items/[id] video": {
 		"status": 200,
 		"body": {
@@ -799,6 +859,20 @@
 				"commentCount": 0
 			}
 		}
+	},
+	"page:/admin/principles/[id]": {
+		"status": 200,
+		"bytes": true,
+		"hasNoteText": false,
+		"hasTagName": false,
+		"hasPageWidth": true,
+		"hasComposer": false,
+		"selectedSections": [],
+		"hasBackControl": true,
+		"hasGlobalHeader": false,
+		"hasReminder": false,
+		"hasMarket": false,
+		"hasSectionTabs": false
 	},
 	"POST /api/principles/[id]/comments": {
 		"status": 201,
@@ -1248,6 +1322,7 @@
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": []
 			}
@@ -1265,6 +1340,7 @@
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": []
 			}
@@ -1282,6 +1358,7 @@
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": [],
 				"commentCount": 0,
@@ -1299,6 +1376,19 @@
 				]
 			}
 		}
+	},
+	"GET /api/notes/[id]/print Markdown": {
+		"status": 200,
+		"hasHeading": true,
+		"hasTable": true,
+		"hasTaskList": true,
+		"hasMarkdownLink": true,
+		"hasBareUrl": true,
+		"noteHrefCount": 1,
+		"principleHrefCount": 1,
+		"codeKeepsWikiSyntax": true,
+		"noUnsafeLink": true,
+		"noInjectedScript": true
 	},
 	"GET /api/principles/[id] backlinks": {
 		"status": 200,
@@ -1326,6 +1416,7 @@
 					"featured": false,
 					"video": "",
 					"published": false,
+					"monospace": false,
 					"coverId": null,
 					"tags": [],
 					"commentCount": 0,
@@ -4169,6 +4260,7 @@
 				"featured": true,
 				"video": "dQw4w9WgXcQ",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": [],
 				"commentCount": 1,
@@ -4631,6 +4723,7 @@
 				"featured": false,
 				"video": "",
 				"published": false,
+				"monospace": false,
 				"coverId": null,
 				"tags": [],
 				"commentCount": 0,

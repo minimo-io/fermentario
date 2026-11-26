@@ -19,12 +19,29 @@
 		onDelete: (note: Note) => void;
 		onFeature: (note: Note) => void;
 		onPublish: (note: Note) => void;
+		onToggleMonospace: (note: Note) => Promise<void>;
 		onClose: () => void;
 	};
-	let { note, onOpen, onListen, onEdit, onDelete, onFeature, onPublish, onClose }: Props = $props();
+	let { note, onOpen, onListen, onEdit, onDelete, onFeature, onPublish, onToggleMonospace, onClose }: Props = $props();
 
 	let copied = $state(false);
 	let copyErr = $state('');
+	let savingMonospace = $state(false);
+	let monospaceError = $state('');
+
+	async function toggleMonospace() {
+		if (savingMonospace) return;
+		savingMonospace = true;
+		monospaceError = '';
+		try {
+			await onToggleMonospace(note);
+			onClose();
+		} catch (e) {
+			monospaceError = (e as Error)?.message ?? 'Could not save note settings.';
+		} finally {
+			savingMonospace = false;
+		}
+	}
 
 	async function copyNote() {
 		try {
@@ -79,6 +96,17 @@
 			</button>
 			<button
 				type="button"
+				role="switch"
+				aria-checked={note.monospace ?? false}
+				disabled={savingMonospace}
+				class="flex min-h-11 items-center justify-between gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-60"
+				onclick={() => void toggleMonospace()}
+			>
+				<span>Monospace font</span>
+				<span class="rounded-full px-2 py-0.5 text-xs {note.monospace ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-900' : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'}">{savingMonospace ? 'Saving…' : note.monospace ? 'On' : 'Off'}</span>
+			</button>
+			<button
+				type="button"
 				class="flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
 				onclick={() => { onFeature(note); }}
 			>
@@ -117,6 +145,9 @@
 		</div>
 		{#if copyErr}
 			<p class="px-3.5 pb-2 pt-1 text-xs text-rose-500 dark:text-rose-400">{copyErr}</p>
+		{/if}
+		{#if monospaceError}
+			<p role="alert" class="px-3.5 pb-2 pt-1 text-xs text-rose-500 dark:text-rose-400">{monospaceError}</p>
 		{/if}
 	</div>
 </div>

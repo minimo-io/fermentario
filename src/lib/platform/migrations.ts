@@ -1011,6 +1011,15 @@ const removeAiData: Migration = {
 	}
 };
 
+/** Add per-note monospace display preference. */
+const noteMonospace: Migration = {
+	version: 46,
+	name: 'note-monospace',
+	up(db) {
+		addColumn(db, 'notes', 'monospace', 'INTEGER NOT NULL DEFAULT 0');
+	}
+};
+
 export const MIGRATIONS: Migration[] = [
 	baseline,
 	commentPins,
@@ -1056,7 +1065,8 @@ export const MIGRATIONS: Migration[] = [
 	todoItemPhotos,
 	adminConfig,
 	removeQuickNote,
-	removeAiData
+	removeAiData,
+	noteMonospace
 ];
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

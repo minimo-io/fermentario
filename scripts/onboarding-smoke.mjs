@@ -131,7 +131,7 @@ async function sceneEmpty() {
 		const created = await create.json();
 		assert(create.status === 201, `POST /api/journal returned ${create.status}`);
 		assert(created.state === 'active', 'create should activate the new journal');
-		assert(created.journal?.schemaVersion === 45, 'new journal should use the latest schema version');
+		assert(created.journal?.schemaVersion === 46, 'new journal should use the latest schema version');
 
 		const journalPath = join(dataDir, 'journals', created.journal.id, 'journal.db');
 		assert(existsSync(journalPath), 'new journal file should exist');

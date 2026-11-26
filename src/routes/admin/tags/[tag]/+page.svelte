@@ -127,6 +127,19 @@
 		}
 	}
 
+	async function toggleMonospace(n: Note) {
+		const res = await loading.track(fetch(`/api/notes/${n.id}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ monospace: !n.monospace })
+		}));
+		const d = await res.json();
+		if (!res.ok) throw new Error(d?.error ?? 'Could not save note settings.');
+		const saved = d.note as Note;
+		pager.patch(saved);
+		pinned = pinned.map((item) => item.id === saved.id ? saved : item);
+	}
+
 	function cover(n: Note, coverId: string | null) {
 		pager.patch({ ...n, coverId });
 		pinned = pinned.map((x) => (x.id === n.id ? { ...x, coverId } : x));
@@ -269,6 +282,7 @@
 					onEdit={edit}
 					onFeature={feature}
 					onPublish={publish}
+					onToggleMonospace={toggleMonospace}
 					onCover={cover}
 					onLoadMore={() => pager.loadMore()}
 					hasMore={false}
@@ -293,6 +307,7 @@
 						onEdit={edit}
 						onFeature={feature}
 						onPublish={publish}
+						onToggleMonospace={toggleMonospace}
 						onCover={cover}
 						onLoadMore={() => pager.loadMore()}
 						hasMore={pager.hasMore}

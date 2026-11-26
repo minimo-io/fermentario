@@ -22,7 +22,8 @@ export const SCHEMA = `
 		updated_at INTEGER NOT NULL,
 		featured   INTEGER NOT NULL DEFAULT 0,
 		video      TEXT NOT NULL DEFAULT '',
-		published  INTEGER NOT NULL DEFAULT 0
+		published  INTEGER NOT NULL DEFAULT 0,
+		monospace  INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS note_tags (
@@ -115,6 +116,7 @@ export interface Note {
 	featured: boolean;
 	video: string;
 	published: boolean;
+	monospace: boolean;
 	/** Cover photo id, when the note has one. */
 	coverId: string | null;
 	tags: string[];
@@ -133,6 +135,7 @@ export interface NoteRow {
 	featured: number;
 	video: string;
 	published: number;
+	monospace: number;
 }
 
 export interface NoteCursor {
@@ -643,6 +646,7 @@ const rowToNote = (r: NoteRow, tags: string[] = [], comments = 0, links: LinkRef
 	featured: r.featured === 1,
 	video: r.video ?? '',
 	published: (r.published ?? 0) === 1,
+	monospace: (r.monospace ?? 0) === 1,
 	coverId,
 	tags,
 	commentCount: comments,
@@ -1496,7 +1500,7 @@ export function createJournal(db: SqlDb) {
 			now
 		);
 		db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
-		return { id, title: '', content, created_at: now, updated_at: now, featured: false, video: '', published: false, coverId: null, tags: [] };
+		return { id, title: '', content, created_at: now, updated_at: now, featured: false, video: '', published: false, monospace: false, coverId: null, tags: [] };
 	}
 
 	function deleteNote(id: string): boolean {
@@ -1617,6 +1621,11 @@ export function createJournal(db: SqlDb) {
 		const updated = Math.max(Date.now(), existing.created_at + 1);
 		db.prepare('UPDATE notes SET title = ?, updated_at = ? WHERE id = ?').run(clean, updated, id);
 		return getNote(id);
+	}
+
+	function setNoteMonospace(id: string, monospace: boolean): Note | null {
+		const done = db.prepare('UPDATE notes SET monospace = ? WHERE id = ?').run(monospace ? 1 : 0, id).changes > 0;
+		return done ? getNote(id) : null;
 	}
 
 	/** One page of notes, newest first, with a stable cursor.
@@ -5685,6 +5694,7 @@ export function createJournal(db: SqlDb) {
 		getNotePhoto,
 		setNoteVideo,
 		setNoteTitle,
+		setNoteMonospace,
 		searchJournal,
 		countNotes,
 		getRunningTimeEntry,

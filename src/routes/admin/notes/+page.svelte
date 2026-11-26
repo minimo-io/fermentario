@@ -25,6 +25,7 @@
 				onEdit={n.onEditNote}
 				onFeature={n.onFeatureNote}
 				onPublish={n.onPublishNote}
+				onToggleMonospace={n.onToggleMonospace}
 				onCover={n.onCoverNote}
 				onLoadMore={n.onLoadMore}
 				hasMore={false}
@@ -60,6 +61,7 @@
 		onEdit={n.onEditNote}
 		onFeature={n.onFeatureNote}
 		onPublish={n.onPublishNote}
+		onToggleMonospace={n.onToggleMonospace}
 		onCover={n.onCoverNote}
 		onLoadMore={n.onLoadMore}
 		hasMore={n.hasMore}

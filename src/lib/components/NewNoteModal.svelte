@@ -1,19 +1,30 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import { fade } from 'svelte/transition';
+	import { onMount, tick } from 'svelte';
+	import { fade, slide } from 'svelte/transition';
 	import { newNote } from '$lib/new-note.svelte';
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { splitHashtags } from '$lib/hashtags';
 	import TagFinder from '$lib/components/TagFinder.svelte';
 	import NoteFinder from '$lib/components/NoteFinder.svelte';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import X from '@lucide/svelte/icons/x';
+	import { motionMs } from '$lib/motion';
 
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 	const pendingTags = $derived(splitHashtags(newNote.text).tags);
 	const canSave = $derived(splitHashtags(newNote.text).content.trim().length > 0 && !newNote.saving);
 	let maxDate = $state('');
 	let dateValue = $state('');
+	let detailsOpen = $state(false);
+
+	onMount(() => {
+		const query = window.matchMedia('(min-width: 640px)');
+		const update = () => (detailsOpen = query.matches);
+		update();
+		query.addEventListener('change', update);
+		return () => query.removeEventListener('change', update);
+	});
 
 	$effect(() => {
 		if (!newNote.open) return;
@@ -28,6 +39,12 @@
 	function setDate(value: string) {
 		dateValue = value;
 		newNote.setCreatedAt(value ? datetimeLocalTimestamp(value) ?? null : null);
+	}
+
+	function toggleDetails() {
+		detailsOpen = !detailsOpen;
+		if (detailsOpen) textarea?.blur();
+		else void tick().then(() => textarea?.focus());
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -45,7 +62,7 @@
 
 {#if newNote.open}
 	<div
-		class="fixed inset-0 z-50 flex flex-col bg-white dark:bg-stone-900"
+		class="fixed inset-0 z-50 flex h-dvh min-h-0 flex-col bg-white dark:bg-stone-900"
 		role="dialog"
 		aria-modal="true"
 		aria-label="New note"
@@ -60,14 +77,27 @@
 				{newNote.saving ? 'Saving…' : 'Save'}
 			</button>
 		</div>
-		<div class="mx-auto mt-3 flex w-full max-w-2xl flex-wrap items-center gap-2 px-6">
-			<label class="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] text-stone-500 dark:border-stone-800 dark:bg-stone-800/50 dark:text-stone-400">
-				<CalendarClock class="h-3.5 w-3.5 shrink-0" />
-				<span class="shrink-0">Date</span>
-				<input type="datetime-local" value={dateValue} max={maxDate} aria-label="Note date and time" title="Leave empty to use the current time" class="min-w-0 max-w-[11rem] bg-transparent text-base text-stone-600 outline-none dark:text-stone-300" oninput={(e) => setDate(e.currentTarget.value)} />
-			</label>
-			<span class="text-[11px] text-stone-400">Empty uses now.</span>
-		</div>
+		<button
+			type="button"
+			class="mx-auto mt-3 flex min-h-10 w-full max-w-2xl items-center justify-between px-6 text-xs font-medium text-stone-500 dark:text-stone-400"
+			aria-expanded={detailsOpen}
+			onclick={toggleDetails}
+		>
+			<span>{detailsOpen ? 'Hide details' : 'Date and time'}</span>
+			<ChevronDown class="h-4 w-4 transition-transform duration-200 motion-reduce:transition-none {detailsOpen ? 'rotate-180' : ''}" />
+		</button>
+		{#if detailsOpen}
+			<div class="min-h-0 shrink-0 overflow-y-auto" transition:slide={{ duration: motionMs(180) }}>
+				<div class="mx-auto flex w-full max-w-2xl flex-wrap items-center gap-2 px-6">
+					<label class="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] text-stone-500 dark:border-stone-800 dark:bg-stone-800/50 dark:text-stone-400">
+						<CalendarClock class="h-3.5 w-3.5 shrink-0" />
+						<span class="shrink-0">Date</span>
+						<input type="datetime-local" value={dateValue} max={maxDate} aria-label="Note date and time" title="Leave empty to use the current time" class="min-w-0 max-w-[11rem] bg-transparent text-base text-stone-600 outline-none dark:text-stone-300" oninput={(e) => setDate(e.currentTarget.value)} />
+					</label>
+					<span class="text-[11px] text-stone-400">Empty uses now.</span>
+				</div>
+			</div>
+		{/if}
 		{#if pendingTags.length > 0}
 			<div class="mx-auto mt-3 flex w-full max-w-2xl flex-wrap items-center gap-1 px-6">
 				{#each pendingTags as tag (tag)}
@@ -76,7 +106,7 @@
 			</div>
 		{/if}
 		{#if newNote.error}<p class="mx-auto mt-2 w-full max-w-2xl px-6 text-xs text-rose-500" role="alert">{newNote.error}</p>{/if}
-		<div class="relative mx-auto flex w-full max-w-2xl flex-1 px-6 pb-6 pt-3">
+		<div class="relative mx-auto flex min-h-0 w-full max-w-2xl flex-1 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
 			<textarea
 				bind:this={textarea}
 				class="h-full w-full resize-none bg-transparent text-base leading-relaxed text-stone-800 outline-none dark:text-stone-200"

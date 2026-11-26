@@ -7,12 +7,15 @@
 	import RipioPanel from '$lib/components/RipioPanel.svelte';
 	import NostrPanel from '$lib/components/NostrPanel.svelte';
 	import DatabasePanel from '$lib/components/DatabasePanel.svelte';
+	import VoicePanel from '$lib/components/VoicePanel.svelte';
+	import type { SpeechLang } from '$lib/speech';
 
 	type Lang = 'en' | 'es' | 'pt';
-	type Tab = 'general' | 'trading' | 'nostr' | 'database';
+	type Tab = 'general' | 'voice' | 'trading' | 'nostr' | 'database';
 
 	type Props = {
 		entriesLang: Lang;
+		voiceURI: string;
 		contentWidth: ContentWidth;
 		theme: Theme;
 		sections: { id: string; label: string }[];
@@ -22,20 +25,22 @@
 		onClose: () => void;
 		onSaveMotto: (value: string) => Promise<void>;
 		onSaveLanguages: (p: { entriesLang: Lang }) => void;
+		onVoice: (voiceURI: string) => void;
 		onWidth: (w: ContentWidth) => void;
 		onSections: (ids: string[]) => void;
 		onTheme: (t: Theme) => void;
 		onRestoreStart: (file: File) => void;
 	};
 	let {
-		entriesLang, contentWidth, theme, sections,
+		entriesLang, voiceURI, contentWidth, theme, sections,
 		motto, tab,
-		onTab, onClose,
+		onTab, onClose, onVoice,
 		onSaveMotto, onSaveLanguages, onWidth, onSections, onTheme, onRestoreStart
 	}: Props = $props();
 
 	const TABS: { id: Tab; label: string }[] = [
 		{ id: 'general', label: 'General' },
+		{ id: 'voice', label: 'Voice' },
 		{ id: 'trading', label: 'Trading' },
 		{ id: 'nostr', label: 'Nostr' },
 		{ id: 'database', label: 'Database' }
@@ -94,6 +99,8 @@
 			<div bind:this={bodyEl}>
 				{#if tab === 'general'}
 					<LanguagePanel {entriesLang} {contentWidth} {theme} {sections} {motto} {onSaveMotto} onSave={onSaveLanguages} {onWidth} {onSections} {onTheme} />
+				{:else if tab === 'voice'}
+					<VoicePanel lang={entriesLang as SpeechLang} {voiceURI} {onVoice} />
 				{:else if tab === 'trading'}
 					<RipioPanel />
 				{:else if tab === 'nostr'}

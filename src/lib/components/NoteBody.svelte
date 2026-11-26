@@ -85,7 +85,7 @@
 			</button>
 			<div
 				bind:this={fold.textEls[note.id]}
-				class="min-w-0 flex-1 whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {fold.collapsed[
+				class="note-markdown min-w-0 flex-1 whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {note.monospace ? 'font-mono' : ''} {fold.collapsed[
 					note.id
 				] && !fold.unclamped[note.id]
 					? 'line-clamp-1'
@@ -96,11 +96,78 @@
 		</div>
 	</div>
 {:else}
-	<p
+	<div
 		bind:this={fold.textEls[note.id]}
-		class="whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200">{@html html}</p
-	>
+		class="note-markdown whitespace-pre-wrap text-[15px] leading-snug text-stone-800 dark:text-stone-200 {note.monospace ? 'font-mono' : ''}">{@html html}</div>
 {/if}
+
+<style>
+	:global(.note-markdown > * + *) {
+		margin-top: 0.65em;
+	}
+	:global(.note-markdown h1),
+	:global(.note-markdown h2),
+	:global(.note-markdown h3),
+	:global(.note-markdown h4),
+	:global(.note-markdown h5),
+	:global(.note-markdown h6) {
+		font-weight: 700;
+		line-height: 1.25;
+		margin-top: 0.85em;
+	}
+	:global(.note-markdown h1) { font-size: 1.45em; }
+	:global(.note-markdown h2) { font-size: 1.3em; }
+	:global(.note-markdown h3) { font-size: 1.15em; }
+	:global(.note-markdown ul) { list-style: disc; padding-left: 1.5em; }
+	:global(.note-markdown ol) { list-style: decimal; padding-left: 1.5em; }
+	:global(.note-markdown li + li) { margin-top: 0.2em; }
+	:global(.note-markdown blockquote) {
+		border-left: 3px solid #a8a29e;
+		padding-left: 0.8em;
+		color: #78716c;
+	}
+	:global(.dark .note-markdown blockquote) { border-color: #57534e; color: #a8a29e; }
+	:global(.note-markdown code) {
+		border-radius: 0.25rem;
+		background: rgb(120 113 108 / 12%);
+		padding: 0.08em 0.25em;
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.9em;
+	}
+	:global(.note-markdown pre) {
+		overflow-x: auto;
+		border-radius: 0.5rem;
+		background: rgb(120 113 108 / 12%);
+		padding: 0.75em;
+	}
+	:global(.note-markdown pre code) { background: transparent; padding: 0; }
+	:global(.note-markdown table) {
+		display: block;
+		max-width: 100%;
+		overflow-x: auto;
+		border-collapse: collapse;
+		white-space: normal;
+	}
+	:global(.note-markdown th),
+	:global(.note-markdown td) {
+		border: 1px solid #d6d3d1;
+		padding: 0.3em 0.55em;
+		text-align: left;
+	}
+	:global(.dark .note-markdown th),
+	:global(.dark .note-markdown td) { border-color: #44403c; }
+	:global(.note-markdown .wiki-link) {
+		border-radius: 9999px;
+		background: rgb(120 113 108 / 18%);
+		padding: 0.05em 0.55em;
+		font-size: 0.82em;
+		font-weight: 600;
+	}
+	:global(.note-markdown .wiki-link:hover) { background: rgb(120 113 108 / 30%); }
+	:global(.note-markdown img) { max-width: 100%; height: auto; border-radius: 0.5rem; }
+	:global(.note-markdown .contains-task-list) { list-style: none; padding-left: 0; }
+	:global(.note-markdown .task-list-item-checkbox) { margin-right: 0.45em; }
+</style>
 
 {#if note.tags?.length}
 	<div class="mt-2 flex flex-wrap gap-1">

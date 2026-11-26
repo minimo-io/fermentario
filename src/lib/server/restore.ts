@@ -202,9 +202,10 @@ export function copyUploadIntoTarget(
 		if (has('holdings')) statements.push('DELETE FROM holding_value_history', 'DELETE FROM portfolio_value_history', 'DELETE FROM holding_actions', 'DELETE FROM holdings', 'DELETE FROM fx_rates', 'DELETE FROM category_goals', 'DELETE FROM category_value_goals');
 
 		statements.push(
-			`INSERT INTO notes (id, content, created_at, updated_at, featured, video, published)
+			`INSERT INTO notes (id, content, created_at, updated_at, featured, video, published, monospace)
 				SELECT id, content, created_at, updated_at,
-					${column('notes', 'featured', '0')}, ${column('notes', 'video', "''")}, ${column('notes', 'published', '0')}
+					${column('notes', 'featured', '0')}, ${column('notes', 'video', "''")}, ${column('notes', 'published', '0')},
+					${column('notes', 'monospace', '0')}
 				FROM backup.notes`,
 			'INSERT INTO note_tags (note_id, tag) SELECT note_id, tag FROM backup.note_tags'
 		);

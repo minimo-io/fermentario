@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { deleteNote, getNote, setNoteTags, setNoteFeatured, setNotePublished, setNoteVideo, setNoteTitle, updateNote } from '$lib/server/db';
+import { deleteNote, getNote, setNoteTags, setNoteFeatured, setNotePublished, setNoteVideo, setNoteTitle, setNoteMonospace, updateNote } from '$lib/server/db';
 import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
 
@@ -10,7 +10,7 @@ export async function GET({ params }) {
 }
 
 export async function PATCH({ params, request }) {
-	let body: { content?: unknown; title?: unknown; featured?: unknown; published?: unknown; video?: unknown; created_at?: unknown };
+	let body: { content?: unknown; title?: unknown; featured?: unknown; published?: unknown; video?: unknown; monospace?: unknown; created_at?: unknown };
 	try {
 		body = await request.json();
 	} catch {
@@ -23,12 +23,13 @@ export async function PATCH({ params, request }) {
 		createdAt = Math.min(n, Date.now());
 	}
 	// Flags and the title touch only their own columns.
-	if (typeof body?.content !== 'string' && (typeof body?.featured === 'boolean' || typeof body?.published === 'boolean' || typeof body?.video === 'string' || typeof body?.title === 'string')) {
+	if (typeof body?.content !== 'string' && (typeof body?.featured === 'boolean' || typeof body?.published === 'boolean' || typeof body?.video === 'string' || typeof body?.title === 'string' || typeof body?.monospace === 'boolean')) {
 		let note = getNote(params.id);
 		if (!note) return json({ error: 'not found' }, { status: 404 });
 		if (typeof body.featured === 'boolean') note = setNoteFeatured(params.id, body.featured) ?? note;
 		if (typeof body.published === 'boolean') note = setNotePublished(params.id, body.published) ?? note;
 		if (typeof body.title === 'string') note = setNoteTitle(params.id, body.title) ?? note;
+		if (typeof body.monospace === 'boolean') note = setNoteMonospace(params.id, body.monospace) ?? note;
 		if (typeof body.video === 'string') {
 			const raw = body.video.trim();
 			if (raw) {

@@ -14,15 +14,17 @@ sizing. Consult this before changing any of them.
   `404`); the private note editor lives at `/admin/notes/[id]`. Public
   presentation lives in DB `public_config` and is fetched by the server for
   public routes. Private admin presentation (the reminder) lives in DB
-  `admin_config`; theme, entries language, column width and the summary
-  prompt stay browser-only preferences.
+  `admin_config`; theme, entries language, selected system voice and column
+  width stay browser-only preferences.
   `GET /api/public/config` is safe for anonymous visitors, while
   `PATCH /api/config/public` belongs to the admin API namespace.
   The URL is
-  the section state — no session storage, no `?from=` return links. Detail
-  pages go back with browser history, falling back to their section root.
-  The admin shell (header, Market card, section pills, composer, settings)
-  lives in the `admin` layout; route pages only render their section.
+   the section state — no session storage, no `?from=` return links. Detail
+   pages go back with browser history, falling back to their section root.
+   The admin shell (header, Market card, section pills, composer, settings)
+   lives in the `admin` layout; route pages only render their section. A
+   single note, task or principle omits that shell and keeps its own back
+   control with the detail content.
 
 ## Layout
 
@@ -49,10 +51,10 @@ sizing. Consult this before changing any of them.
   keep it visible. It never appears on the public pages or in the bare EPUB
   reader.
 - **Market rail scope**: holdings and trading sit under the header on the
-  section views only (`/admin/notes`, `/admin/todo`, `/admin/library`,
-  `/admin/principles`, `/admin/influences`, `/admin/stocks`,
-  `/admin/businesses/*`). Heatmaps, Tags, a single note or task, Ask,
-  Diagnostics and Settings pages open without the market rail.
+   section views only (`/admin/notes`, `/admin/todo`, `/admin/library`,
+   `/admin/principles`, `/admin/influences`, `/admin/stocks`,
+   `/admin/businesses/*`). Heatmaps, Tags, a single note, task or principle,
+   Ask, Diagnostics and Settings pages open without the market rail.
 - **Help dialog** (`HelpModal.svelte`, opened from the header): the slogan
   `Your sovereign life's dashboard` (`src/lib/brand.ts`) and two pill tabs.
   **Shortcuts** holds the 16:9 walkthrough placeholder and the shortcut list
@@ -68,7 +70,25 @@ sizing. Consult this before changing any of them.
 - **New note editor**: the command, shortcut and mini-app button open the same
   full-screen editor. Its optional date/time becomes the note's `created_at`.
   Text and date persist in session storage until save. An unsaved draft puts a
-  lime dot on the mini-app button.
+  lime dot on the mini-app button. Note editing uses the same full-screen
+  `NoteEditorModal` layout on both the list and single-note page; edit-only
+  title, video and cover fields stay in that form. On phones, keep those
+  secondary fields collapsed by default so the focused text editor gets the
+  available height; expose them under one Details control. The optional date
+  in the new-note form follows the same mobile pattern.
+- **Note Markdown**: render note bodies with CommonMark/GFM, including tables,
+  task lists, headings, links and code. Keep editors as raw text. Treat
+  `[[uuid]]` as a Markdown inline extension so references remain clickable
+  outside code spans and fences. Disable raw HTML and sanitize rendered output.
+- **Read aloud**: the current implementation uses the browser/device speech
+  service, not an AI model. Settings → Voice lists system voices, lets the user
+  select one and test it. If speech is unsupported or fails to start, show a
+  clear message instead of leaving the read-aloud action silent. A cross-device
+  engine is still under evaluation.
+- **Note typography**: each note stores its own monospace preference. The
+  normal font remains the default. Apply the preference on every note body and
+  on public note excerpts; put its control in the note actions menu in the
+  notes list and the single-note page, not in note creation or editing.
 - **Fixed bottom bars**: To-Do, Principles, Stocks and Nostr use the shared
   `FixedBottomBar`. It publishes its height as `--composer-h` and clears that
   value when it unmounts.

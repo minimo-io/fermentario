@@ -30,6 +30,68 @@
 - For startup probes, poll the journal-status endpoint and wait for a response;
   do not require a 2xx response because broken journals correctly return 503.
 
+## Session: Native read-aloud support
+- `src/lib/speech.ts` also provides speech-recognition exports used by the
+  composer. Keep that API intact when adding browser speech synthesis; separate
+  the shared read-aloud helpers rather than replacing the module.
+- Speech synthesis can fail asynchronously or accept a request without
+  starting. Report unsupported APIs, runtime errors and missing start events;
+  expose system voices without assuming voice lists load immediately.
+
+## Session: Per-note monospace display
+- Keep the font preference on the note row, default it to false in the
+  migration, and include it in restore so old backups reset to the normal font.
+- Update the shared Note type, journal row mapper, API patch handler and
+  journal method registry together; the method registry is what makes it
+  available through the server database facade.
+- Apply the class in the shared body and public excerpt. Keep the setting out
+  of creation and editing; place it in the actions menus on list rows and
+  single-note pages.
+
+## Session: Clickable links in note print output
+- Printable notes must use the shared `renderNoteContent` pipeline instead of
+  `inlineMarkdown` alone. The shared pipeline also turns bare URLs into
+  anchors and resolves `[[note-id]]` links with their live labels.
+- Cover this with a print-route smoke assertion for a real `href`, not only
+  the route status and content type.
+
+## Session: Use one full-screen note editor
+- A compact edit dialog in the note list and inline editing on the detail page
+  feel unlike the full-screen creation editor, especially on phones. Route
+  both edit entry points through one full-screen form and keep edit-only fields
+  (title, video and cover) within its controls.
+- Keep API persistence and cover upload in the route callbacks; the shared
+  editor owns layout, date input, keyboard handling and local cover preview.
+- On phones, autofocus can open the keyboard as soon as the editor appears.
+  Collapse secondary fields by default so the text area keeps useful height;
+  opening Details should dismiss the keyboard, and closing it can return focus
+  to the text.
+
+## Session: Render note text as Markdown
+- A few regular-expression replacements do not scale to Markdown blocks.
+  Render note bodies through one CommonMark/GFM parser and sanitizer on every
+  display surface; leave editor values untouched.
+- Parse `[[uuid]]` as an inline token before normal links. Replacing text in
+  rendered HTML can incorrectly activate references inside inline or fenced
+  code.
+- Keep raw HTML disabled and test tables, headings, tasks, URL links, note and
+  principle references, plus the code boundary in the printable route.
+- A passing build and HTTP smoke test do not prove a long-running Vite dev
+  server has refreshed its optimized dependency cache after new packages are
+  installed. Open the affected route in a real browser, inspect failed
+  requests and page errors, and restart Vite when it reports `Outdated
+  Optimize Dep`; verify the route again after restart.
+- Keep the note renderer safe with Markdown's raw-HTML-off mode and an explicit
+  URL-scheme allowlist. Do not import a Node-only HTML sanitizer into the
+  shared client/server renderer; it can externalize `fs` and `path` in Vite.
+
+## Session: Keep detail pages free of the admin shell
+- Note, task and principle detail routes already own their back controls.
+  Render those routes without the global admin header, market rail, reminder
+  or section tabs; keep their detail content and route-local navigation.
+- Match only the exact single-item route depth so section pages such as
+  `/admin/notes` and nested tools keep their normal shell behavior.
+
 ## Session: Global toast placement
 - Keep global action-result toasts at the viewport bottom and above modal
   overlays. Include the device safe-area inset so they stay visible on phones.

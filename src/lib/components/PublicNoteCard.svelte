@@ -31,7 +31,7 @@
 	{:else}
 		<a
 			href={`/notes/${note.id}`}
-			class="block text-[15px] leading-snug text-stone-800 hover:underline dark:text-stone-200"
+			class="block text-[15px] leading-snug text-stone-800 hover:underline dark:text-stone-200 {note.monospace ? 'font-mono' : ''}"
 		>{excerpt(note.content)}</a
 		>
 	{/if}

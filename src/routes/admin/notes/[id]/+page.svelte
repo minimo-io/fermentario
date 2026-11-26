@@ -1,16 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
 	import Star from '@lucide/svelte/icons/star';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import NoteBody from '$lib/components/NoteBody.svelte';
-	import NoteFinder from '$lib/components/NoteFinder.svelte';
+	import NoteEditorModal from '$lib/components/NoteEditorModal.svelte';
 	import { youTubeWatchUrl } from '$lib/youtube';
-	import { fileToPhotoUrl } from '$lib/stock-photo';
-	import ImagePlus from '@lucide/svelte/icons/image-plus';
-	import X from '@lucide/svelte/icons/x';
 	import CommentModal from '$lib/components/CommentModal.svelte';
 	import CommentItem from '$lib/components/CommentItem.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -18,10 +15,10 @@
 	import NoteActionsMenu from '$lib/components/NoteActionsMenu.svelte';
 	import { contentWidthClass } from '$lib/display';
 	import { sortComments } from '$lib/comments';
-	import { splitHashtags, withTrailingHashtags } from '$lib/hashtags';
-	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
+	import { withTrailingHashtags } from '$lib/hashtags';
 	import { loading } from '$lib/loading.svelte';
 	import { showToast } from '$lib/toast.svelte';
+	import { preferredSpeechVoiceURI, speakText, speechStartedMessage, type SpeechLang } from '$lib/speech';
 	import type { Note, NoteComment } from '$lib/types';
 
 	let { data } = $props();
@@ -35,27 +32,15 @@
 	let editTitle = $state('');
 	let editContent = $state('');
 	let editVideo = $state('');
-	let editDate = $state('');
-	let editDateInitial = $state('');
-	let editMaxDate = $state('');
-	let editSaving = $state(false);
-	let editError = $state('');
-	let editField = $state<HTMLTextAreaElement | null>(null);
-	// Cover state mirrors the dialog: undefined keeps, data URL replaces,
-	// null removes.
-	let editCoverPreview = $state<string | null>(null);
-	let editCoverData = $state<string | null | undefined>(undefined);
-	const editUnchanged = $derived(
-		editTitle.trim() === (note.title ?? '').trim() &&
-			editContent.trim() === withTrailingHashtags(note.content, note.tags).trim() &&
-			editVideo.trim() === (note.video ? youTubeWatchUrl(note.video) : '') &&
-			editDate === editDateInitial &&
-			editCoverData === undefined
-	);
-	const editEmpty = $derived(splitHashtags(editContent).content.trim().length === 0);
 	let confirming = $state(false);
 	let menuOpen = $state(false);
 	let reading = $state(false);
+	let stopSpeech: (() => void) | null = null;
+	let speechGeneration = 0;
+	onDestroy(() => {
+		speechGeneration += 1;
+		stopSpeech?.();
+	});
 	let addingComment = $state(false);
 	let editingComment = $state<NoteComment | null>(null);
 	let confirmingComment = $state<NoteComment | null>(null);
@@ -144,42 +129,35 @@
 		await refresh();
 	}
 
-	function focusEditor(node: HTMLTextAreaElement) {
-		node.focus();
-		node.setSelectionRange(node.value.length, node.value.length);
-		node.style.height = 'auto';
-		node.style.height = `${node.scrollHeight}px`;
+	async function toggleMonospace(n: Note) {
+		const res = await loading.track(fetch(`/api/notes/${n.id}`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ monospace: !n.monospace })
+		}));
+		const d = await res.json();
+		if (!res.ok) throw new Error(d?.error ?? 'Could not save note settings.');
+		note = d.note as Note;
 	}
 
-	function autosizeEditor() {
-		if (!editField) return;
-		editField.style.height = 'auto';
-		editField.style.height = `${editField.scrollHeight}px`;
-	}
-
-	async function saveEdit() {
-		if (editSaving || editEmpty || editUnchanged) return;
-		editSaving = true;
-		editError = '';
+	async function saveEdit(content: string, video: string, createdAt: number, cover: string | null | undefined, title: string) {
 		try {
-			const createdAt = editDate === editDateInitial
-				? note.created_at
-				: Math.min(datetimeLocalTimestamp(editDate) ?? Date.now(), Date.now());
 			const res = await loading.track(fetch(`/api/notes/${note.id}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: editContent.trim(), title: editTitle.trim(), video: editVideo.trim(), created_at: createdAt })
+				body: JSON.stringify({ content, title, video, created_at: createdAt })
 			}));
 			const d = await res.json();
 			if (!res.ok) throw new Error(d?.error ?? 'Failed to save note.');
-			if (editCoverData !== undefined) {
-				if (editCoverData === null) {
-					await loading.track(fetch(`/api/notes/${note.id}/photo`, { method: 'DELETE' }));
+			if (cover !== undefined) {
+				if (cover === null) {
+					const coverRes = await loading.track(fetch(`/api/notes/${note.id}/photo`, { method: 'DELETE' }));
+					if (!coverRes.ok) throw new Error('Could not remove the cover image.');
 				} else {
 					const pres = await loading.track(fetch(`/api/notes/${note.id}/photo`, {
 						method: 'POST',
 						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ photo: editCoverData })
+						body: JSON.stringify({ photo: cover })
 					}));
 					const pd = await pres.json();
 					if (!pres.ok) throw new Error(pd?.error ?? 'Could not save the cover image.');
@@ -188,29 +166,12 @@
 			editing = false;
 			await refresh();
 		} catch (e) {
-			editError = (e as Error)?.message ?? 'Could not save the note.';
-		} finally {
-			editSaving = false;
+			throw e;
 		}
 	}
 
 	function cancelEdit() {
-		if (editSaving) return;
 		editing = false;
-		editError = '';
-		editCoverPreview = null;
-		editCoverData = undefined;
-	}
-
-	function onEditKeydown(e: KeyboardEvent) {
-		if (e.isComposing) return;
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			cancelEdit();
-		} else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-			e.preventDefault();
-			void saveEdit();
-		}
 	}
 
 	async function remove() {
@@ -273,18 +234,33 @@
 
 	function read() {
 		menuOpen = false;
+		speechGeneration += 1;
+		const generation = speechGeneration;
 		if (reading) {
-			window.speechSynthesis.cancel();
+			stopSpeech?.();
+			stopSpeech = null;
 			reading = false;
 			return;
 		}
-		const u = new SpeechSynthesisUtterance(note.content);
-		u.rate = 0.98;
-		u.lang = lang === 'es' ? 'es-ES' : lang === 'pt' ? 'pt-PT' : 'en-US';
-		u.onend = () => (reading = false);
-		u.onerror = () => (reading = false);
+		const speechLang: SpeechLang = lang === 'es' || lang === 'pt' ? lang : 'en';
+		const result = speakText(note.content, speechLang, preferredSpeechVoiceURI(), () => {
+			if (speechGeneration === generation) showToast(speechStartedMessage(speechLang), 'success');
+		}, () => {
+			if (speechGeneration !== generation) return;
+			reading = false;
+			stopSpeech = null;
+		}, (message) => {
+			if (speechGeneration !== generation) return;
+			reading = false;
+			stopSpeech = null;
+			showToast(message);
+		});
+		if (typeof result === 'string') {
+			showToast(result);
+			return;
+		}
+		stopSpeech = result;
 		reading = true;
-		window.speechSynthesis.speak(u);
 	}
 
 	function openEdit() {
@@ -294,31 +270,7 @@
 		// Prefill the URL, not the stored id: the id would fail the API's URL
 		// check on a text-only edit.
 		editVideo = note.video ? youTubeWatchUrl(note.video) : '';
-		editDate = datetimeLocalValue(note.created_at);
-		editDateInitial = editDate;
-		editMaxDate = datetimeLocalValue(Date.now());
-		editError = '';
-		editCoverPreview = note.coverId ? `/api/notes/photos/${note.coverId}` : null;
-		editCoverData = undefined;
 		editing = true;
-	}
-
-	async function pickEditCover(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (!file) return;
-		try {
-			editCoverData = await fileToPhotoUrl(file);
-			editCoverPreview = editCoverData;
-		} catch {
-			editError = 'Could not read the image.';
-		}
-	}
-
-	function removeEditCover() {
-		editCoverData = null;
-		editCoverPreview = null;
 	}
 </script>
 
@@ -361,85 +313,7 @@
 			<div class="flex items-start gap-2">
 				{#if note.featured}<Star class="mt-1 h-4 w-4 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />{/if}
 				<div class="min-w-0 flex-1">
-					{#if editing}
-						<label class="block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-title">Title (optional)</label>
-						<input
-							id="edit-note-title"
-							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
-							bind:value={editTitle}
-							onkeydown={onEditKeydown}
-							maxlength={120}
-						/>
-						<div class="relative mt-3">
-							<textarea
-								bind:this={editField}
-								use:focusEditor
-								class="max-h-[50dvh] w-full resize-none overflow-y-auto rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base leading-snug text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-								aria-label="Note text"
-								placeholder="Note text"
-								value={editContent}
-								oninput={(e) => { editContent = e.currentTarget.value; autosizeEditor(); }}
-								onkeydown={onEditKeydown}
-							></textarea>
-							<NoteFinder textarea={editField} excludeId={note.id} />
-						</div>
-						<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-date">Date and time</label>
-						<input
-							id="edit-note-date"
-							type="datetime-local"
-							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none focus:border-stone-400 dark:focus:border-stone-600"
-							bind:value={editDate}
-							onkeydown={onEditKeydown}
-							max={editMaxDate}
-						/>
-						<p class="mt-1 text-[11px] text-stone-400 dark:text-stone-500">Empty uses the current time.</p>
-						<label class="mt-3 block text-xs font-medium text-stone-500 dark:text-stone-400" for="edit-note-video">YouTube URL (optional)</label>
-						<input
-							id="edit-note-video"
-							class="mt-1 w-full rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-3 text-base text-stone-800 dark:text-stone-200 outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-stone-400 dark:focus:border-stone-600"
-							value={editVideo}
-							oninput={(e) => (editVideo = e.currentTarget.value)}
-							onkeydown={onEditKeydown}
-							placeholder="https://www.youtube.com/watch?v=…"
-							inputmode="url"
-						/>
-						<div class="mt-3">
-							<span class="block text-xs font-medium text-stone-500 dark:text-stone-400">Cover image (optional)</span>
-							{#if editCoverPreview}
-								<div class="mt-1 flex items-start gap-2">
-									<img src={editCoverPreview} alt="Note cover preview" class="h-20 w-32 rounded-xl object-cover" />
-									<button
-										type="button"
-										class="grid h-7 w-7 shrink-0 place-items-center rounded-full text-stone-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-rose-600 dark:hover:text-rose-400"
-										aria-label="Remove cover image"
-										onclick={removeEditCover}
-									><X class="h-4 w-4" /></button>
-								</div>
-							{:else}
-								<label class="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-stone-200 dark:border-stone-800 px-3 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800">
-									<ImagePlus class="h-3.5 w-3.5" /> Choose image
-									<input type="file" accept="image/*" class="sr-only" onchange={pickEditCover} />
-								</label>
-							{/if}
-						</div>
-						{#if editError}
-							<p class="mt-2 text-xs text-rose-500 dark:text-rose-400">{editError}</p>
-						{/if}
-						<div class="mt-4 flex justify-end gap-2">
-							<button
-								type="button"
-								class="rounded-full border border-stone-200 dark:border-stone-800 px-4 py-1.5 text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
-								disabled={editSaving}
-								onclick={cancelEdit}
-							>{editSaving ? 'Saving…' : 'Cancel'}</button>
-							<button
-								type="button"
-								class="rounded-full bg-stone-900 dark:bg-stone-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-stone-800 dark:hover:bg-stone-600 disabled:opacity-50"
-								disabled={editSaving || editEmpty || editUnchanged}
-								onclick={() => void saveEdit()}
-							>{editSaving ? 'Saving…' : 'Save'}</button>
-						</div>
-					{:else}
+					{#if !editing}
 						<NoteBody
 							{note}
 							variant="page"
@@ -495,6 +369,21 @@
 	</div>
 </main>
 
+{#if editing}
+	<NoteEditorModal
+		{note}
+		title={editTitle}
+		content={editContent}
+		video={editVideo}
+		coverId={note.coverId ?? null}
+		onTitle={(value) => (editTitle = value)}
+		onContent={(value) => (editContent = value)}
+		onVideo={(value) => (editVideo = value)}
+		onSave={saveEdit}
+		onCancel={cancelEdit}
+	/>
+{/if}
+
 {#if addingComment}
 	<CommentModal
 		onSubmit={addComment}
@@ -535,6 +424,7 @@
 		onDelete={() => { menuOpen = false; confirming = true; }}
 		onFeature={toggleFeature}
 		onPublish={togglePublish}
+		onToggleMonospace={toggleMonospace}
 		onClose={() => (menuOpen = false)}
 	/>
 {/if}
@@ -550,4 +440,3 @@
 		onCancel={() => (confirming = false)}
 	/>
 {/if}
-

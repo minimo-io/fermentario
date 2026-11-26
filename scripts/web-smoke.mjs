@@ -160,8 +160,8 @@ try {
 		: null;
 	registry.close();
 	// Keep in step with LATEST_SCHEMA_VERSION in src/lib/platform/migrations.ts.
-	if (!journal || journal.state !== 'active' || journal.schema_version !== 45) {
-		console.error('The legacy import did not register an active v45 journal: ' + JSON.stringify(journal));
+	if (!journal || journal.state !== 'active' || journal.schema_version !== 46) {
+		console.error('The legacy import did not register an active v46 journal: ' + JSON.stringify(journal));
 		stop();
 		process.exit(1);
 	}
@@ -191,6 +191,7 @@ async function api(name, path, init) {
 async function page(name, path, probes) {
 	const res = await fetch(`${base}${path}`);
 	const html = await res.text();
+	const extra = probes ? probes(html) : {};
 	results.push([
 		name,
 		{
@@ -206,10 +207,11 @@ async function page(name, path, probes) {
 			// Chrome that must match the route. A mini app under /admin is not a
 			// section: it must show no selected section pill and no composer.
 			hasComposer: html.includes('composer-field'),
-			selectedSections: [...html.matchAll(/data-section="([^"]+)"[^>]*aria-selected="true"/g)].map((m) => m[1])
+			selectedSections: [...html.matchAll(/data-section="([^"]+)"[^>]*aria-selected="true"/g)].map((m) => m[1]),
+			...extra
 		}
 	]);
-	return res.status;
+	return { status: res.status, ...extra };
 }
 
 const json = (b, method = 'POST') => ({
@@ -228,6 +230,28 @@ function must(name, res, predicate, what) {
 		stop();
 		process.exit(1);
 	}
+}
+
+async function detailPage(name, path, backLabel) {
+	const result = await page(name, path, (html) => ({
+		hasBackControl: html.includes(backLabel),
+		hasGlobalHeader: html.includes('aria-label="Public homepage"'),
+		hasReminder: html.includes('aria-label="Reminder"'),
+		hasMarket: html.includes('aria-label="Market"'),
+		hasSectionTabs: html.includes('aria-label="Views"')
+	}));
+	must(
+		name,
+		result,
+		(r) =>
+			r.status === 200 &&
+			r.hasBackControl &&
+			!r.hasGlobalHeader &&
+			!r.hasReminder &&
+			!r.hasMarket &&
+			!r.hasSectionTabs,
+		'200 with its back control and no global admin chrome'
+	);
 }
 
 // --- Pages -----------------------------------------------------------------
@@ -297,7 +321,7 @@ volatile.add(created.body.note.updated_at);
 const edited = await api(
 	'PATCH /api/notes/[id]',
 	`/api/notes/${id}`,
-	json({ content: 'Smoke test note, edited, about kayaking #work' }, 'PATCH')
+	json({ content: 'Smoke test note, edited, about kayaking https://example.com/docs #work' }, 'PATCH')
 );
 must('PATCH /api/notes/[id]', edited, (r) => r.status === 200 && !!r.body.note, '200 with a note');
 volatile.add(edited.body.note.updated_at);
@@ -314,10 +338,32 @@ must(
 	(r) =>
 		r.status === 200 &&
 		r.body.note?.title === 'Smoke note title' &&
-		r.body.note?.content === 'Smoke test note, edited, about kayaking',
+		r.body.note?.content === 'Smoke test note, edited, about kayaking https://example.com/docs',
 	'200 with the title and the unchanged content'
 );
 volatile.add(titled.body.note.updated_at);
+
+const notePrint = await fetch(`${base}/api/notes/${id}/print`);
+const notePrintHtml = await notePrint.text();
+results.push(['GET /api/notes/[id]/print', { status: notePrint.status, contentType: notePrint.headers.get('content-type'), hasClickableUrl: notePrintHtml.includes('href="https://example.com/docs"') }]);
+must(
+	'GET /api/notes/[id]/print',
+	{ status: notePrint.status, body: { contentType: notePrint.headers.get('content-type'), hasClickableUrl: notePrintHtml.includes('href="https://example.com/docs"') } },
+	(r) => r.status === 200 && r.body?.contentType?.includes('text/html') && r.body?.hasClickableUrl === true,
+	'200 printable HTML with a clickable URL'
+);
+
+const monospace = await api(
+	'PATCH /api/notes/[id] monospace',
+	`/api/notes/${id}`,
+	json({ monospace: true }, 'PATCH')
+);
+must(
+	'PATCH /api/notes/[id] monospace',
+	monospace,
+	(r) => r.status === 200 && r.body.note?.monospace === true,
+	'200 with the per-note font preference'
+);
 
 const published = await api(
 	'PATCH /api/notes/[id] published',
@@ -333,7 +379,7 @@ must(
 await api('GET /api/public/notes', '/api/public/notes');
 await api('GET /api/public/notes/[id]', `/api/public/notes/${id}`);
 await page('page:/notes/[id]', `/notes/${id}`);
-await page('page:/admin/notes/[id]', `/admin/notes/${id}`);
+await detailPage('page:/admin/notes/[id]', `/admin/notes/${id}`, 'All notes');
 
 // Public config is a separate, safe namespace. Exercise write/read/disable,
 // then reset it so the remaining public checks keep the default shape.
@@ -581,6 +627,7 @@ const itemId = item.body.item.id;
 volatile.add(itemId);
 volatile.add(item.body.item.created_at);
 volatile.add(item.body.item.updated_at);
+await detailPage('page:/admin/todo/[id]', `/admin/todo/${itemId}`, 'Back');
 
 const itemVideo = await api(
 	'PATCH /api/todo/items/[id] video',
@@ -608,6 +655,7 @@ must('POST /api/principles', principle, (r) => r.status === 201 && !!r.body.prin
 const principleId = principle.body.principle.id;
 volatile.add(principleId);
 volatile.add(principle.body.principle.created_at);
+await detailPage('page:/admin/principles/[id]', `/admin/principles/${principleId}`, 'All principles');
 
 const principleComment = await api(
 	'POST /api/principles/[id]/comments',
@@ -965,7 +1013,31 @@ const linkTargetId = linkTarget.body.note.id;
 const linkSource = await api(
 	'POST /api/notes link source',
 	'/api/notes',
-	json({ content: `Note that links to [[${linkTargetId}]] and [[${principleId}]] for trips` })
+	json({
+		content: [
+			'## Migration notes',
+			'',
+			'This note has **bold**, *italic*, and ~~removed~~ text, with a [Markdown link](https://example.test/docs).',
+			'',
+			'| Type | Destination |',
+			'| --- | --- |',
+			`| Note | [[${linkTargetId}]] |`,
+			`| Principle | [[${principleId}]] |`,
+			'',
+			'- [x] Keep headings',
+			'- [ ] Keep tables',
+			'',
+			'`[[' + linkTargetId + ']]` stays code.',
+			'',
+			'Plain URL https://example.test/reference.',
+			'',
+			'[Unsafe](javascript:alert(1))',
+			'',
+			'<script>alert(1)</script>',
+			'',
+			'# markdown-test'
+		].join('\n')
+	})
 );
 must('POST /api/notes link source', linkSource, (r) => r.status === 201 && !!r.body.note, '201 with a note');
 volatile.add(linkSource.body.note.id);
@@ -984,6 +1056,58 @@ must(
 		r.body.note.linkedNotes.some((l) => l.id === linkTargetId && l.kind === 'note' && l.label === 'Link target note about kayaking trips') &&
 		r.body.note.linkedNotes.some((l) => l.id === principleId && l.kind === 'principle' && l.label === 'Principle that must survive a restore'),
 	'the outgoing links with live labels and kinds'
+);
+
+const linkedPrint = await fetch(`${base}/api/notes/${linkSourceId}/print`);
+const linkedPrintHtml = await linkedPrint.text();
+const noteHrefCount = (linkedPrintHtml.match(new RegExp(`href="/admin/notes/${linkTargetId}"`, 'g')) ?? []).length;
+const principleHrefCount = (linkedPrintHtml.match(new RegExp(`href="/admin/principles/${principleId}"`, 'g')) ?? []).length;
+results.push([
+	'GET /api/notes/[id]/print Markdown',
+	{
+		status: linkedPrint.status,
+		hasHeading: linkedPrintHtml.includes('<h2>Migration notes</h2>'),
+		hasTable: linkedPrintHtml.includes('<table>'),
+		hasTaskList: linkedPrintHtml.includes('type="checkbox"'),
+		hasMarkdownLink: linkedPrintHtml.includes('href="https://example.test/docs"'),
+		hasBareUrl: linkedPrintHtml.includes('href="https://example.test/reference"'),
+		noteHrefCount,
+		principleHrefCount,
+		codeKeepsWikiSyntax: linkedPrintHtml.includes(`<code>[[${linkTargetId}]]</code>`),
+		noUnsafeLink: !linkedPrintHtml.includes('href="javascript:'),
+		noInjectedScript: !linkedPrintHtml.includes('<script>alert(')
+	}
+]);
+must(
+	'GET /api/notes/[id]/print Markdown',
+	{
+		status: linkedPrint.status,
+		body: {
+			hasHeading: linkedPrintHtml.includes('<h2>Migration notes</h2>'),
+			hasTable: linkedPrintHtml.includes('<table>'),
+			hasTaskList: linkedPrintHtml.includes('type="checkbox"'),
+			hasMarkdownLink: linkedPrintHtml.includes('href="https://example.test/docs"'),
+			hasBareUrl: linkedPrintHtml.includes('href="https://example.test/reference"'),
+			noteHrefCount,
+			principleHrefCount,
+			codeKeepsWikiSyntax: linkedPrintHtml.includes(`<code>[[${linkTargetId}]]</code>`),
+			noUnsafeLink: !linkedPrintHtml.includes('href="javascript:'),
+			noInjectedScript: !linkedPrintHtml.includes('<script>alert(')
+		}
+	},
+	(r) =>
+		r.status === 200 &&
+		r.body?.hasHeading === true &&
+		r.body?.hasTable === true &&
+		r.body?.hasTaskList === true &&
+		r.body?.hasMarkdownLink === true &&
+		r.body?.hasBareUrl === true &&
+		r.body?.noteHrefCount === 1 &&
+		r.body?.principleHrefCount === 1 &&
+		r.body?.codeKeepsWikiSyntax === true &&
+		r.body?.noUnsafeLink === true &&
+		r.body?.noInjectedScript === true,
+	'GFM blocks, links, wiki-link types, code boundaries and HTML safety'
 );
 
 const backlinks = await api('GET /api/principles/[id] backlinks', `/api/principles/${principleId}`);

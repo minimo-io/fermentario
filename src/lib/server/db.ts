@@ -31,6 +31,7 @@ export const removeNoteCover = bind('removeNoteCover');
 export const getNotePhoto = bind('getNotePhoto');
 export const setNoteVideo = bind('setNoteVideo');
 export const setNoteTitle = bind('setNoteTitle');
+export const setNoteMonospace = bind('setNoteMonospace');
 export const searchJournal = bind('searchJournal');
 export const countNotes = bind('countNotes');
 export const getRunningTimeEntry = bind('getRunningTimeEntry');

@@ -38,6 +38,7 @@ export interface Note {
 	featured?: boolean;
 	video?: string;
 	published?: boolean;
+	monospace?: boolean;
 	coverId?: string | null;
 	commentCount?: number;
 	linkedNotes?: LinkRef[];
