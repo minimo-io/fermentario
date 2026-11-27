@@ -19,6 +19,7 @@ export const createNote = bind('createNote');
 export const deleteNote = bind('deleteNote');
 export const updateNote = bind('updateNote');
 export const getNote = bind('getNote');
+export const getLatestNote = bind('getLatestNote');
 export const listNotesPage = bind('listNotesPage');
 export const listNotesLinkingTo = bind('listNotesLinkingTo');
 export const countNotesByTag = bind('countNotesByTag');

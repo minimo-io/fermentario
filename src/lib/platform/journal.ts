@@ -1541,6 +1541,13 @@ export function createJournal(db: SqlDb) {
 		return r ? withTags([r])[0] : null;
 	}
 
+	function getLatestNote(): Note | null {
+		const r = db
+			.prepare('SELECT * FROM notes ORDER BY updated_at DESC, created_at DESC, id DESC LIMIT 1')
+			.get() as unknown as NoteRow | undefined;
+		return r ? withTags([r])[0] : null;
+	}
+
 	/** Pin or unpin a note. Touches only the flag: text, FTS row, vector
 	 *  and tags are left alone. Returns null when the note does not exist. */
 	function setNoteFeatured(id: string, featured: boolean): Note | null {
@@ -5682,6 +5689,7 @@ export function createJournal(db: SqlDb) {
 		deleteNote,
 		updateNote,
 		getNote,
+		getLatestNote,
 		listNotesPage,
 		listNotesLinkingTo,
 		countNotesByTag,

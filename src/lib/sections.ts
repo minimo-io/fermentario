@@ -6,7 +6,6 @@
 import type { Component } from 'svelte';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import ListTodo from '@lucide/svelte/icons/list-todo';
-import LibraryBig from '@lucide/svelte/icons/library-big';
 import Scale from '@lucide/svelte/icons/scale';
 import Lightbulb from '@lucide/svelte/icons/lightbulb';
 import Briefcase from '@lucide/svelte/icons/briefcase';
@@ -19,14 +18,13 @@ export interface Section {
 	icon: Component;
 }
 
-export type SectionId = 'notes' | 'todo' | 'library' | 'principles' | 'influences' | 'businesses' | 'stocks' | 'nostr';
+export type SectionId = 'notes' | 'todo' | 'principles' | 'influences' | 'businesses' | 'stocks' | 'nostr';
 
 export type View = SectionId;
 
 export const SECTIONS: Section[] = [
 	{ id: 'notes', label: 'Notes', icon: NotebookPen },
 	{ id: 'todo', label: 'To-Do', icon: ListTodo },
-	{ id: 'library', label: 'Library', icon: LibraryBig },
 	{ id: 'principles', label: 'Principles', icon: Scale },
 	{ id: 'influences', label: 'Influences', icon: Lightbulb },
 	{ id: 'businesses', label: 'Businesses', icon: Briefcase },
@@ -36,7 +34,7 @@ export const SECTIONS: Section[] = [
 
 /** Reorderable sections. Businesses and Stocks are fixed on the right and
  *  never join the persisted order. */
-export const REORDERABLE_SECTIONS: SectionId[] = ['notes', 'todo', 'library', 'principles', 'influences', 'nostr'];
+export const REORDERABLE_SECTIONS: SectionId[] = ['notes', 'todo', 'principles', 'influences', 'nostr'];
 export const FIXED_SECTIONS: SectionId[] = ['businesses', 'stocks'];
 
 export const DEFAULT_SECTION_ORDER: SectionId[] = REORDERABLE_SECTIONS.slice();

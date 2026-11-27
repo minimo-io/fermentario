@@ -6,7 +6,7 @@ sizing. Consult this before changing any of them.
 ## Navigation
 
 - Private sections live under `/admin` (`/admin/notes`, `/admin/todo`,
-  `/admin/library`, `/admin/principles`, `/admin/influences`,
+  `/admin/principles`, `/admin/influences`,
   `/admin/stocks`, `/admin/ask`, `/admin/businesses/cubiq`,
   `/admin/businesses/trading`); old section URLs `307` to their `/admin`
   twin. `/` is the public homepage: published notes grouped by year then
@@ -23,8 +23,9 @@ sizing. Consult this before changing any of them.
    pages go back with browser history, falling back to their section root.
    The admin shell (header, Market card, section pills, composer, settings)
    lives in the `admin` layout; route pages only render their section. A
-   single note, task or principle omits that shell and keeps its own back
-   control with the detail content.
+  single note, task or principle omits that shell and keeps its own back
+  control with the detail content. The EPUB Library is a mini app at
+  `/tools/library`; `/admin/library` redirects there.
 
 ## Layout
 
@@ -51,7 +52,7 @@ sizing. Consult this before changing any of them.
   keep it visible. It never appears on the public pages or in the bare EPUB
   reader.
 - **Market rail scope**: holdings and trading sit under the header on the
-   section views only (`/admin/notes`, `/admin/todo`, `/admin/library`,
+   section views only (`/admin/notes`, `/admin/todo`,
    `/admin/principles`, `/admin/influences`, `/admin/stocks`,
    `/admin/businesses/*`). Heatmaps, Tags, a single note, task or principle,
    Ask, Diagnostics and Settings pages open without the market rail.
@@ -212,7 +213,7 @@ sizing. Consult this before changing any of them.
 - **Breakpoints**: mobile-first. `sm:` (640px) is the only breakpoint in use,
   for the desktop adjustments already present (composer padding, modal placement,
   heatmap height).
-- **Section bar**: the left group (Notes, To-Do, Library, Principles,
+- **Section bar**: the left group (Notes, To-Do, Principles,
   Influences) keeps drag reorder and scrolls as one line. Businesses and
   Stocks are fixed on the right, outside the persisted order and the Settings
   section list. Desktop is one row (`justify-between`, left group scrolls);
@@ -380,10 +381,11 @@ sizing. Consult this before changing any of them.
    `ws://<lan-ip>:<port>/relay` locally) as a write relay for the account;
    `FERMENTARIO_NOSTR_RELAYS` (comma separated) replaces the fallback
    discovery relays for a self-hosted setup.
- - **Library (EPUB reader)**: `/admin/library` lists books as cards (title,
-   author · size · progress · last read, `Read` pill, trash behind the
-   standard confirm); the section bottom bar is one `Upload EPUB` button on
-   a hidden file input. EPUB bytes live in the journal DB (`books.bytes`);
+  - **Library (EPUB reader mini app)**: `/tools/library` lists books as cards (title,
+    author · size · progress · last read, `Read` pill, trash behind the
+    standard confirm); `Library` opens from the mini-app picker and `/admin/library`
+    redirects there. The bottom bar is one `Upload EPUB` button on a hidden
+    file input. EPUB bytes live in the journal DB (`books.bytes`);
    uploads are multipart `POST /api/books` and title/author are parsed from
    the file **in the browser** (epub.js), so the server stores bytes
    verbatim and never unzips. DRM (a zip carrying `encryption.xml`) is
@@ -1003,8 +1005,9 @@ decide, and late content (status chips, test results) gets clipped.
   opened app shows a `Latest used` pill and a running app shows a `Running`
   badge. Usage is stored in local storage. An app with a `shortcut` shows its
   `Kbd` chip in the modal and in the search palette; `Mod` renders as ⌘ or Ctrl.
-  **New note** is the shared full-screen note editor. The old scratchpad mini
-  app has been removed. **Time tracker**
+  **New note** is the shared full-screen note editor. **Library**
+  (`/tools/library`) lists EPUBs and opens the existing full-screen reader.
+  The old scratchpad mini app has been removed. **Time tracker**
   (`/tools/time-tracker`) starts one timer
   with an optional comment and stops it later. The start card is a single row:
   title, comment field, `Start`, `Cancel`; no reveal step, and the title text

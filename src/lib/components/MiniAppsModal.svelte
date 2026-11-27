@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import { BACKDROP_MS, PANEL_MS, PANEL_Y, motionMs } from '$lib/motion';
-	import { miniApps, openMiniApp } from '$lib/mini-apps.svelte';
+	import { miniApps, openLatestNote, openMiniApp } from '$lib/mini-apps.svelte';
 	import { shortcutKeys } from '$lib/shortcuts';
 	import { isAppleDevice } from '$lib/platform';
 	import Kbd from '$lib/components/Kbd.svelte';
@@ -95,6 +95,14 @@
 								<span class="shrink-0 self-center"><Kbd keys={shortcutKeys(app.shortcut, apple)} /></span>
 							{/if}
 						</button>
+						{#if app.id === 'new-note' && miniApps.latestNote}
+							<button
+								type="button"
+								class="ml-[3.75rem] -mt-1 mb-1 rounded-full border border-stone-200 px-2 py-0.5 text-[10px] font-medium leading-4 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+								aria-label="Open latest note"
+								onclick={openLatestNote}
+							>Latest note</button>
+						{/if}
 					</li>
 				{/each}
 			</ul>

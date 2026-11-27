@@ -2,7 +2,9 @@ import type { Component } from 'svelte';
 import { goto } from '$app/navigation';
 import Timer from '@lucide/svelte/icons/timer';
 import SquarePen from '@lucide/svelte/icons/square-pen';
+import LibraryBig from '@lucide/svelte/icons/library-big';
 import { newNote } from '$lib/new-note.svelte';
+import type { Note } from '$lib/types';
 
 export interface MiniAppDef {
 	id: string;
@@ -57,12 +59,24 @@ export const MINI_APPS: MiniAppDef[] = [
 		kind: 'link',
 		href: '/tools/time-tracker',
 		icon: Timer
+	},
+	{
+		id: 'library',
+		label: 'Library',
+		description: 'Read your EPUB books and documents.',
+		kind: 'link',
+		href: '/tools/library',
+		icon: LibraryBig
 	}
 ];
 
 class MiniAppsStore {
 	open = $state(false);
 	usage = $state<Record<string, Usage>>({});
+	latestNote = $state<Note | null>(null);
+	latestNoteLoaded = $state(false);
+	latestNoteLoading = $state(false);
+	private latestNoteRequest: Promise<void> | null = null;
 
 	loadUsage() {
 		this.usage = readUsage();
@@ -111,6 +125,28 @@ class MiniAppsStore {
 	openModal() {
 		this.loadUsage();
 		this.open = true;
+		this.latestNoteLoaded = false;
+		void this.loadLatestNote();
+	}
+
+	async loadLatestNote() {
+		if (this.latestNoteRequest) return this.latestNoteRequest;
+		this.latestNoteLoading = true;
+		this.latestNoteRequest = (async () => {
+			try {
+				const res = await fetch('/api/notes/latest');
+				if (!res.ok) throw new Error('Could not load latest note');
+				const data = (await res.json()) as { note: Note | null };
+				this.latestNote = data.note;
+				this.latestNoteLoaded = true;
+			} catch {
+				// Keep the picker usable when the latest-note request fails.
+			} finally {
+				this.latestNoteLoading = false;
+				this.latestNoteRequest = null;
+			}
+		})();
+		return this.latestNoteRequest;
 	}
 
 	closeModal() {
@@ -133,4 +169,11 @@ export function openMiniApp(app: MiniAppDef) {
 		return;
 	}
 	if (app.href) void goto(app.href);
+}
+
+export async function openLatestNote() {
+	if (!miniApps.latestNoteLoaded) await miniApps.loadLatestNote();
+	const note = miniApps.latestNote;
+	miniApps.closeModal();
+	if (note) void goto(`/admin/notes/${encodeURIComponent(note.id)}`);
 }

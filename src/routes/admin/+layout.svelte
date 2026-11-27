@@ -46,7 +46,6 @@ import { speakText, type SpeechLang } from '$lib/speech';
 	const MARKET_SECTIONS = new Set([
 		'/admin/notes',
 		'/admin/todo',
-		'/admin/library',
 		'/admin/principles',
 		'/admin/influences',
 		'/admin/stocks',

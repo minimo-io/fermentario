@@ -1,5 +1,23 @@
 # Lessons Learned
 
+## Session: Show the latest note in the mini-app picker
+- Determine “latest” by `updated_at`, not by creation order, so editing an old
+  note makes it the direct-open target.
+- Keep direct navigation separate from the main New note action. A failed
+  latest-note lookup must not block note creation or the rest of the picker.
+- Keep the sub-button label concise; do not add note content excerpts unless
+  requested.
+
+## Session: Move EPUB Library into mini apps
+- Remove a moved feature from the section registry and section-order sanitizer,
+  not only from the rendered tab list; otherwise stored navigation can retain
+  an invalid section.
+- Keep the previous route as a redirect when moving a section to a tool route,
+  so saved links continue to work.
+- In web-smoke tests, avoid using tiny numeric timestamps for fixture rows:
+  the baseline normalizer may treat the same number in unrelated fields as
+  runtime data.
+
 ## Session: Search command aliases and global dialogs
 - Store global dialogs outside route-specific headers. Commands must open the
   same shared Help modal that the homepage button opens, including on admin

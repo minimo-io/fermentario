@@ -270,6 +270,14 @@ must(
 await page('page:/admin/notes', '/admin/notes');
 await page('page:/admin/todo', '/admin/todo');
 await page('page:/tools/time-tracker', '/tools/time-tracker');
+await page('page:/tools/library', '/tools/library');
+const libraryRedirect = await api('GET /admin/library redirect', '/admin/library', { redirect: 'manual' });
+must(
+	'GET /admin/library redirect',
+	libraryRedirect,
+	(r) => r.status === 307 && r.headers.get('location') === '/tools/library',
+	'307 to /tools/library'
+);
 await page('page:/admin/stocks', '/admin/stocks');
 const bizRedirect = await api('GET /businesses redirect', '/businesses', { redirect: 'manual' });
 must(
@@ -310,7 +318,7 @@ await api('GET /api/stats/heatmap', '/api/stats/heatmap');
 const created = await api(
 	'POST /api/notes',
 	'/api/notes',
-	json({ content: 'Smoke test note about kayaking #garden' })
+	json({ content: 'Smoke test note about kayaking #garden', created_at: 1741089500000 })
 );
 must('POST /api/notes', created, (r) => r.status === 201 && !!r.body.note, '201 with a note');
 const id = created.body.note.id;
@@ -325,6 +333,17 @@ const edited = await api(
 );
 must('PATCH /api/notes/[id]', edited, (r) => r.status === 200 && !!r.body.note, '200 with a note');
 volatile.add(edited.body.note.updated_at);
+
+const latestNote = await api('GET /api/notes/latest', '/api/notes/latest');
+must(
+	'GET /api/notes/latest',
+	latestNote,
+	(r) =>
+		r.status === 200 &&
+		r.body.note?.id === edited.body.note.id &&
+		r.body.note?.updated_at === edited.body.note.updated_at,
+	'200 with the most recently edited note, even when it is not the newest by creation date'
+);
 
 // A title-only PATCH must not demand content or touch the note text.
 const titled = await api(
