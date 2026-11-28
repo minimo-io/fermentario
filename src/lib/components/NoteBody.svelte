@@ -143,6 +143,15 @@
 		border-collapse: collapse;
 		white-space: normal;
 	}
+	:global(.note-markdown .note-content-link) {
+		color: #0369a1;
+		text-decoration: underline;
+		text-decoration-color: currentColor;
+		text-underline-offset: 2px;
+		cursor: pointer;
+	}
+	:global(.dark .note-markdown .note-content-link) { color: #38bdf8; }
+	:global(.note-markdown .note-content-link:hover) { text-decoration-thickness: 2px; }
 	:global(.note-markdown th),
 	:global(.note-markdown td) {
 		border: 1px solid #d6d3d1;

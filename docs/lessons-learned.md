@@ -65,6 +65,12 @@
   Position the list against the textarea's viewport rectangle, flip to the
   side with more room, cap its height, and update it on scroll and resize.
 
+## Session: Render Markdown links inside note tables
+- Style parsed Markdown anchors explicitly because Tailwind's reset removes
+  browser-default link colors and underlines, including inside rendered tables.
+- Add `target="_blank"` and `rel="noopener noreferrer"` in the Markdown link
+  renderer so inline, auto-linked and table links share safe new-tab behavior.
+
 ## Session: Retire a journal-backed feature
 - Never remove an applied migration from `MIGRATIONS`; keep its schema version
   in the sequence, then add a later migration to drop the retired table.

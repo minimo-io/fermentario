@@ -29,6 +29,17 @@ markdown.validateLink = (url: string) => {
 	return !scheme || scheme === 'http' || scheme === 'https' || scheme === 'mailto';
 };
 
+// Markdown links open separately so a reader does not lose the note they are
+// reading. Keep these attributes on links wherever the parser places them,
+// including links rendered inside GFM tables.
+markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
+	const token = tokens[index]!;
+	token.attrSet('target', '_blank');
+	token.attrSet('rel', 'noopener noreferrer');
+	token.attrJoin('class', 'note-content-link');
+	return self.renderToken(tokens, index, options);
+};
+
 // Keep note/principle references inside the Markdown parser's inline-token
 // pipeline. A post-render regex would incorrectly turn `[[id]]` inside code
 // spans and fenced code into links.
