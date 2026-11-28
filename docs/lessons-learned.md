@@ -18,6 +18,40 @@
   the baseline normalizer may treat the same number in unrelated fields as
   runtime data.
 
+## Session: Show a QR code for the dev server
+- Build phone URLs from the current dev origin’s protocol and port, but get
+  interface addresses on the server; the browser cannot reliably discover the
+  computer’s LAN or Tailscale address.
+- Keep interface discovery behind a dev-only endpoint and expose only private
+  LAN IPv4 and a Tailscale address confirmed by `tailscale status`.
+
+## Session: Open commands with a colon shortcut
+- Let the shared search store carry the requested initial mode. This keeps
+  opening the palette and choosing command mode in one state transition.
+- Ignore global text shortcuts inside editable fields and dialogs so normal
+  typing and modal controls keep their expected behavior.
+
+## Session: Read a KeePass vault in the browser
+- KDBX 4 commonly uses Argon2, which kdbxweb does not provide. Supply and
+  test an Argon2 implementation; AES-only tests do not establish compatibility.
+- Terminate the vault worker on lock and guard asynchronous unlock results so a
+  cancelled unlock cannot put a database back into the unlocked state.
+- The browser can delay background timers. Check elapsed wall time again when
+  the page becomes visible, before allowing further vault activity.
+
+## Session: Add note covers during creation
+- Create the note and cover in one database transaction. A separate upload
+  after creation can leave a saved note behind and create duplicates on retry.
+- Keep image previews in memory rather than session storage, and tell the user
+  that reloading clears the selected image while text and date still persist.
+- Use one cover component for private rows, public rows and note pages so
+  image viewing and uncropped detail views stay consistent.
+
+## Session: Protect vault files from commits
+- Ignore KeePass databases, key files and their backup suffixes throughout the
+  repository. Ignore rules do not protect files that Git already tracks, so
+  check tracked and staged paths separately before a commit.
+
 ## Session: Search command aliases and global dialogs
 - Store global dialogs outside route-specific headers. Commands must open the
   same shared Help modal that the homepage button opens, including on admin

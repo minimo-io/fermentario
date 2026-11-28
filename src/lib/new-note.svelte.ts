@@ -53,12 +53,14 @@ class NewNoteStore {
 	open = $state(false);
 	text = $state('');
 	createdAt = $state<number | null>(null);
+	cover = $state<string | null>(null);
+	coverLoading = $state(false);
 	saving = $state(false);
 	error = $state('');
 
 	/** The mini-app button shows a dot while an unsaved note is waiting. */
 	get hasDraft(): boolean {
-		return this.text.trim().length > 0 || this.createdAt !== null;
+		return this.text.trim().length > 0 || this.createdAt !== null || this.cover !== null;
 	}
 
 	loadDraft() {
@@ -97,12 +99,13 @@ class NewNoteStore {
 	discard() {
 		this.text = '';
 		this.createdAt = null;
+		this.cover = null;
 		this.error = '';
 		clearStoredDraft();
 	}
 
 	async save() {
-		if (this.saving) return;
+		if (this.saving || this.coverLoading) return;
 		const raw = this.text.trim();
 		if (!raw) return;
 		const { content } = splitHashtags(raw);
@@ -121,13 +124,14 @@ class NewNoteStore {
 			const res = await fetch('/api/notes', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ content: raw, created_at: createdAt })
+				body: JSON.stringify({ content: raw, created_at: createdAt, photo: this.cover ?? undefined })
 			});
 			const data = (await res.json()) as { note?: Note; error?: string };
 			if (!res.ok || !data.note) throw new Error(data?.error ?? 'Failed to save note.');
 			const note = data.note;
 			this.text = '';
 			this.createdAt = null;
+			this.cover = null;
 			clearStoredDraft();
 			this.open = false;
 			showToast('Note saved.', 'success');

@@ -1490,17 +1490,22 @@ export function createJournal(db: SqlDb) {
 		return map;
 	}
 
-	function createNote(content: string, createdAt: number): Note {
+	function createNote(content: string, createdAt: number, cover?: { bytes: Uint8Array; mime: string }): Note {
 		const id = crypto.randomUUID();
 		const now = createdAt;
-		db.prepare('INSERT INTO notes (id, content, created_at, updated_at) VALUES (?, ?, ?, ?)').run(
-			id,
-			content,
-			now,
-			now
-		);
-		db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
-		return { id, title: '', content, created_at: now, updated_at: now, featured: false, video: '', published: false, monospace: false, coverId: null, tags: [] };
+		const coverId = cover ? crypto.randomUUID() : null;
+		db.transaction(() => {
+			db.prepare('INSERT INTO notes (id, content, created_at, updated_at) VALUES (?, ?, ?, ?)').run(
+				id, content, now, now
+			);
+			db.prepare('INSERT INTO notes_fts (content, note_id) VALUES (?, ?)').run(content, id);
+			if (cover && coverId) {
+				db.prepare('INSERT INTO note_photos (id, note_id, photo, mime, created_at) VALUES (?, ?, ?, ?, ?)').run(
+					coverId, id, cover.bytes as unknown as string, cover.mime, Date.now()
+				);
+			}
+		});
+		return { id, title: '', content, created_at: now, updated_at: now, featured: false, video: '', published: false, monospace: false, coverId, tags: [] };
 	}
 
 	function deleteNote(id: string): boolean {

@@ -9,6 +9,7 @@ import {
 } from '$lib/server/db';
 import { splitHashtags } from '$lib/hashtags';
 import { extractYouTubeId } from '$lib/youtube';
+import { decodePhotoUrl } from '$lib/stock-photo';
 
 const MAX_TAG_FILTER = 60;
 
@@ -50,8 +51,14 @@ export async function POST({ request }) {
 	if (!content) {
 		return json({ error: 'empty note' }, { status: 400 });
 	}
+	let cover: ReturnType<typeof decodePhotoUrl> = null;
+	if (body?.photo !== undefined) {
+		if (typeof body.photo !== 'string' || !(cover = decodePhotoUrl(body.photo))) {
+			return json({ error: 'photo must be a JPEG, PNG or WebP data URL under 4 MB' }, { status: 400 });
+		}
+	}
 	const created = Number(body?.created_at) || Date.now();
-	const note = createNote(content, created);
+	const note = createNote(content, created, cover ?? undefined);
 	if (typeof body?.video === 'string' && body.video.trim()) {
 		const id = extractYouTubeId(body.video);
 		if (!id) return json({ error: 'not a YouTube URL' }, { status: 400 });

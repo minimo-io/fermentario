@@ -6,6 +6,7 @@
 
 import type { Component } from 'svelte';
 import { goto } from '$app/navigation';
+import { dev } from '$app/environment';
 import House from '@lucide/svelte/icons/house';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import NotebookText from '@lucide/svelte/icons/notebook-text';
@@ -15,6 +16,11 @@ import LayoutGrid from '@lucide/svelte/icons/layout-grid';
 import { newNote } from '$lib/new-note.svelte';
 import { help } from '$lib/help.svelte';
 import { miniApps } from '$lib/mini-apps.svelte';
+import { devNetwork } from '$lib/dev-network.svelte';
+import QrCode from '@lucide/svelte/icons/qr-code';
+import KeyRound from '@lucide/svelte/icons/key-round';
+import LockKeyhole from '@lucide/svelte/icons/lock-keyhole';
+import { vault } from '$lib/vault.svelte';
 
 export interface CommandDef {
 	/** Lowercase, unique, at least two characters. This is the execution key. */
@@ -30,6 +36,35 @@ export interface CommandDef {
 }
 
 export const COMMANDS: CommandDef[] = [
+	{
+		code: 'vault',
+		label: 'Open password vault',
+		description: 'Open the KeePass password vault.',
+		keywords: ['password', 'keepass', 'kdbx'],
+		icon: KeyRound,
+		run: () => vault.openModal()
+	},
+	{
+		code: 'lock',
+		label: 'Lock password vault',
+		description: 'Lock the open KeePass database.',
+		keywords: ['password', 'keepass', 'close'],
+		icon: LockKeyhole,
+		run: () => vault.lock()
+	},
+	...(dev
+		? [
+				{
+					code: 'qrcode',
+					aliases: ['qr'],
+					label: 'Show dev QR code',
+					description: 'Show a QR code and addresses for opening this dev server on another device.',
+					keywords: ['network', 'phone', 'mobile', 'lan', 'tailscale'],
+					icon: QrCode,
+					run: () => devNetwork.openModal()
+				}
+			]
+		: []),
 	{
 		code: 'help',
 		label: 'Help',

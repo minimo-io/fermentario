@@ -4,16 +4,18 @@
 	import { newNote } from '$lib/new-note.svelte';
 	import { datetimeLocalTimestamp, datetimeLocalValue } from '$lib/datetime';
 	import { splitHashtags } from '$lib/hashtags';
+	import { fileToPhotoUrl } from '$lib/stock-photo';
 	import TagFinder from '$lib/components/TagFinder.svelte';
 	import NoteFinder from '$lib/components/NoteFinder.svelte';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import X from '@lucide/svelte/icons/x';
+	import ImagePlus from '@lucide/svelte/icons/image-plus';
 	import { motionMs } from '$lib/motion';
 
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 	const pendingTags = $derived(splitHashtags(newNote.text).tags);
-	const canSave = $derived(splitHashtags(newNote.text).content.trim().length > 0 && !newNote.saving);
+	const canSave = $derived(splitHashtags(newNote.text).content.trim().length > 0 && !newNote.saving && !newNote.coverLoading);
 	let maxDate = $state('');
 	let dateValue = $state('');
 	let detailsOpen = $state(false);
@@ -39,6 +41,22 @@
 	function setDate(value: string) {
 		dateValue = value;
 		newNote.setCreatedAt(value ? datetimeLocalTimestamp(value) ?? null : null);
+	}
+
+	async function pickCover(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file || newNote.coverLoading) return;
+		newNote.coverLoading = true;
+		try {
+			newNote.cover = await fileToPhotoUrl(file);
+			newNote.error = '';
+		} catch {
+			newNote.error = 'Could not read the image.';
+		} finally {
+			newNote.coverLoading = false;
+		}
 	}
 
 	function toggleDetails() {
@@ -83,7 +101,7 @@
 			aria-expanded={detailsOpen}
 			onclick={toggleDetails}
 		>
-			<span>{detailsOpen ? 'Hide details' : 'Date and time'}</span>
+			<span>{detailsOpen ? 'Hide details' : 'Date and cover'}</span>
 			<ChevronDown class="h-4 w-4 transition-transform duration-200 motion-reduce:transition-none {detailsOpen ? 'rotate-180' : ''}" />
 		</button>
 		{#if detailsOpen}
@@ -95,6 +113,18 @@
 						<input type="datetime-local" value={dateValue} max={maxDate} aria-label="Note date and time" title="Leave empty to use the current time" class="min-w-0 max-w-[11rem] bg-transparent text-base text-stone-600 outline-none dark:text-stone-300" oninput={(e) => setDate(e.currentTarget.value)} />
 					</label>
 					<span class="text-[11px] text-stone-400">Empty uses now.</span>
+					{#if newNote.cover}
+						<div class="flex items-center gap-2">
+							<img src={newNote.cover} alt="Note cover preview" class="h-10 w-16 rounded-lg object-cover" />
+							<button type="button" class="grid h-9 w-9 place-items-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-rose-600 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-rose-400" aria-label="Remove cover image" onclick={() => (newNote.cover = null)}><X class="h-4 w-4" /></button>
+						</div>
+						<span class="text-[11px] text-stone-400">The image stays until you reload.</span>
+					{:else}
+						<label class="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-800">
+							<ImagePlus class="h-3.5 w-3.5" /> {newNote.coverLoading ? 'Loading…' : 'Cover'}
+							<input type="file" accept="image/*" class="sr-only" disabled={newNote.coverLoading || newNote.saving} onchange={pickCover} />
+						</label>
+					{/if}
 				</div>
 			</div>
 		{/if}

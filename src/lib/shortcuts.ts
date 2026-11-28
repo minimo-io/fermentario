@@ -17,7 +17,10 @@ export type ShortcutGroup = { group: string; items: Shortcut[] };
 export const SHORTCUTS: ShortcutGroup[] = [
 	{
 		group: 'Everywhere',
-		items: [{ keys: ['Mod', 'K'], label: 'Open search' }]
+		items: [
+			{ keys: ['Mod', 'K'], label: 'Open search' },
+			{ keys: [':'], label: 'Open commands' }
+		]
 	},
 	{
 		group: 'Admin',

@@ -25,3 +25,13 @@ vite.config.ts.timestamp-*
 # Local data and cache: never committed.
 /data
 /.cache
+
+# KeePass vaults, key files and their backups.
+*.[kK][dD][bB][xX]
+*.[kK][dD][bB][xX].*
+*.[kK][dD][bB]
+*.[kK][dD][bB].*
+*.[kK][eE][yY]
+*.[kK][eE][yY].*
+*.[kK][eE][yY][xX]
+*.[kK][eE][yY][xX].*

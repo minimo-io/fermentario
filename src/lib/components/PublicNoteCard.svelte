@@ -1,5 +1,6 @@
 <script lang="ts">
 	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
+	import NoteCover from '$lib/components/NoteCover.svelte';
 	import type { Note } from '$lib/types';
 
 	// The public list is a blog list: title or excerpt, never the rendered
@@ -15,12 +16,7 @@
 
 <div class="rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-white/70 dark:bg-stone-900/70 px-4 py-3">
 	{#if note.coverId && showCover}
-		<img
-			src={`/api/notes/photos/${note.coverId}`}
-			alt=""
-			loading="lazy"
-			class="mb-2 h-32 w-full rounded-xl object-cover"
-		/>
+		<NoteCover coverId={note.coverId} variant="public-row" />
 	{/if}
 	{#if note.title}
 		<a

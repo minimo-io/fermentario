@@ -1,5 +1,17 @@
 # Tools
 
+## `node scripts/test-vault.mjs` — vault browser smoke test
+
+Runs against the local dev server at `http://127.0.0.1:4173/`. Set
+`VAULT_TEST_URL` to use a different server, or `CHROME_PATH` to select Chrome.
+It creates synthetic AES and Argon2id databases in memory and tests wrong
+passwords, unlock, search, password reveal, modal state, manual and idle lock,
+and checks that synthetic secrets do not appear in network requests. It does
+not read a real vault.
+Optionally set `VAULT_TEST_FIXTURE` to a synthetic KDBX with master password
+`test-master` and an entry named `Synthetic account` with password
+`fixture-secret`, to test an independently generated file as well.
+
 ## `pnpm test` — web app regression gate
 `node scripts/web-smoke.mjs`
 

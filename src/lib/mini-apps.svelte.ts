@@ -3,7 +3,9 @@ import { goto } from '$app/navigation';
 import Timer from '@lucide/svelte/icons/timer';
 import SquarePen from '@lucide/svelte/icons/square-pen';
 import LibraryBig from '@lucide/svelte/icons/library-big';
+import KeyRound from '@lucide/svelte/icons/key-round';
 import { newNote } from '$lib/new-note.svelte';
+import { vault } from '$lib/vault.svelte';
 import type { Note } from '$lib/types';
 
 export interface MiniAppDef {
@@ -59,6 +61,13 @@ export const MINI_APPS: MiniAppDef[] = [
 		kind: 'link',
 		href: '/tools/time-tracker',
 		icon: Timer
+	},
+	{
+		id: 'vault',
+		label: 'Password vault',
+		description: 'Open and search a KeePass database.',
+		kind: 'modal',
+		icon: KeyRound
 	},
 	{
 		id: 'library',
@@ -162,6 +171,10 @@ export function openMiniApp(app: MiniAppDef) {
 	miniApps.recordUse(app.id);
 	miniApps.closeModal();
 	if (app.kind === 'modal') {
+		if (app.id === 'vault') {
+			vault.openModal();
+			return;
+		}
 		if (app.id === 'new-note') {
 			newNote.openModal();
 			return;

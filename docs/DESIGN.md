@@ -71,12 +71,13 @@ sizing. Consult this before changing any of them.
 - **New note editor**: the command, shortcut and mini-app button open the same
   full-screen editor. Its optional date/time becomes the note's `created_at`.
   Text and date persist in session storage until save. An unsaved draft puts a
-  lime dot on the mini-app button. Note editing uses the same full-screen
-  `NoteEditorModal` layout on both the list and single-note page; edit-only
-  title, video and cover fields stay in that form. On phones, keep those
+  lime dot on the mini-app button. A selected cover stays in memory until save
+  or reload. Note editing uses the same full-screen `NoteEditorModal` layout
+  on both the list and single-note page; title and video stay in that form.
+  On phones, keep the
   secondary fields collapsed by default so the focused text editor gets the
   available height; expose them under one Details control. The optional date
-  in the new-note form follows the same mobile pattern.
+  date and cover in the new-note form follow the same mobile pattern.
 - **Note Markdown**: render note bodies with CommonMark/GFM, including tables,
   task lists, headings, links and code. Keep editors as raw text. Treat
   `[[uuid]]` as a Markdown inline extension so references remain clickable
@@ -651,8 +652,9 @@ off venue shows a Watch badge and one `Enable` button. The
   and the public note page. Fixed order: cover, title, linked pills, markdown
   body, tags, video. The body folds the same way on all four: chevron, one
   clamped line when collapsed, the same 180 ms animation and the same stored
-  fold ids. `variant` only changes the title size (15 px row, 18 px page) and
-  the cover cap (`max-h-40`, `max-h-80`). Never hand-write this markup again
+  fold ids. `variant` changes the title size (15 px row, 18 px page): list
+  covers are cropped previews that open an image modal, and single-note covers
+  show their full aspect ratio. Never hand-write this markup again
   in a note row or a note page.
 - **The public index is a blog list**: `/` lists each published note as
   cover, title (or the 160-character excerpt when the note has no title),
@@ -995,7 +997,9 @@ decide, and late content (status chips, test results) gets clipped.
   query leaves command mode. The first code, `note`, opens `NewNoteModal` from
   any route and posts to `/api/notes`. `/admin/notes` listens for
   `notes:created` and inserts the saved row without a reload; other routes keep
-  the note for the next timeline load.
+  the note for the next timeline load. In dev mode, `:qrcode` (alias `:qr`)
+  opens the phone QR modal; it prints localhost and LAN URLs and prefers an
+  active Tailscale URL for the QR code.
 - **Mini apps**: a floating action button at the bottom right opens the mini
   apps modal. It mounts in the root layout, so every page shows it; the EPUB
   reader (`/admin/book/*`) is the only exception. Tools live at `/tools/<id>`,
@@ -1007,6 +1011,12 @@ decide, and late content (status chips, test results) gets clipped.
   `Kbd` chip in the modal and in the search palette; `Mod` renders as ⌘ or Ctrl.
   **New note** is the shared full-screen note editor. **Library**
   (`/tools/library`) lists EPUBs and opens the existing full-screen reader.
+  **Password vault** opens a read-only KDBX file in the browser. Its full-screen modal
+  keeps search and selection when closed, hides revealed passwords, and shows
+  a red unlocked indicator on the mini-app button without replacing other
+  indicators. `:vault` opens it and `:lock` locks it. It locks after
+  five minutes of inactivity or one minute hidden. Copy feedback briefly turns
+  green and says `Copied!`.
   The old scratchpad mini app has been removed. **Time tracker**
   (`/tools/time-tracker`) starts one timer
   with an optional comment and stops it later. The start card is a single row:

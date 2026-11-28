@@ -304,6 +304,17 @@ await page('page:/admin/diagnostics', '/admin/diagnostics');
 
 // --- Read routes -----------------------------------------------------------
 
+const hiddenDevNetwork = await api(
+	'GET /api/dev/network-addresses hidden in production',
+	'/api/dev/network-addresses'
+);
+must(
+	'GET /api/dev/network-addresses hidden in production',
+	hiddenDevNetwork,
+	(r) => r.status === 404,
+	'404 so network addresses are not exposed by production builds'
+);
+
 const page1 = await api('GET /api/notes?limit=2', '/api/notes?limit=2');
 const c = page1.body.nextCursor;
 await api(
@@ -315,16 +326,28 @@ await api('GET /api/notes?tag=missing', '/api/notes?tag=nosuchtag');
 await api('GET /api/stats/heatmap', '/api/stats/heatmap');
 
 // --- Write routes ----------------------------------------------------------
+const TINY_COVER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const invalidNoteCover = await api(
+	'POST /api/notes invalid cover',
+	'/api/notes',
+	json({ content: 'Invalid cover must not create a note', photo: 'invalid' })
+);
+must('POST /api/notes invalid cover', invalidNoteCover, (r) => r.status === 400, '400 before creating the note');
+const afterInvalidCover = await fetch(`${base}/api/notes?limit=1`).then((response) => response.json());
+must('Invalid cover does not create a note', { status: 200, body: afterInvalidCover }, (r) => r.body.count === page1.body.count, 'note count is unchanged');
 const created = await api(
 	'POST /api/notes',
 	'/api/notes',
-	json({ content: 'Smoke test note about kayaking #garden', created_at: 1741089500000 })
+	json({ content: 'Smoke test note about kayaking #garden', created_at: 1741089500000, photo: TINY_COVER })
 );
-must('POST /api/notes', created, (r) => r.status === 201 && !!r.body.note, '201 with a note');
+must('POST /api/notes', created, (r) => r.status === 201 && !!r.body.note?.coverId, '201 with a note and cover');
 const id = created.body.note.id;
 volatile.add(id);
+volatile.add(created.body.note.coverId);
 volatile.add(created.body.note.created_at);
 volatile.add(created.body.note.updated_at);
+const createdCover = await fetch(`${base}/api/notes/photos/${created.body.note.coverId}`);
+must('GET new note cover', { status: createdCover.status, body: Buffer.from(await createdCover.arrayBuffer()) }, (r) => r.status === 200 && r.body.equals(Buffer.from(TINY_COVER.split(',')[1], 'base64')), '200 with the original image bytes');
 
 const edited = await api(
 	'PATCH /api/notes/[id]',
@@ -548,7 +571,6 @@ must(
 volatile.add(adminConfigReset.body.adminConfig.updatedAt);
 
 // Covers ride with the note: upload, serve bytes, then reference by id.
-const TINY_COVER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const cover = await api(
 	'POST /api/notes/[id]/photo',
 	`/api/notes/${id}/photo`,

@@ -3,6 +3,7 @@
 	import TagChip from '$lib/components/TagChip.svelte';
 	import VideoPill from '$lib/components/VideoPill.svelte';
 	import NoteLinkPills from '$lib/components/NoteLinkPills.svelte';
+	import NoteCover from '$lib/components/NoteCover.svelte';
 	import { renderNoteContent } from '$lib/note-links';
 	import { createNoteFold } from '$lib/note-fold.svelte';
 	import type { Note } from '$lib/types';
@@ -11,7 +12,7 @@
 	// list, admin note page, public note page. Fixed order everywhere:
 	// cover -> title -> linked pills -> markdown body -> tags -> video.
 	// The body folds the same way on every one of them.
-	// `variant` only changes the title size and the cover cap.
+	// `variant` changes the title size and the cover presentation.
 	// The public index is NOT a body surface: it lists title or excerpt only.
 	type Props = {
 		note: Note;
@@ -33,16 +34,10 @@
 
 	const fold = createNoteFold();
 	const html = $derived(renderNoteContent(note.content, note.linkedNotes, { publicUi }));
-	const coverClass = $derived(variant === 'page' ? 'max-h-80' : 'max-h-40');
 </script>
 
 {#if note.coverId && showCover}
-	<img
-		src={`/api/notes/photos/${note.coverId}`}
-		alt=""
-		loading="lazy"
-		class="mb-2 w-full rounded-xl object-cover {coverClass}"
-	/>
+	<NoteCover coverId={note.coverId} {variant} />
 {/if}
 
 {#if note.title}

@@ -2,3 +2,5 @@ allowBuilds:
   better-sqlite3: true
   onnxruntime-node: true
   protobufjs: true
+overrides:
+  "kdbxweb>@xmldom/xmldom": "^0.8.15"

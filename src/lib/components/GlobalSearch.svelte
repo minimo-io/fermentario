@@ -180,13 +180,14 @@
 	// then put focus back where it came from.
 	$effect(() => {
 		if (search.open) {
+			const openInCommandMode = search.openInCommandMode;
 			restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 			miniApps.loadUsage();
 			query = '';
 			results = [];
 			error = '';
 			selected = 0;
-			commandMode = false;
+			commandMode = openInCommandMode;
 			void tick().then(() => inputEl?.focus());
 			return;
 		}
@@ -315,6 +316,27 @@
 	function handleWindowKeydown(e: KeyboardEvent) {
 		if (e.isComposing) return;
 		const mod = e.metaKey || e.ctrlKey;
+
+		if (
+			!search.open &&
+			e.key === ':' &&
+			!mod &&
+			!e.altKey &&
+			page.url.pathname !== '/welcome' &&
+			page.url.pathname !== '/journal-error'
+		) {
+			const target = e.target as HTMLElement | null;
+			if (
+				target &&
+				(target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+			) {
+				return;
+			}
+			if (document.querySelector('[role="dialog"]')) return;
+			e.preventDefault();
+			search.openCommands();
+			return;
+		}
 
 		if (mod && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
 			if (page.url.pathname === '/welcome' || page.url.pathname === '/journal-error') return;

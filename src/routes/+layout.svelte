@@ -13,6 +13,10 @@
 	import { SLOGAN } from '$lib/brand';
 	import { timeTracker } from '$lib/time-tracker.svelte';
 	import { newNote } from '$lib/new-note.svelte';
+	import { devNetwork } from '$lib/dev-network.svelte';
+	import DevNetworkModal from '$lib/components/DevNetworkModal.svelte';
+	import VaultModal from '$lib/components/VaultModal.svelte';
+	import { vault } from '$lib/vault.svelte';
 	import { applyStoredTheme, watchSystemTheme } from '$lib/theme';
 	let { children } = $props();
 
@@ -144,6 +148,12 @@
 
 {@render children()}
 <NewNoteModal />
+{#if vault.open}
+	<VaultModal />
+{/if}
+{#if devNetwork.open}
+	<DevNetworkModal onClose={() => devNetwork.closeModal()} />
+{/if}
 {#if help.open}
 	<HelpModal onClose={() => help.closeModal()} />
 {/if}
